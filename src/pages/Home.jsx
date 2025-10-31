@@ -104,8 +104,14 @@ const Home = () => {
           </Card>
 
           <div className="flex gap-4 justify-center mt-8">
-            <Link to="/guests">
+            <Link to="/dashboard">
               <Button size="lg" className="gap-2">
+                <Heart className="w-5 h-5" />
+                Open Dashboard
+              </Button>
+            </Link>
+            <Link to="/guests">
+              <Button size="lg" variant="outline" className="gap-2">
                 <Users className="w-5 h-5" />
                 Manage Guests
               </Button>
