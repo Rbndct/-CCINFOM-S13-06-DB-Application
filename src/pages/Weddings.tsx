@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -10,12 +11,33 @@ import {
   Eye,
   Edit,
   Trash2,
-  MoreHorizontal
+  MoreHorizontal,
+  Loader2,
+  Clock
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { useToast } from '@/hooks/use-toast';
+import VenueAutocomplete from '@/components/VenueAutocomplete';
+import { cn } from '@/lib/utils';
 import { 
   Table, 
   TableBody, 
@@ -33,9 +55,68 @@ import {
 import DashboardLayout from '@/components/DashboardLayout';
 
 const Weddings = () => {
+  const navigate = useNavigate();
+  const { toast } = useToast();
   const [weddings, setWeddings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [couples, setCouples] = useState([]);
+  const [loading, setLoading] = useState(false);
+  
+  // Refs for date/time inputs
+  const dateInputRef = useRef<HTMLInputElement>(null);
+  const timeInputRef = useRef<HTMLInputElement>(null);
+  
+  // Form state
+  const [selectedCoupleId, setSelectedCoupleId] = useState('');
+  const [weddingDate, setWeddingDate] = useState('');
+  const [weddingTime, setWeddingTime] = useState('');
+  const [venue, setVenue] = useState('');
+  const [venuePlaceId, setVenuePlaceId] = useState('');
+  const [venueAddress, setVenueAddress] = useState('');
+  const [paymentStatus, setPaymentStatus] = useState('');
+  const [plannerContact, setPlannerContact] = useState('');
+  
+  // Validation errors
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Fetch couples list
+  useEffect(() => {
+    // Mock couples data - replace with actual API call
+    setCouples([
+      {
+        id: 1,
+        partner1_name: 'John Smith',
+        partner2_name: 'Jane Smith',
+        partner1_phone: '(555) 123-4567',
+        partner2_phone: '(555) 123-4568',
+        partner1_email: 'john.smith@email.com',
+        partner2_email: 'jane.smith@email.com',
+        planner_contact: 'Sarah Johnson - (555) 987-6543',
+      },
+      {
+        id: 2,
+        partner1_name: 'Mike Johnson',
+        partner2_name: 'Sarah Johnson',
+        partner1_phone: '(555) 234-5678',
+        partner2_phone: '(555) 234-5679',
+        partner1_email: 'mike.johnson@email.com',
+        partner2_email: 'sarah.johnson@email.com',
+        planner_contact: 'Emily Davis - (555) 876-5432',
+      },
+      {
+        id: 3,
+        partner1_name: 'David Brown',
+        partner2_name: 'Lisa Brown',
+        partner1_phone: '(555) 345-6789',
+        partner2_phone: '(555) 345-6790',
+        partner1_email: 'david.brown@email.com',
+        partner2_email: 'lisa.brown@email.com',
+        planner_contact: 'Michael Wilson - (555) 765-4321',
+      }
+    ]);
+  }, []);
 
   // Mock data - replace with actual API calls
   useEffect(() => {
@@ -105,18 +186,139 @@ const Weddings = () => {
     return matchesSearch && matchesFilter;
   });
 
+  // Validation function
+  const validateForm = () => {
+    const newErrors: Record<string, string> = {};
+    
+    if (!selectedCoupleId) newErrors.selectedCoupleId = 'Couple selection is required';
+    if (!weddingDate) newErrors.weddingDate = 'Wedding date is required';
+    if (!weddingTime) newErrors.weddingTime = 'Wedding time is required';
+    if (!venue.trim()) {
+      newErrors.venue = 'Venue is required';
+    }
+    if (!paymentStatus) newErrors.paymentStatus = 'Payment status is required';
+    if (!plannerContact.trim()) newErrors.plannerContact = 'Planner contact is required';
+
+    // Date validation
+    if (weddingDate) {
+      const date = new Date(weddingDate);
+      if (isNaN(date.getTime())) {
+        newErrors.weddingDate = 'Invalid date format';
+      }
+    }
+
+    // Time validation (HH:MM format)
+    if (weddingTime && !/^([0-1][0-9]|2[0-3]):[0-5][0-9]$/.test(weddingTime)) {
+      newErrors.weddingTime = 'Time must be in HH:MM format';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Reset form
+  const resetForm = () => {
+    setSelectedCoupleId('');
+    setWeddingDate('');
+    setWeddingTime('');
+    setVenue('');
+    setVenuePlaceId('');
+    setVenueAddress('');
+    setPaymentStatus('');
+    setPlannerContact('');
+    setErrors({});
+  };
+
+  // Handle dialog close
+  const handleDialogClose = (open: boolean) => {
+    if (!open) {
+      // Reset form immediately when closing
+      resetForm();
+    }
+    setDialogOpen(open);
+  };
+
+  // Handle form submission
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!validateForm()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fill in all required fields correctly',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Find selected couple
+      const selectedCouple = couples.find(c => c.id === parseInt(selectedCoupleId));
+      if (!selectedCouple) {
+        throw new Error('Selected couple not found');
+      }
+
+      // Create wedding object
+      const newWedding = {
+        id: Date.now(), // Auto-generate ID
+        couple: `${selectedCouple.partner1_name} & ${selectedCouple.partner2_name}`,
+        partner1: selectedCouple.partner1_name,
+        partner2: selectedCouple.partner2_name,
+        weddingDate: weddingDate,
+        weddingTime: weddingTime,
+        venue: venue.trim(),
+        venuePlaceId: venuePlaceId || null,
+        venueAddress: venueAddress || venue.trim(),
+        guestCount: 0, // Will be calculated from guests list
+        paymentStatus: paymentStatus,
+        plannerContact: plannerContact.trim(),
+      };
+
+      // Simulate API call
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // Add to weddings list
+      setWeddings([...weddings, newWedding]);
+
+      toast({
+        title: 'Wedding Created',
+        description: `Wedding for ${newWedding.couple} has been created successfully`,
+      });
+
+      // Close dialog and reset form
+      setDialogOpen(false);
+      resetForm();
+
+      // Optionally navigate to the new wedding detail page
+      // navigate(`/dashboard/weddings/${newWedding.id}`);
+    } catch (error) {
+      toast({
+        title: 'Error',
+        description: error.message || 'Failed to create wedding. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Weddings</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Wedding Overview</h1>
             <p className="text-muted-foreground">
-              Manage all wedding events and bookings
+              Select a wedding to view its details and manage all aspects
             </p>
           </div>
-          <Button>
+          <Button onClick={() => {
+            resetForm(); // Reset form when opening dialog
+            setDialogOpen(true);
+          }}>
             <Plus className="w-4 h-4 mr-2" />
             New Wedding
           </Button>
@@ -210,7 +412,11 @@ const Weddings = () => {
               </TableHeader>
               <TableBody>
                 {filteredWeddings.map((wedding) => (
-                  <TableRow key={wedding.id}>
+                  <TableRow 
+                    key={wedding.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => navigate(`/dashboard/weddings/${wedding.id}`)}
+                  >
                     <TableCell className="font-medium">
                       <div>
                         <div className="font-semibold">{wedding.couple}</div>
@@ -253,7 +459,7 @@ const Weddings = () => {
                     <TableCell>
                       {getPaymentStatusBadge(wedding.paymentStatus)}
                     </TableCell>
-                    <TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0">
@@ -261,7 +467,7 @@ const Weddings = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate(`/dashboard/weddings/${wedding.id}`)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
@@ -282,6 +488,217 @@ const Weddings = () => {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Add Wedding Dialog */}
+        <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" key={dialogOpen ? 'open' : 'closed'}>
+            <DialogHeader>
+              <DialogTitle>Add New Wedding</DialogTitle>
+              <DialogDescription>
+                Fill in all the required information to create a new wedding
+              </DialogDescription>
+            </DialogHeader>
+            
+            <form onSubmit={handleSubmit} className="space-y-4 overflow-visible">
+              {/* Couple Selection */}
+              <div className="space-y-2">
+                <Label htmlFor="couple">Couple *</Label>
+                <Select value={selectedCoupleId} onValueChange={setSelectedCoupleId}>
+                  <SelectTrigger id="couple" className={errors.selectedCoupleId ? 'border-red-500' : ''}>
+                    <SelectValue placeholder="Select a couple" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {couples.map((couple) => (
+                      <SelectItem key={couple.id} value={couple.id.toString()}>
+                        {couple.partner1_name} & {couple.partner2_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.selectedCoupleId && (
+                  <p className="text-sm text-red-500">{errors.selectedCoupleId}</p>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Wedding Date */}
+                <div className="space-y-2">
+                  <Label htmlFor="weddingDate">Wedding Date *</Label>
+                  <div className="relative">
+                    <Input
+                      ref={dateInputRef}
+                      id="weddingDate"
+                      type="date"
+                      value={weddingDate}
+                      onChange={(e) => setWeddingDate(e.target.value)}
+                      className={cn(
+                        errors.weddingDate ? 'border-red-500' : '', 
+                        'pr-10',
+                        '[&::-webkit-calendar-picker-indicator]:hidden',
+                        '[&::-webkit-calendar-picker-indicator]:appearance-none'
+                      )}
+                    />
+                    <Calendar 
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground transition-colors" 
+                      onClick={() => {
+                        if (dateInputRef.current) {
+                          try {
+                            // Try showPicker() first (modern browsers)
+                            if (typeof dateInputRef.current.showPicker === 'function') {
+                              dateInputRef.current.showPicker();
+                            } else {
+                              // Fallback to click() for older browsers
+                              dateInputRef.current.click();
+                            }
+                          } catch {
+                            // Fallback if showPicker fails
+                            dateInputRef.current.click();
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  {errors.weddingDate && (
+                    <p className="text-sm text-red-500">{errors.weddingDate}</p>
+                  )}
+                </div>
+
+                {/* Wedding Time */}
+                <div className="space-y-2">
+                  <Label htmlFor="weddingTime">Wedding Time *</Label>
+                  <div className="relative">
+                    <Input
+                      ref={timeInputRef}
+                      id="weddingTime"
+                      type="time"
+                      value={weddingTime}
+                      onChange={(e) => setWeddingTime(e.target.value)}
+                      className={cn(
+                        errors.weddingTime ? 'border-red-500' : '', 
+                        'pr-10',
+                        '[&::-webkit-calendar-picker-indicator]:hidden',
+                        '[&::-webkit-calendar-picker-indicator]:appearance-none'
+                      )}
+                    />
+                    <Clock 
+                      className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground cursor-pointer hover:text-foreground transition-colors" 
+                      onClick={() => {
+                        if (timeInputRef.current) {
+                          try {
+                            // Try showPicker() first (modern browsers)
+                            if (typeof timeInputRef.current.showPicker === 'function') {
+                              timeInputRef.current.showPicker();
+                            } else {
+                              // Fallback to click() for older browsers
+                              timeInputRef.current.click();
+                            }
+                          } catch {
+                            // Fallback if showPicker fails
+                            timeInputRef.current.click();
+                          }
+                        }
+                      }}
+                    />
+                  </div>
+                  {errors.weddingTime && (
+                    <p className="text-sm text-red-500">{errors.weddingTime}</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Venue - Autocomplete (optional) or text input */}
+              <div className="space-y-2">
+                <Label htmlFor="venue">Venue *</Label>
+                <VenueAutocomplete
+                  value={venue}
+                  onChange={(value) => {
+                    setVenue(value);
+                    if (!value) {
+                      setVenuePlaceId('');
+                      setVenueAddress('');
+                    }
+                  }}
+                  onPlaceSelect={(place) => {
+                    setVenue(place.name);
+                    setVenuePlaceId(place.placeId);
+                    setVenueAddress(place.address);
+                  }}
+                  placeholder="Enter or search for a venue..."
+                  error={!!errors.venue}
+                />
+                {venueAddress && venueAddress !== venue && (
+                  <p className="text-xs text-muted-foreground flex items-center gap-1">
+                    <MapPin className="w-3 h-3" />
+                    {venueAddress}
+                  </p>
+                )}
+                {errors.venue && (
+                  <p className="text-sm text-red-500">{errors.venue}</p>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  You can type a venue name directly or use autocomplete suggestions if available
+                </p>
+              </div>
+
+              {/* Payment Status */}
+              <div className="space-y-2">
+                <Label htmlFor="paymentStatus">Payment Status *</Label>
+                <Select value={paymentStatus} onValueChange={setPaymentStatus}>
+                  <SelectTrigger id="paymentStatus" className={errors.paymentStatus ? 'border-red-500' : ''}>
+                    <SelectValue placeholder="Select payment status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="partial">Partial</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.paymentStatus && (
+                  <p className="text-sm text-red-500">{errors.paymentStatus}</p>
+                )}
+              </div>
+
+              {/* Planner Contact */}
+              <div className="space-y-2">
+                <Label htmlFor="plannerContact">Planner Contact *</Label>
+                <Input
+                  id="plannerContact"
+                  value={plannerContact}
+                  onChange={(e) => setPlannerContact(e.target.value)}
+                  placeholder="Enter planner name and contact"
+                  className={errors.plannerContact ? 'border-red-500' : ''}
+                />
+                {errors.plannerContact && (
+                  <p className="text-sm text-red-500">{errors.plannerContact}</p>
+                )}
+              </div>
+
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setDialogOpen(false)}
+                  disabled={loading}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Wedding
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );
