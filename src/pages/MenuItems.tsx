@@ -11,12 +11,14 @@ import {
   Trash2,
   MoreHorizontal,
   AlertTriangle,
-  CheckCircle
+  CheckCircle,
+  Lock
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Table, 
   TableBody, 
@@ -34,13 +36,15 @@ import {
 import DashboardLayout from '@/components/DashboardLayout';
 
 const MenuItems = () => {
+  const [activeTab, setActiveTab] = useState('templates');
   const [menuItems, setMenuItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
 
   // Mock data - replace with actual API calls
   useEffect(() => {
-    setMenuItems([
+    // Templates (default items available to all weddings)
+    const templates = [
       {
         id: 1,
         menu_name: 'Grilled Salmon',
@@ -50,7 +54,9 @@ const MenuItems = () => {
         stock: 50,
         restriction_id: null,
         restriction_name: null,
-        profit_margin: 9.50
+        profit_margin: 9.50,
+        is_template: true,
+        usage_count: 12
       },
       {
         id: 2,
@@ -61,7 +67,9 @@ const MenuItems = () => {
         stock: 30,
         restriction_id: 1,
         restriction_name: 'Vegetarian',
-        profit_margin: 9.25
+        profit_margin: 9.25,
+        is_template: true,
+        usage_count: 8
       },
       {
         id: 3,
@@ -72,7 +80,9 @@ const MenuItems = () => {
         stock: 75,
         restriction_id: null,
         restriction_name: null,
-        profit_margin: 7.75
+        profit_margin: 7.75,
+        is_template: true,
+        usage_count: 15
       },
       {
         id: 4,
@@ -83,7 +93,9 @@ const MenuItems = () => {
         stock: 20,
         restriction_id: 2,
         restriction_name: 'Gluten-Free',
-        profit_margin: 9.00
+        profit_margin: 9.00,
+        is_template: true,
+        usage_count: 10
       },
       {
         id: 5,
@@ -94,9 +106,31 @@ const MenuItems = () => {
         stock: 15,
         restriction_id: null,
         restriction_name: null,
-        profit_margin: 13.00
+        profit_margin: 13.00,
+        is_template: true,
+        usage_count: 6
       }
-    ]);
+    ];
+
+    // Wedding-specific items (examples)
+    const weddingSpecific = [
+      {
+        id: 101,
+        menu_name: 'Custom Wedding Cake',
+        menu_cost: 45.00,
+        menu_price: 75.00,
+        menu_type: 'Dessert',
+        stock: 5,
+        restriction_id: null,
+        restriction_name: null,
+        profit_margin: 30.00,
+        is_template: false,
+        wedding_id: 1,
+        wedding_name: 'John & Jane Wedding'
+      }
+    ];
+
+    setMenuItems([...templates, ...weddingSpecific]);
   }, []);
 
   const getStockStatus = (stock: number) => {
@@ -120,15 +154,20 @@ const MenuItems = () => {
   };
 
   const filteredMenuItems = menuItems.filter(item => {
+    const matchesTab = activeTab === 'templates' ? item.is_template : !item.is_template;
     const matchesSearch = item.menu_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          item.menu_type.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesFilter = filterType === 'all' || item.menu_type === filterType;
-    return matchesSearch && matchesFilter;
+    return matchesTab && matchesSearch && matchesFilter;
   });
 
-  const totalValue = menuItems.reduce((sum, item) => sum + (item.stock * item.menu_price), 0);
-  const lowStockItems = menuItems.filter(item => item.stock < 10).length;
-  const outOfStockItems = menuItems.filter(item => item.stock === 0).length;
+  const templateItems = menuItems.filter(item => item.is_template);
+  const weddingItems = menuItems.filter(item => !item.is_template);
+
+  const currentItems = activeTab === 'templates' ? templateItems : weddingItems;
+  const totalValue = currentItems.reduce((sum, item) => sum + (item.stock * item.menu_price), 0);
+  const lowStockItems = currentItems.filter(item => item.stock < 10).length;
+  const outOfStockItems = currentItems.filter(item => item.stock === 0).length;
 
   return (
     <DashboardLayout>
@@ -190,55 +229,79 @@ const MenuItems = () => {
           </Card>
         </div>
 
-        {/* Menu Items List */}
+        {/* Menu Items List with Tabs */}
         <Card>
           <CardHeader>
             <CardTitle>Menu Items</CardTitle>
             <CardDescription>
-              View and manage all menu items and their details
+              {activeTab === 'templates' 
+                ? 'Template library - Default menu items available to all weddings'
+                : 'Wedding-specific menu items'}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="relative flex-1">
-                <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search menu items..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-8"
-                />
-              </div>
-              <Button variant="outline">
-                <Filter className="w-4 h-4 mr-2" />
-                Filter
-              </Button>
-            </div>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+              <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
+                <TabsTrigger value="templates" className="gap-2">
+                  <Package className="w-4 h-4" />
+                  Templates ({templateItems.length})
+                </TabsTrigger>
+                <TabsTrigger value="wedding-specific" className="gap-2">
+                  <Utensils className="w-4 h-4" />
+                  Wedding-Specific ({weddingItems.length})
+                </TabsTrigger>
+              </TabsList>
 
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item Name</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Cost</TableHead>
-                  <TableHead>Price</TableHead>
-                  <TableHead>Profit Margin</TableHead>
-                  <TableHead>Stock</TableHead>
-                  <TableHead>Restrictions</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredMenuItems.map((item) => (
-                  <TableRow key={item.id}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Utensils className="h-4 w-4 text-primary" />
-                        </div>
-                        {item.menu_name}
-                      </div>
-                    </TableCell>
+              <TabsContent value="templates" className="space-y-4">
+                <div className="flex items-center space-x-2 mb-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search templates..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                  <Button variant="outline">
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filter
+                  </Button>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Cost</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Profit Margin</TableHead>
+                      <TableHead>Stock</TableHead>
+                      <TableHead>Restrictions</TableHead>
+                      {activeTab === 'templates' && <TableHead>Usage</TableHead>}
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMenuItems.map((item) => (
+                      <TableRow key={item.id} className={item.is_template ? 'bg-muted/30' : ''}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <Utensils className="h-4 w-4 text-primary" />
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {item.menu_name}
+                              {item.is_template && (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                  <Lock className="w-3 h-3 mr-1" />
+                                  Template
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </TableCell>
                     <TableCell>
                       {getTypeBadge(item.menu_type)}
                     </TableCell>
@@ -263,42 +326,170 @@ const MenuItems = () => {
                         {getStockStatus(item.stock)}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      {item.restriction_name ? (
-                        <Badge variant="outline" className="bg-orange-100 text-orange-800">
-                          {item.restriction_name}
-                        </Badge>
-                      ) : (
-                        <span className="text-sm text-muted-foreground">None</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                        <TableCell>
+                          {item.restriction_name ? (
+                            <Badge variant="outline" className="bg-orange-100 text-orange-800">
+                              {item.restriction_name}
+                            </Badge>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">None</span>
+                          )}
+                        </TableCell>
+                        {activeTab === 'templates' && (
+                          <TableCell>
+                            <span className="text-sm text-muted-foreground">
+                              Used in {item.usage_count || 0} weddings
+                            </span>
+                          </TableCell>
+                        )}
+                            <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+                              {!item.is_template && (
+                                <DropdownMenuItem>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
+                              {item.is_template && (
+                                <DropdownMenuItem disabled className="text-muted-foreground">
+                                  <Lock className="mr-2 h-4 w-4" />
+                                  Template (Cannot Delete)
+                                </DropdownMenuItem>
+                              )}
+                              {!item.is_template && (
+                                <DropdownMenuItem className="text-red-600">
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TabsContent>
+
+              <TabsContent value="wedding-specific" className="space-y-4">
+                <div className="flex items-center space-x-2 mb-4">
+                  <div className="relative flex-1">
+                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search wedding items..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-8"
+                    />
+                  </div>
+                  <Button variant="outline">
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filter
+                  </Button>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item Name</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Cost</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Profit Margin</TableHead>
+                      <TableHead>Stock</TableHead>
+                      <TableHead>Restrictions</TableHead>
+                      <TableHead>Wedding</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredMenuItems.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <Utensils className="h-4 w-4 text-primary" />
+                            </div>
+                            {item.menu_name}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {getTypeBadge(item.menu_type)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm font-medium">
+                            ${item.menu_cost.toFixed(2)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm font-medium">
+                            ${item.menu_price.toFixed(2)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="text-sm font-medium text-green-600">
+                            ${item.profit_margin.toFixed(2)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium">{item.stock}</span>
+                            {getStockStatus(item.stock)}
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          {item.restriction_name ? (
+                            <Badge variant="outline" className="bg-orange-100 text-orange-800">
+                              {item.restriction_name}
+                            </Badge>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">None</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm text-muted-foreground">
+                            {item.wedding_name || 'N/A'}
+                          </span>
+                        </TableCell>
+                        <TableCell>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem className="text-red-600">
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </TabsContent>
+            </Tabs>
           </CardContent>
         </Card>
       </div>
