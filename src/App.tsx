@@ -10,12 +10,15 @@ import NotFound from "./pages/NotFound";
 // Dashboard pages
 import Dashboard from "./pages/Dashboard";
 import Weddings from "./pages/Weddings";
+import WeddingDetail from "./pages/WeddingDetail";
 import Couples from "./pages/Couples";
 import MenuItems from "./pages/MenuItems";
 import Packages from "./pages/Packages";
 import Inventory from "./pages/Inventory";
 import SeatingTables from "./pages/SeatingTables";
 import DietaryRestrictions from "./pages/DietaryRestrictions";
+import Reports from "./pages/Reports";
+import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
 
@@ -31,6 +34,7 @@ const App = () => (
           
           {/* Dashboard Routes */}
           <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/dashboard/weddings/:id" element={<WeddingDetail />} />
           <Route path="/dashboard/weddings" element={<Weddings />} />
           <Route path="/dashboard/couples" element={<Couples />} />
           <Route path="/dashboard/guests" element={<Guests />} />
@@ -39,6 +43,8 @@ const App = () => (
           <Route path="/dashboard/tables" element={<SeatingTables />} />
           <Route path="/dashboard/inventory" element={<Inventory />} />
           <Route path="/dashboard/dietary" element={<DietaryRestrictions />} />
+          <Route path="/dashboard/reports" element={<Reports />} />
+          <Route path="/dashboard/settings" element={<Settings />} />
           
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
