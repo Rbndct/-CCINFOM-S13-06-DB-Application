@@ -59,6 +59,14 @@ export const weddingsAPI = {
   delete: (id) => api.delete(`/weddings/${id}`),
 };
 
+export const couplesAPI = {
+  getAll: () => api.get('/couples'),
+  getById: (id) => api.get(`/couples/${id}`),
+  create: (data) => api.post('/couples', data),
+  update: (id, data) => api.put(`/couples/${id}`, data),
+  delete: (id) => api.delete(`/couples/${id}`),
+};
+
 export const testAPI = {
   checkConnection: () => api.get('/test'),
   healthCheck: () => api.get('/health'),

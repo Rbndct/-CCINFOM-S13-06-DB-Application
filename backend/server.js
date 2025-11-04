@@ -15,10 +15,12 @@ app.use(express.json());
 // Import routes
 const guestsRoutes = require('./routes/guests');
 const weddingsRoutes = require('./routes/weddings');
+const couplesRoutes = require('./routes/couples');
 
 // Use routes
 app.use('/guests', guestsRoutes);
 app.use('/weddings', weddingsRoutes);
+app.use('/couples', couplesRoutes);
 
 // Test route to verify connection
 app.get('/test', (req, res) => {

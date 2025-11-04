@@ -53,6 +53,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/DashboardLayout';
+import { weddingsAPI, couplesAPI } from '@/api';
 
 const Weddings = () => {
   const navigate = useNavigate();
@@ -76,95 +77,55 @@ const Weddings = () => {
   const [venuePlaceId, setVenuePlaceId] = useState('');
   const [venueAddress, setVenueAddress] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
-  const [plannerContact, setPlannerContact] = useState('');
   
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   // Fetch couples list
   useEffect(() => {
-    // Mock couples data - replace with actual API call
-    setCouples([
-      {
-        id: 1,
-        partner1_name: 'John Smith',
-        partner2_name: 'Jane Smith',
-        partner1_phone: '(555) 123-4567',
-        partner2_phone: '(555) 123-4568',
-        partner1_email: 'john.smith@email.com',
-        partner2_email: 'jane.smith@email.com',
-        planner_contact: 'Sarah Johnson - (555) 987-6543',
-      },
-      {
-        id: 2,
-        partner1_name: 'Mike Johnson',
-        partner2_name: 'Sarah Johnson',
-        partner1_phone: '(555) 234-5678',
-        partner2_phone: '(555) 234-5679',
-        partner1_email: 'mike.johnson@email.com',
-        partner2_email: 'sarah.johnson@email.com',
-        planner_contact: 'Emily Davis - (555) 876-5432',
-      },
-      {
-        id: 3,
-        partner1_name: 'David Brown',
-        partner2_name: 'Lisa Brown',
-        partner1_phone: '(555) 345-6789',
-        partner2_phone: '(555) 345-6790',
-        partner1_email: 'david.brown@email.com',
-        partner2_email: 'lisa.brown@email.com',
-        planner_contact: 'Michael Wilson - (555) 765-4321',
-      }
-    ]);
+    fetchCouples();
   }, []);
 
-  // Mock data - replace with actual API calls
+  const fetchCouples = async () => {
+    try {
+      const response = await couplesAPI.getAll();
+      // Transform couple_id to id for frontend compatibility
+      const transformedCouples = (response.data || []).map(couple => ({
+        ...couple,
+        id: couple.couple_id
+      }));
+      setCouples(transformedCouples);
+    } catch (error: any) {
+      console.error('Error fetching couples:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load couples',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  // Fetch weddings
   useEffect(() => {
-    setWeddings([
-      {
-        id: 1,
-        couple: 'John & Jane Smith',
-        partner1: 'John Smith',
-        partner2: 'Jane Smith',
-        weddingDate: '2024-02-14',
-        weddingTime: '16:00',
-        venue: 'Garden Manor',
-        guestCount: 120,
-        totalCost: 25000,
-        productionCost: 18000,
-        paymentStatus: 'paid',
-        plannerContact: 'Sarah Johnson - (555) 123-4567'
-      },
-      {
-        id: 2,
-        couple: 'Mike & Sarah Johnson',
-        partner1: 'Mike Johnson',
-        partner2: 'Sarah Johnson',
-        weddingDate: '2024-02-21',
-        weddingTime: '17:30',
-        venue: 'Riverside Hall',
-        guestCount: 80,
-        totalCost: 18000,
-        productionCost: 12000,
-        paymentStatus: 'pending',
-        plannerContact: 'Emily Davis - (555) 987-6543'
-      },
-      {
-        id: 3,
-        couple: 'David & Lisa Brown',
-        partner1: 'David Brown',
-        partner2: 'Lisa Brown',
-        weddingDate: '2024-03-01',
-        weddingTime: '15:00',
-        venue: 'Mountain View Resort',
-        guestCount: 200,
-        totalCost: 45000,
-        productionCost: 32000,
-        paymentStatus: 'partial',
-        plannerContact: 'Michael Wilson - (555) 456-7890'
-      }
-    ]);
+    fetchWeddings();
   }, []);
+
+  const fetchWeddings = async () => {
+    setLoading(true);
+    try {
+      const response = await weddingsAPI.getAll();
+      setWeddings(response.data || []);
+    } catch (error: any) {
+      console.error('Error fetching weddings:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to load weddings. Make sure backend is running.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const getPaymentStatusBadge = (status: string) => {
     switch (status) {
@@ -197,7 +158,6 @@ const Weddings = () => {
       newErrors.venue = 'Venue is required';
     }
     if (!paymentStatus) newErrors.paymentStatus = 'Payment status is required';
-    if (!plannerContact.trim()) newErrors.plannerContact = 'Planner contact is required';
 
     // Date validation
     if (weddingDate) {
@@ -225,7 +185,6 @@ const Weddings = () => {
     setVenuePlaceId('');
     setVenueAddress('');
     setPaymentStatus('');
-    setPlannerContact('');
     setErrors({});
   };
 
@@ -254,49 +213,33 @@ const Weddings = () => {
     setLoading(true);
 
     try {
-      // Find selected couple
-      const selectedCouple = couples.find(c => c.id === parseInt(selectedCoupleId));
-      if (!selectedCouple) {
-        throw new Error('Selected couple not found');
-      }
-
-      // Create wedding object
-      const newWedding = {
-        id: Date.now(), // Auto-generate ID
-        couple: `${selectedCouple.partner1_name} & ${selectedCouple.partner2_name}`,
-        partner1: selectedCouple.partner1_name,
-        partner2: selectedCouple.partner2_name,
-        weddingDate: weddingDate,
-        weddingTime: weddingTime,
+      // Create wedding via API
+      const response = await weddingsAPI.create({
+        couple_id: parseInt(selectedCoupleId),
+        wedding_date: weddingDate,
+        wedding_time: weddingTime,
         venue: venue.trim(),
-        venuePlaceId: venuePlaceId || null,
-        venueAddress: venueAddress || venue.trim(),
-        guestCount: 0, // Will be calculated from guests list
-        paymentStatus: paymentStatus,
-        plannerContact: plannerContact.trim(),
-      };
+        guest_count: 0,
+        total_cost: 0,
+        production_cost: 0,
+        payment_status: paymentStatus,
+      });
 
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
-
-      // Add to weddings list
-      setWeddings([...weddings, newWedding]);
+      // Refresh weddings list
+      await fetchWeddings();
 
       toast({
         title: 'Wedding Created',
-        description: `Wedding for ${newWedding.couple} has been created successfully`,
+        description: `Wedding for ${response.data.couple} has been created successfully`,
       });
 
       // Close dialog and reset form
       setDialogOpen(false);
       resetForm();
-
-      // Optionally navigate to the new wedding detail page
-      // navigate(`/dashboard/weddings/${newWedding.id}`);
-    } catch (error) {
+    } catch (error: any) {
       toast({
         title: 'Error',
-        description: error.message || 'Failed to create wedding. Please try again.',
+        description: error.response?.data?.message || error.message || 'Failed to create wedding. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -655,21 +598,6 @@ const Weddings = () => {
                 </Select>
                 {errors.paymentStatus && (
                   <p className="text-sm text-red-500">{errors.paymentStatus}</p>
-                )}
-              </div>
-
-              {/* Planner Contact */}
-              <div className="space-y-2">
-                <Label htmlFor="plannerContact">Planner Contact *</Label>
-                <Input
-                  id="plannerContact"
-                  value={plannerContact}
-                  onChange={(e) => setPlannerContact(e.target.value)}
-                  placeholder="Enter planner name and contact"
-                  className={errors.plannerContact ? 'border-red-500' : ''}
-                />
-                {errors.plannerContact && (
-                  <p className="text-sm text-red-500">{errors.plannerContact}</p>
                 )}
               </div>
 

@@ -31,52 +31,40 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/DashboardLayout';
+import { couplesAPI } from '@/api';
+import { useToast } from '@/hooks/use-toast';
 
 const Couples = () => {
   const [couples, setCouples] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
 
-  // Mock data - replace with actual API calls
   useEffect(() => {
-    setCouples([
-      {
-        id: 1,
-        partner1_name: 'John Smith',
-        partner2_name: 'Jane Smith',
-        partner1_phone: '(555) 123-4567',
-        partner2_phone: '(555) 123-4568',
-        partner1_email: 'john.smith@email.com',
-        partner2_email: 'jane.smith@email.com',
-        planner_contact: 'Sarah Johnson - (555) 987-6543',
-        wedding_count: 1,
-        last_wedding: '2024-02-14'
-      },
-      {
-        id: 2,
-        partner1_name: 'Mike Johnson',
-        partner2_name: 'Sarah Johnson',
-        partner1_phone: '(555) 234-5678',
-        partner2_phone: '(555) 234-5679',
-        partner1_email: 'mike.johnson@email.com',
-        partner2_email: 'sarah.johnson@email.com',
-        planner_contact: 'Emily Davis - (555) 876-5432',
-        wedding_count: 1,
-        last_wedding: '2024-02-21'
-      },
-      {
-        id: 3,
-        partner1_name: 'David Brown',
-        partner2_name: 'Lisa Brown',
-        partner1_phone: '(555) 345-6789',
-        partner2_phone: '(555) 345-6790',
-        partner1_email: 'david.brown@email.com',
-        partner2_email: 'lisa.brown@email.com',
-        planner_contact: 'Michael Wilson - (555) 765-4321',
-        wedding_count: 1,
-        last_wedding: '2024-03-01'
-      }
-    ]);
+    fetchCouples();
   }, []);
+
+  const fetchCouples = async () => {
+    setLoading(true);
+    try {
+      const response = await couplesAPI.getAll();
+      // Transform couple_id to id for frontend compatibility
+      const transformedCouples = (response.data || []).map(couple => ({
+        ...couple,
+        id: couple.couple_id
+      }));
+      setCouples(transformedCouples);
+    } catch (error: any) {
+      console.error('Error fetching couples:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to load couples. Make sure backend is running.',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredCouples = couples.filter(couple => {
     const searchLower = searchTerm.toLowerCase();

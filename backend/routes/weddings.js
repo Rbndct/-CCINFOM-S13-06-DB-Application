@@ -2,12 +2,28 @@ const express = require('express');
 const router = express.Router();
 const { promisePool } = require('../db');
 
-// GET all weddings
+// GET all weddings with couple information
 router.get('/', async (req, res) => {
   try {
-    const [rows] = await promisePool.query(
-      'SELECT * FROM weddings ORDER BY wedding_date DESC'
-    );
+    const [rows] = await promisePool.query(`
+      SELECT 
+        w.wedding_id as id,
+        w.couple_id,
+        CONCAT(c.partner1_name, ' & ', c.partner2_name) as couple,
+        c.partner1_name as partner1,
+        c.partner2_name as partner2,
+        w.wedding_date as weddingDate,
+        w.wedding_time as weddingTime,
+        w.venue,
+        w.guest_count as guestCount,
+        w.total_cost as totalCost,
+        w.production_cost as productionCost,
+        w.payment_status as paymentStatus,
+        c.planner_contact as plannerContact
+      FROM wedding w
+      INNER JOIN couple c ON w.couple_id = c.couple_id
+      ORDER BY w.wedding_date DESC
+    `);
     res.json({
       success: true,
       data: rows,
@@ -23,13 +39,28 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET single wedding by ID
+// GET single wedding by ID with couple information
 router.get('/:id', async (req, res) => {
   try {
-    const [rows] = await promisePool.query(
-      'SELECT * FROM weddings WHERE id = ?',
-      [req.params.id]
-    );
+    const [rows] = await promisePool.query(`
+      SELECT 
+        w.wedding_id as id,
+        w.couple_id,
+        CONCAT(c.partner1_name, ' & ', c.partner2_name) as couple,
+        c.partner1_name as partner1,
+        c.partner2_name as partner2,
+        w.wedding_date as weddingDate,
+        w.wedding_time as weddingTime,
+        w.venue,
+        w.guest_count as guestCount,
+        w.total_cost as totalCost,
+        w.production_cost as productionCost,
+        w.payment_status as paymentStatus,
+        c.planner_contact as plannerContact
+      FROM wedding w
+      INNER JOIN couple c ON w.couple_id = c.couple_id
+      WHERE w.wedding_id = ?
+    `, [req.params.id]);
     
     if (rows.length === 0) {
       return res.status(404).json({ 
@@ -55,24 +86,52 @@ router.get('/:id', async (req, res) => {
 // POST create new wedding
 router.post('/', async (req, res) => {
   try {
-    const { couple_names, wedding_date, venue, budget, status } = req.body;
+    const { 
+      couple_id, 
+      wedding_date, 
+      wedding_time, 
+      venue, 
+      guest_count, 
+      total_cost, 
+      production_cost, 
+      payment_status 
+    } = req.body;
     
     const [result] = await promisePool.query(
-      'INSERT INTO weddings (couple_names, wedding_date, venue, budget, status) VALUES (?, ?, ?, ?, ?)',
-      [couple_names, wedding_date, venue, budget, status || 'planning']
+      `INSERT INTO wedding 
+       (couple_id, wedding_date, wedding_time, venue, guest_count, 
+        total_cost, production_cost, payment_status) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [couple_id, wedding_date, wedding_time, venue, 
+       guest_count || 0, total_cost || 0, production_cost || 0, 
+       payment_status || 'pending']
     );
+    
+    // Fetch the created wedding with couple info
+    const [weddingRows] = await promisePool.query(`
+      SELECT 
+        w.wedding_id as id,
+        w.couple_id,
+        CONCAT(c.partner1_name, ' & ', c.partner2_name) as couple,
+        c.partner1_name as partner1,
+        c.partner2_name as partner2,
+        w.wedding_date as weddingDate,
+        w.wedding_time as weddingTime,
+        w.venue,
+        w.guest_count as guestCount,
+        w.total_cost as totalCost,
+        w.production_cost as productionCost,
+        w.payment_status as paymentStatus,
+        c.planner_contact as plannerContact
+      FROM wedding w
+      INNER JOIN couple c ON w.couple_id = c.couple_id
+      WHERE w.wedding_id = ?
+    `, [result.insertId]);
     
     res.status(201).json({
       success: true,
       message: 'Wedding created successfully',
-      data: {
-        id: result.insertId,
-        couple_names,
-        wedding_date,
-        venue,
-        budget,
-        status: status || 'planning'
-      }
+      data: weddingRows[0]
     });
   } catch (error) {
     console.error('Error creating wedding:', error);
@@ -87,11 +146,23 @@ router.post('/', async (req, res) => {
 // PUT update wedding
 router.put('/:id', async (req, res) => {
   try {
-    const { couple_names, wedding_date, venue, budget, status } = req.body;
+    const { 
+      wedding_date, 
+      wedding_time, 
+      venue, 
+      guest_count, 
+      total_cost, 
+      production_cost, 
+      payment_status 
+    } = req.body;
     
     const [result] = await promisePool.query(
-      'UPDATE weddings SET couple_names = ?, wedding_date = ?, venue = ?, budget = ?, status = ? WHERE id = ?',
-      [couple_names, wedding_date, venue, budget, status, req.params.id]
+      `UPDATE wedding SET 
+       wedding_date = ?, wedding_time = ?, venue = ?, guest_count = ?, 
+       total_cost = ?, production_cost = ?, payment_status = ? 
+       WHERE wedding_id = ?`,
+      [wedding_date, wedding_time, venue, guest_count, 
+       total_cost, production_cost, payment_status, req.params.id]
     );
     
     if (result.affectedRows === 0) {
@@ -119,7 +190,7 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
   try {
     const [result] = await promisePool.query(
-      'DELETE FROM weddings WHERE id = ?',
+      'DELETE FROM wedding WHERE wedding_id = ?',
       [req.params.id]
     );
     
