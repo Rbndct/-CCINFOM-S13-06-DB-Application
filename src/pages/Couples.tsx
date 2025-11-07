@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
   Search, 
@@ -30,24 +31,57 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Label } from '@/components/ui/label';
+import { Loader2 } from 'lucide-react';
 import DashboardLayout from '@/components/DashboardLayout';
 import { couplesAPI } from '@/api';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 
 const Couples = () => {
+  const navigate = useNavigate();
   const [couples, setCouples] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
+  const [showFilters, setShowFilters] = useState(false);
+  const [ceremonyType, setCeremonyType] = useState<string | undefined>();
+  const [restrictionType, setRestrictionType] = useState<string | undefined>();
+  const [plannerContact, setPlannerContact] = useState<string>('');
   const [loading, setLoading] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [formLoading, setFormLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    partner1_name: '',
+    partner2_name: '',
+    partner1_phone: '',
+    partner2_phone: '',
+    partner1_email: '',
+    partner2_email: '',
+    planner_contact: ''
+  });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
 
   useEffect(() => {
     fetchCouples();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchCouples = async () => {
     setLoading(true);
     try {
-      const response = await couplesAPI.getAll();
+      const response = await couplesAPI.getAll({
+        ceremony_type: ceremonyType,
+        restriction_type: restrictionType,
+        planner_contact: plannerContact || undefined,
+      });
       // Transform couple_id to id for frontend compatibility
       const transformedCouples = (response.data || []).map(couple => ({
         ...couple,
@@ -74,6 +108,60 @@ const Couples = () => {
            couple.partner2_email.toLowerCase().includes(searchLower);
   });
 
+  const validateForm = () => {
+    const errors: Record<string, string> = {};
+    if (!formData.partner1_name.trim()) errors.partner1_name = 'Partner 1 name is required';
+    if (!formData.partner2_name.trim()) errors.partner2_name = 'Partner 2 name is required';
+    if (!formData.partner1_phone.trim()) errors.partner1_phone = 'Partner 1 phone is required';
+    if (!formData.partner2_phone.trim()) errors.partner2_phone = 'Partner 2 phone is required';
+    if (!formData.partner1_email.trim()) errors.partner1_email = 'Partner 1 email is required';
+    if (!formData.partner2_email.trim()) errors.partner2_email = 'Partner 2 email is required';
+    if (!formData.planner_contact.trim()) errors.planner_contact = 'Planner contact is required';
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleCreateCouple = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please fill in all required fields',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setFormLoading(true);
+    try {
+      await couplesAPI.create(formData);
+      toast({
+        title: 'Success',
+        description: 'Couple created successfully',
+      });
+      setCreateDialogOpen(false);
+      setFormData({
+        partner1_name: '',
+        partner2_name: '',
+        partner1_phone: '',
+        partner2_phone: '',
+        partner1_email: '',
+        partner2_email: '',
+        planner_contact: ''
+      });
+      setFormErrors({});
+      await fetchCouples();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || 'Failed to create couple',
+        variant: 'destructive',
+      });
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -85,7 +173,7 @@ const Couples = () => {
               Manage couple information and contact details
             </p>
           </div>
-          <Button>
+          <Button onClick={() => setCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             New Couple
           </Button>
@@ -168,11 +256,44 @@ const Couples = () => {
                   className="pl-8"
                 />
               </div>
-              <Button variant="outline">
+              <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
                 <Filter className="w-4 h-4 mr-2" />
-                Filter
+                Filters
               </Button>
+              <Button variant="secondary" onClick={fetchCouples}>Apply</Button>
             </div>
+
+            {showFilters && (
+              <div className="grid md:grid-cols-3 gap-3 mb-4">
+                <div>
+                  <label className="text-sm text-muted-foreground">Ceremony Type</label>
+                  <Select value={ceremonyType} onValueChange={setCeremonyType}>
+                    <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="civil">Civil</SelectItem>
+                      <SelectItem value="religious">Religious</SelectItem>
+                      <SelectItem value="garden">Garden</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Restriction Type</label>
+                  <Select value={restrictionType} onValueChange={setRestrictionType}>
+                    <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="vegan">Vegan</SelectItem>
+                      <SelectItem value="vegetarian">Vegetarian</SelectItem>
+                      <SelectItem value="gluten-free">Gluten-free</SelectItem>
+                      <SelectItem value="allergy">Allergy</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Planner Contact</label>
+                  <Input value={plannerContact} onChange={(e) => setPlannerContact(e.target.value)} placeholder="Name or contact" />
+                </div>
+              </div>
+            )}
 
             <Table>
               <TableHeader>
@@ -189,7 +310,10 @@ const Couples = () => {
                 {filteredCouples.map((couple) => (
                   <TableRow key={couple.id}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2">
+                      <div
+                        className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+                        onClick={() => navigate(`/dashboard/couples/${couple.id}`)}
+                      >
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                           <Heart className="h-4 w-4 text-primary" />
                         </div>
@@ -243,7 +367,7 @@ const Couples = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate(`/dashboard/couples/${couple.id}`)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>
@@ -251,7 +375,19 @@ const Couples = () => {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
+                          <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={async () => {
+                              if (!confirm('Delete this couple?')) return;
+                              try {
+                                await couplesAPI.delete(couple.id);
+                                await fetchCouples();
+                                toast({ title: 'Couple deleted' });
+                              } catch (e: any) {
+                                toast({ title: 'Error', description: e.response?.data?.error || 'Failed to delete couple', variant: 'destructive' });
+                              }
+                            }}
+                          >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>
@@ -264,6 +400,143 @@ const Couples = () => {
             </Table>
           </CardContent>
         </Card>
+
+        {/* Create Couple Dialog */}
+        <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create New Couple</DialogTitle>
+              <DialogDescription>
+                Fill in all the required information to create a new couple
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleCreateCouple} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="partner1_name">Partner 1 Name *</Label>
+                  <Input
+                    id="partner1_name"
+                    value={formData.partner1_name}
+                    onChange={(e) => setFormData({ ...formData, partner1_name: e.target.value })}
+                    className={formErrors.partner1_name ? 'border-red-500' : ''}
+                    disabled={formLoading}
+                  />
+                  {formErrors.partner1_name && (
+                    <p className="text-sm text-red-500">{formErrors.partner1_name}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="partner2_name">Partner 2 Name *</Label>
+                  <Input
+                    id="partner2_name"
+                    value={formData.partner2_name}
+                    onChange={(e) => setFormData({ ...formData, partner2_name: e.target.value })}
+                    className={formErrors.partner2_name ? 'border-red-500' : ''}
+                    disabled={formLoading}
+                  />
+                  {formErrors.partner2_name && (
+                    <p className="text-sm text-red-500">{formErrors.partner2_name}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="partner1_phone">Partner 1 Phone *</Label>
+                  <Input
+                    id="partner1_phone"
+                    value={formData.partner1_phone}
+                    onChange={(e) => setFormData({ ...formData, partner1_phone: e.target.value })}
+                    className={formErrors.partner1_phone ? 'border-red-500' : ''}
+                    disabled={formLoading}
+                  />
+                  {formErrors.partner1_phone && (
+                    <p className="text-sm text-red-500">{formErrors.partner1_phone}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="partner2_phone">Partner 2 Phone *</Label>
+                  <Input
+                    id="partner2_phone"
+                    value={formData.partner2_phone}
+                    onChange={(e) => setFormData({ ...formData, partner2_phone: e.target.value })}
+                    className={formErrors.partner2_phone ? 'border-red-500' : ''}
+                    disabled={formLoading}
+                  />
+                  {formErrors.partner2_phone && (
+                    <p className="text-sm text-red-500">{formErrors.partner2_phone}</p>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="partner1_email">Partner 1 Email *</Label>
+                  <Input
+                    id="partner1_email"
+                    type="email"
+                    value={formData.partner1_email}
+                    onChange={(e) => setFormData({ ...formData, partner1_email: e.target.value })}
+                    className={formErrors.partner1_email ? 'border-red-500' : ''}
+                    disabled={formLoading}
+                  />
+                  {formErrors.partner1_email && (
+                    <p className="text-sm text-red-500">{formErrors.partner1_email}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="partner2_email">Partner 2 Email *</Label>
+                  <Input
+                    id="partner2_email"
+                    type="email"
+                    value={formData.partner2_email}
+                    onChange={(e) => setFormData({ ...formData, partner2_email: e.target.value })}
+                    className={formErrors.partner2_email ? 'border-red-500' : ''}
+                    disabled={formLoading}
+                  />
+                  {formErrors.partner2_email && (
+                    <p className="text-sm text-red-500">{formErrors.partner2_email}</p>
+                  )}
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="planner_contact">Planner Contact *</Label>
+                <Input
+                  id="planner_contact"
+                  value={formData.planner_contact}
+                  onChange={(e) => setFormData({ ...formData, planner_contact: e.target.value })}
+                  className={formErrors.planner_contact ? 'border-red-500' : ''}
+                  disabled={formLoading}
+                  placeholder="Planner name and contact info"
+                />
+                {formErrors.planner_contact && (
+                  <p className="text-sm text-red-500">{formErrors.planner_contact}</p>
+                )}
+              </div>
+              <DialogFooter>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setCreateDialogOpen(false)}
+                  disabled={formLoading}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={formLoading}>
+                  {formLoading ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Creating...
+                    </>
+                  ) : (
+                    <>
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Couple
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
   );

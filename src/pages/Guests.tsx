@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Plus, Loader2, RefreshCw, UserPlus, Mail, Phone } from 'lucide-react';
+import { Plus, Loader2, RefreshCw, UserPlus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,10 +7,22 @@ import { guestsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import Navigation from '@/components/Navigation';
 
+type Guest = {
+  id: number;
+  guest_id: number;
+  guest_name: string;
+  wedding_id: number;
+  table_id: number | null;
+  table_number?: string | null;
+  restriction_id?: number | null;
+  restriction_name?: string | null;
+  rsvp_status: string;
+};
+
 const Guests = () => {
-  const [guests, setGuests] = useState([]);
+  const [guests, setGuests] = useState<Guest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -20,37 +32,27 @@ const Guests = () => {
   const fetchGuests = async () => {
     setLoading(true);
     setError(null);
-    
     try {
       const response = await guestsAPI.getAll();
       setGuests(response.data || []);
-      
-      toast({
-        title: 'Guests loaded',
-        description: `Found ${response.count || 0} guests`,
-      });
-    } catch (err) {
+      toast({ title: 'Guests loaded', description: `Found ${response.count || 0} guests` });
+    } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Make sure the backend is running on port 3001';
       setError(errorMessage);
-      
-      toast({
-        title: 'Connection Failed',
-        description: errorMessage,
-        variant: 'destructive',
-      });
+      toast({ title: 'Connection Failed', description: errorMessage, variant: 'destructive' });
     } finally {
       setLoading(false);
     }
   };
 
-  const getRSVPBadgeVariant = (status) => {
+  const getRSVPBadgeVariant = (status: string) => {
     switch (status) {
       case 'confirmed':
-        return 'default';
+        return 'default' as const;
       case 'declined':
-        return 'destructive';
+        return 'destructive' as const;
       default:
-        return 'secondary';
+        return 'secondary' as const;
     }
   };
 
@@ -71,7 +73,6 @@ const Guests = () => {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-muted/30 to-background">
       <Navigation />
-      
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <div className="flex items-center justify-between mb-2">
@@ -86,9 +87,7 @@ const Guests = () => {
               </Button>
             </div>
           </div>
-          <p className="text-muted-foreground">
-            Manage your wedding guest list and track RSVPs
-          </p>
+          <p className="text-muted-foreground">Manage your wedding guest list and track RSVPs</p>
         </div>
 
         {error ? (
@@ -132,71 +131,41 @@ const Guests = () => {
             <div className="grid gap-4 mb-6 md:grid-cols-3">
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Total Guests
-                  </CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Total Guests</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold">{guests.length}</div>
                 </CardContent>
               </Card>
-              
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Confirmed
-                  </CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Confirmed</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-green-600">
-                    {guests.filter(g => g.rsvp_status === 'confirmed').length}
-                  </div>
+                  <div className="text-3xl font-bold text-green-600">{guests.filter(g => g.rsvp_status === 'confirmed').length}</div>
                 </CardContent>
               </Card>
-              
               <Card>
                 <CardHeader className="pb-3">
-                  <CardTitle className="text-sm font-medium text-muted-foreground">
-                    Pending
-                  </CardTitle>
+                  <CardTitle className="text-sm font-medium text-muted-foreground">Pending</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="text-3xl font-bold text-amber-600">
-                    {guests.filter(g => g.rsvp_status === 'pending').length}
-                  </div>
+                  <div className="text-3xl font-bold text-amber-600">{guests.filter(g => g.rsvp_status === 'pending').length}</div>
                 </CardContent>
               </Card>
             </div>
-
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {guests.map((guest) => (
                 <Card key={guest.id} className="border-2 hover:shadow-lg transition-shadow">
                   <CardHeader>
                     <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg">{guest.name}</CardTitle>
-                      <Badge variant={getRSVPBadgeVariant(guest.rsvp_status)}>
-                        {guest.rsvp_status}
-                      </Badge>
+                      <CardTitle className="text-lg">{guest.guest_name}</CardTitle>
+                      <Badge variant={getRSVPBadgeVariant(guest.rsvp_status)}>{guest.rsvp_status}</Badge>
                     </div>
                   </CardHeader>
-                  <CardContent className="space-y-2">
-                    {guest.email && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Mail className="w-4 h-4" />
-                        <span className="truncate">{guest.email}</span>
-                      </div>
-                    )}
-                    {guest.phone && (
-                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Phone className="w-4 h-4" />
-                        <span>{guest.phone}</span>
-                      </div>
-                    )}
-                    {guest.plus_one && (
-                      <Badge variant="outline" className="text-xs">
-                        +1 Guest
-                      </Badge>
-                    )}
+                  <CardContent className="space-y-2 text-sm text-muted-foreground">
+                    {guest.table_number ? <div>Table: {guest.table_number}</div> : <div>No seating assigned</div>}
+                    {guest.restriction_name ? <div>Restriction: {guest.restriction_name}</div> : null}
                   </CardContent>
                 </Card>
               ))}
@@ -209,3 +178,6 @@ const Guests = () => {
 };
 
 export default Guests;
+
+
+

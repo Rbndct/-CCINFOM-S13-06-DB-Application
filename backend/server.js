@@ -16,32 +16,32 @@ app.use(express.json());
 const guestsRoutes = require('./routes/guests');
 const weddingsRoutes = require('./routes/weddings');
 const couplesRoutes = require('./routes/couples');
+const dietaryRoutes = require('./routes/dietaryRestrictions');
+const tablesRoutes = require('./routes/tables');
+const healthRoute = require('./routes/health');
 
 // Use routes
 app.use('/guests', guestsRoutes);
 app.use('/weddings', weddingsRoutes);
 app.use('/couples', couplesRoutes);
+app.use('/dietary-restrictions', dietaryRoutes);
+app.use('/tables', tablesRoutes);
+app.use('/health', healthRoute);
 
 // Test route to verify connection
 app.get('/test', (req, res) => {
-  res.json({ 
+  res.json({
     message: 'Wedding System Management API is running!',
     timestamp: new Date().toISOString()
   });
 });
 
-// Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', service: 'Wedding Management API' });
-});
+// (moved to /health route)
 
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ 
-    error: 'Something went wrong!', 
-    message: err.message 
-  });
+  res.status(500).json({error: 'Something went wrong!', message: err.message});
 });
 
 // Start server
