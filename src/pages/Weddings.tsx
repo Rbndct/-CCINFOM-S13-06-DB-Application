@@ -140,13 +140,7 @@ const Weddings = () => {
   const fetchWeddings = async () => {
     setLoading(true);
     try {
-      const response = await weddingsAPI.getAll({
-        date_from: dateFrom || undefined,
-        date_to: dateTo || undefined,
-        venue: venueFilter || undefined,
-        planner_contact: plannerFilter || undefined,
-        has_restrictions: hasRestrictions,
-      });
+      const response = await weddingsAPI.getAll();
       setWeddings(response.data || []);
     } catch (error: any) {
       console.error('Error fetching weddings:', error);

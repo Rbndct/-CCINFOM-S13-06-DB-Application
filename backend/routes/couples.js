@@ -384,17 +384,32 @@ router.delete('/preferences/:preference_id', async (req, res) => {
   try {
     const preferenceId = req.params.preference_id;
 
-    // Check if preference is used by any weddings
-    const [weddingRefs] = await promisePool.query(
-        'SELECT COUNT(*) AS cnt FROM wedding WHERE preference_id = ?',
-        [preferenceId]);
+    // Check if preference_id column exists in wedding table
+    let hasPreferenceColumn = false;
+    try {
+      const [colCheck] = await promisePool.query(
+          `SELECT COUNT(*) as cnt 
+         FROM information_schema.COLUMNS 
+         WHERE TABLE_SCHEMA = DATABASE() 
+         AND TABLE_NAME = 'wedding' 
+         AND COLUMN_NAME = 'preference_id'`);
+      hasPreferenceColumn = colCheck[0]?.cnt > 0;
+    } catch (e) {
+      hasPreferenceColumn = false;
+    }
 
-    if ((weddingRefs[0]?.cnt || 0) > 0) {
-      return res.status(409).json({
-        success: false,
-        error:
-            'Preference is in use by one or more weddings and cannot be deleted'
-      });
+    if (hasPreferenceColumn) {
+      const [weddingRefs] = await promisePool.query(
+          'SELECT COUNT(*) AS cnt FROM wedding WHERE preference_id = ?',
+          [preferenceId]);
+
+      if ((weddingRefs[0]?.cnt || 0) > 0) {
+        return res.status(409).json({
+          success: false,
+          error:
+              'Preference is in use by one or more weddings and cannot be deleted'
+        });
+      }
     }
 
     const [del] = await promisePool.query(

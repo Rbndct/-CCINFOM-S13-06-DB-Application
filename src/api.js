@@ -50,7 +50,7 @@ export const guestsAPI = {
 };
 
 export const weddingsAPI = {
-  getAll: (params) => api.get('/weddings', {params}),
+  getAll: () => api.get('/weddings'),
   getById: (id) => api.get(`/weddings/${id}`),
   create: (data) => api.post('/weddings', data),
   update: (id, data) => api.put(`/weddings/${id}`, data),

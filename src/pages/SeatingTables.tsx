@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   Plus, 
   Search, 
@@ -33,75 +33,9 @@ import {
 import DashboardLayout from '@/components/DashboardLayout';
 
 const SeatingTables = () => {
-  const [tables, setTables] = useState([]);
+  const [tables] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterWedding, setFilterWedding] = useState('all');
-
-  // Mock data - replace with actual API calls
-  useEffect(() => {
-    setTables([
-      {
-        id: 1,
-        table_number: 'T-001',
-        table_category: 'VIP',
-        capacity: 8,
-        wedding_id: 1,
-        wedding_couple: 'John & Jane Smith',
-        wedding_date: '2024-02-14',
-        package_name: 'Premium Package',
-        assigned_guests: 6,
-        available_seats: 2
-      },
-      {
-        id: 2,
-        table_number: 'T-002',
-        table_category: 'Family',
-        capacity: 10,
-        wedding_id: 1,
-        wedding_couple: 'John & Jane Smith',
-        wedding_date: '2024-02-14',
-        package_name: 'Premium Package',
-        assigned_guests: 10,
-        available_seats: 0
-      },
-      {
-        id: 3,
-        table_number: 'T-003',
-        table_category: 'Friends',
-        capacity: 8,
-        wedding_id: 1,
-        wedding_couple: 'John & Jane Smith',
-        wedding_date: '2024-02-14',
-        package_name: 'Premium Package',
-        assigned_guests: 7,
-        available_seats: 1
-      },
-      {
-        id: 4,
-        table_number: 'T-004',
-        table_category: 'VIP',
-        capacity: 6,
-        wedding_id: 2,
-        wedding_couple: 'Mike & Sarah Johnson',
-        wedding_date: '2024-02-21',
-        package_name: 'Budget Package',
-        assigned_guests: 4,
-        available_seats: 2
-      },
-      {
-        id: 5,
-        table_number: 'T-005',
-        table_category: 'Family',
-        capacity: 8,
-        wedding_id: 2,
-        wedding_couple: 'Mike & Sarah Johnson',
-        wedding_date: '2024-02-21',
-        package_name: 'Budget Package',
-        assigned_guests: 8,
-        available_seats: 0
-      }
-    ]);
-  }, []);
 
   const getCategoryBadge = (category: string) => {
     const colors = {
