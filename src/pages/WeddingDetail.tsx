@@ -51,6 +51,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/DashboardLayout';
+import { tablesAPI } from '@/api';
 
 const WeddingDetail = () => {
   const { id } = useParams();
@@ -70,6 +71,7 @@ const WeddingDetail = () => {
   
   // Tables state
   const [tables, setTables] = useState<any[]>([]);
+  const [seatingLoading, setSeatingLoading] = useState(false);
   const [tableCategory, setTableCategory] = useState('');
   const [tableNumber, setTableNumber] = useState('');
   const [tableCapacity, setTableCapacity] = useState('');
@@ -206,6 +208,43 @@ const WeddingDetail = () => {
       setLoading(false);
     }, 500);
   }, [id]);
+
+  useEffect(() => {
+    const loadSeating = async () => {
+      if (!id) return;
+      setSeatingLoading(true);
+      try {
+        const resp = await tablesAPI.getSeating(id);
+        setTables(resp.data || []);
+      } catch {}
+      setSeatingLoading(false);
+    };
+    loadSeating();
+  }, [id]);
+
+  const ensureCoupleTable = async () => {
+    if (!id) return;
+    try {
+      await tablesAPI.createCoupleTable(id);
+      const resp = await tablesAPI.getSeating(id);
+      setTables(resp.data || []);
+      toast({ title: 'Couple Table Created' });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.response?.data?.error || 'Failed to create couple table', variant: 'destructive' });
+    }
+  };
+
+  const addGuestTable = async (capacity: number) => {
+    if (!id) return;
+    try {
+      await tablesAPI.createGuestTable(id, capacity);
+      const resp = await tablesAPI.getSeating(id);
+      setTables(resp.data || []);
+      toast({ title: 'Guest Table Created', description: `Capacity ${capacity}` });
+    } catch (e: any) {
+      toast({ title: 'Error', description: e.response?.data?.error || 'Failed to create guest table', variant: 'destructive' });
+    }
+  };
   
   // Helper function to get assigned table for a guest
   const getGuestAssignedTable = (guestId: number) => {
@@ -861,13 +900,23 @@ const WeddingDetail = () => {
 
           {/* Tables Tab */}
           <TabsContent value="tables" className="space-y-4">
-            <Card>
+          <Card>
               <CardHeader>
                 <CardTitle>Add Table</CardTitle>
                 <CardDescription>Add a new table to this wedding</CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleAddTable} className="space-y-4">
+              <form onSubmit={handleAddTable} className="space-y-4">
+                {/* Mandatory Couple Table CTA */}
+                {tables.filter(t => t.table_category === 'couple').length === 0 && (
+                  <div className="p-3 rounded border bg-muted/30 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Couple Table Required</p>
+                      <p className="text-xs text-muted-foreground">Create the couple table before adding guest tables.</p>
+                    </div>
+                    <Button onClick={(e) => { e.preventDefault(); ensureCoupleTable(); }} disabled={seatingLoading}>Create Couple Table</Button>
+                  </div>
+                )}
                   <div className="space-y-2">
                     <Label htmlFor="tableCategory">Table Category *</Label>
                     <Select value={tableCategory} onValueChange={setTableCategory} disabled={tableFormLoading}>
@@ -875,40 +924,25 @@ const WeddingDetail = () => {
                         <SelectValue placeholder="Select table category" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="VIP">VIP</SelectItem>
-                        <SelectItem value="Kids">Kids</SelectItem>
-                        <SelectItem value="Partners">Partners</SelectItem>
-                        <SelectItem value="General">General</SelectItem>
+                      <SelectItem value="couple">Couple</SelectItem>
+                      <SelectItem value="guest">Guest</SelectItem>
                       </SelectContent>
                     </Select>
                     {tableFormErrors.tableCategory && (
                       <p className="text-sm text-red-500">{tableFormErrors.tableCategory}</p>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="tableNumber">Table Number *</Label>
-                      <Input
-                        id="tableNumber"
-                        value={tableNumber}
-                        onChange={(e) => setTableNumber(e.target.value)}
-                        placeholder="e.g., T-001"
-                        className={tableFormErrors.tableNumber ? 'border-red-500' : ''}
-                        disabled={tableFormLoading}
-                      />
-                      {tableFormErrors.tableNumber && (
-                        <p className="text-sm text-red-500">{tableFormErrors.tableNumber}</p>
-                      )}
-                    </div>
-                    <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
                       <Label htmlFor="tableCapacity">Capacity *</Label>
                       <Input
                         id="tableCapacity"
                         type="number"
                         value={tableCapacity}
                         onChange={(e) => setTableCapacity(e.target.value)}
-                        placeholder="Enter capacity"
-                        min="1"
+                      placeholder="6-10 for guest tables"
+                      min="6"
+                      max="10"
                         className={tableFormErrors.tableCapacity ? 'border-red-500' : ''}
                         disabled={tableFormLoading}
                       />
@@ -930,6 +964,10 @@ const WeddingDetail = () => {
                       </>
                     )}
                   </Button>
+                <div className="flex gap-2 mt-2">
+                  <Button type="button" variant="outline" onClick={() => addGuestTable(6)} disabled={tables.filter(t => t.table_category === 'couple').length === 0}>Quick Add Guest Table (6)</Button>
+                  <Button type="button" variant="outline" onClick={() => addGuestTable(10)} disabled={tables.filter(t => t.table_category === 'couple').length === 0}>Quick Add Guest Table (10)</Button>
+                </div>
                 </form>
               </CardContent>
             </Card>

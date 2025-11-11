@@ -36,7 +36,6 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import VenueAutocomplete from '@/components/VenueAutocomplete';
 import { cn } from '@/lib/utils';
 import { 
   Table, 
@@ -54,13 +53,21 @@ import {
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/DashboardLayout';
 import { weddingsAPI, couplesAPI } from '@/api';
+import { usePrice } from '@/utils/currency';
 
 const Weddings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { convert, format } = usePrice();
   const [weddings, setWeddings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
+  const [showFilters, setShowFilters] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [venueFilter, setVenueFilter] = useState('');
+  const [plannerFilter, setPlannerFilter] = useState('');
+  const [hasRestrictions, setHasRestrictions] = useState<string | undefined>();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [couples, setCouples] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -74,9 +81,9 @@ const Weddings = () => {
   const [weddingDate, setWeddingDate] = useState('');
   const [weddingTime, setWeddingTime] = useState('');
   const [venue, setVenue] = useState('');
-  const [venuePlaceId, setVenuePlaceId] = useState('');
-  const [venueAddress, setVenueAddress] = useState('');
   const [paymentStatus, setPaymentStatus] = useState('');
+  const [selectedPreferenceId, setSelectedPreferenceId] = useState('');
+  const [couplePreferences, setCouplePreferences] = useState<any[]>([]);
   
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -85,6 +92,16 @@ const Weddings = () => {
   useEffect(() => {
     fetchCouples();
   }, []);
+
+  // Fetch preferences when couple is selected
+  useEffect(() => {
+    if (selectedCoupleId) {
+      fetchCouplePreferences();
+    } else {
+      setCouplePreferences([]);
+      setSelectedPreferenceId('');
+    }
+  }, [selectedCoupleId]);
 
   const fetchCouples = async () => {
     try {
@@ -105,6 +122,16 @@ const Weddings = () => {
     }
   };
 
+  const fetchCouplePreferences = async () => {
+    try {
+      const response = await couplesAPI.getPreferences(selectedCoupleId);
+      setCouplePreferences(response.data || []);
+    } catch (error: any) {
+      console.error('Error fetching preferences:', error);
+      setCouplePreferences([]);
+    }
+  };
+
   // Fetch weddings
   useEffect(() => {
     fetchWeddings();
@@ -113,7 +140,13 @@ const Weddings = () => {
   const fetchWeddings = async () => {
     setLoading(true);
     try {
-      const response = await weddingsAPI.getAll();
+      const response = await weddingsAPI.getAll({
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        venue: venueFilter || undefined,
+        planner_contact: plannerFilter || undefined,
+        has_restrictions: hasRestrictions,
+      });
       setWeddings(response.data || []);
     } catch (error: any) {
       console.error('Error fetching weddings:', error);
@@ -182,9 +215,9 @@ const Weddings = () => {
     setWeddingDate('');
     setWeddingTime('');
     setVenue('');
-    setVenuePlaceId('');
-    setVenueAddress('');
     setPaymentStatus('');
+    setSelectedPreferenceId('');
+    setCouplePreferences([]);
     setErrors({});
   };
 
@@ -223,6 +256,7 @@ const Weddings = () => {
         total_cost: 0,
         production_cost: 0,
         payment_status: paymentStatus,
+        preference_id: selectedPreferenceId ? parseInt(selectedPreferenceId) : null,
       });
 
       // Refresh weddings list
@@ -298,7 +332,7 @@ const Weddings = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                ${weddings.reduce((sum, wedding) => sum + wedding.totalCost, 0).toLocaleString()}
+                {format(convert(weddings.reduce((sum, wedding) => sum + (wedding.totalCost || 0), 0)))}
               </div>
             </CardContent>
           </Card>
@@ -335,11 +369,41 @@ const Weddings = () => {
                   className="pl-8"
                 />
               </div>
-              <Button variant="outline">
+              <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
                 <Filter className="w-4 h-4 mr-2" />
-                Filter
+                Filters
               </Button>
+              <Button variant="secondary" onClick={fetchWeddings}>Apply</Button>
             </div>
+
+            {showFilters && (
+              <div className="grid md:grid-cols-5 gap-3 mb-4">
+                <div>
+                  <label className="text-sm text-muted-foreground">From</label>
+                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">To</label>
+                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Venue</label>
+                  <Input value={venueFilter} onChange={(e) => setVenueFilter(e.target.value)} placeholder="Search venue" />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Planner</label>
+                  <Input value={plannerFilter} onChange={(e) => setPlannerFilter(e.target.value)} placeholder="Planner contact" />
+                </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Has Restrictions</label>
+                  <select className="w-full h-10 rounded-md border bg-transparent px-3 text-sm" value={hasRestrictions ?? ''} onChange={(e) => setHasRestrictions(e.target.value || undefined)}>
+                    <option value="">Any</option>
+                    <option value="Y">Yes</option>
+                    <option value="N">No</option>
+                  </select>
+                </div>
+              </div>
+            )}
 
             <Table>
               <TableHeader>
@@ -393,9 +457,9 @@ const Weddings = () => {
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-semibold">${wedding.totalCost.toLocaleString()}</div>
+                        <div className="font-semibold">{format(convert(wedding.totalCost || 0))}</div>
                         <div className="text-sm text-muted-foreground">
-                          Prod: ${wedding.productionCost.toLocaleString()}
+                          Prod: {format(convert(wedding.productionCost || 0))}
                         </div>
                       </div>
                     </TableCell>
@@ -418,7 +482,19 @@ const Weddings = () => {
                             <Edit className="mr-2 h-4 w-4" />
                             Edit
                           </DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600">
+                          <DropdownMenuItem
+                            className="text-red-600"
+                            onClick={async () => {
+                              if (!confirm('Delete this wedding?')) return;
+                              try {
+                                await weddingsAPI.delete(wedding.id);
+                                await fetchWeddings();
+                                toast({ title: 'Wedding deleted' });
+                              } catch (e: any) {
+                                toast({ title: 'Error', description: e.response?.data?.error || 'Failed to delete wedding', variant: 'destructive' });
+                              }
+                            }}
+                          >
                             <Trash2 className="mr-2 h-4 w-4" />
                             Delete
                           </DropdownMenuItem>
@@ -462,6 +538,40 @@ const Weddings = () => {
                   <p className="text-sm text-red-500">{errors.selectedCoupleId}</p>
                 )}
               </div>
+
+              {/* Preference Selection (optional, filtered by couple) */}
+              {selectedCoupleId && (
+                <div className="space-y-2">
+                  <Label htmlFor="preference">Preference (Optional)</Label>
+                  <Select
+                    value={selectedPreferenceId}
+                    onValueChange={setSelectedPreferenceId}
+                    disabled={couplePreferences.length === 0}
+                  >
+                    <SelectTrigger id="preference">
+                      <SelectValue placeholder={couplePreferences.length === 0 ? 'No preferences available - add preferences in couple detail' : 'Select a preference'} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {couplePreferences.map((pref) => (
+                        <SelectItem key={pref.preference_id} value={pref.preference_id.toString()}>
+                          {pref.ceremony_type} - {pref.restriction_name || 'No restriction'}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {selectedPreferenceId && couplePreferences.length > 0 && (() => {
+                    const selectedPref = couplePreferences.find(p => p.preference_id.toString() === selectedPreferenceId);
+                    return selectedPref ? (
+                      <div className="p-2 bg-muted rounded text-sm">
+                        <p><strong>Ceremony:</strong> {selectedPref.ceremony_type}</p>
+                        {selectedPref.restriction_name && (
+                          <p><strong>Restriction:</strong> {selectedPref.restriction_name} ({selectedPref.restriction_type})</p>
+                        )}
+                      </div>
+                    ) : null;
+                  })()}
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 {/* Wedding Date */}
@@ -549,38 +659,20 @@ const Weddings = () => {
                 </div>
               </div>
 
-              {/* Venue - Autocomplete (optional) or text input */}
+              {/* Venue */}
               <div className="space-y-2">
                 <Label htmlFor="venue">Venue *</Label>
-                <VenueAutocomplete
+                <Input
+                  id="venue"
                   value={venue}
-                  onChange={(value) => {
-                    setVenue(value);
-                    if (!value) {
-                      setVenuePlaceId('');
-                      setVenueAddress('');
-                    }
-                  }}
-                  onPlaceSelect={(place) => {
-                    setVenue(place.name);
-                    setVenuePlaceId(place.placeId);
-                    setVenueAddress(place.address);
-                  }}
-                  placeholder="Enter or search for a venue..."
-                  error={!!errors.venue}
+                  onChange={(e) => setVenue(e.target.value)}
+                  placeholder="Enter venue name..."
+                  className={cn(errors.venue ? 'border-red-500' : '')}
+                  disabled={loading}
                 />
-                {venueAddress && venueAddress !== venue && (
-                  <p className="text-xs text-muted-foreground flex items-center gap-1">
-                    <MapPin className="w-3 h-3" />
-                    {venueAddress}
-                  </p>
-                )}
                 {errors.venue && (
                   <p className="text-sm text-red-500">{errors.venue}</p>
                 )}
-                <p className="text-xs text-muted-foreground">
-                  You can type a venue name directly or use autocomplete suggestions if available
-                </p>
               </div>
 
               {/* Payment Status */}

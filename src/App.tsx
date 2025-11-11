@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Weddings from "./pages/Weddings";
 import WeddingDetail from "./pages/WeddingDetail";
 import Couples from "./pages/Couples";
+import CoupleDetail from "./pages/CoupleDetail";
 import MenuItems from "./pages/MenuItems";
 import Packages from "./pages/Packages";
 import Inventory from "./pages/Inventory";
@@ -36,6 +37,7 @@ const App = () => (
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/dashboard/weddings/:id" element={<WeddingDetail />} />
           <Route path="/dashboard/weddings" element={<Weddings />} />
+          <Route path="/dashboard/couples/:id" element={<CoupleDetail />} />
           <Route path="/dashboard/couples" element={<Couples />} />
           <Route path="/dashboard/guests" element={<Guests />} />
           <Route path="/dashboard/menu" element={<MenuItems />} />
