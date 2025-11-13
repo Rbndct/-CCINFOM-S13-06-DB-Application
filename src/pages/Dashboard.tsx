@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Calendar, 
   Users, 
@@ -19,7 +19,7 @@ import { Badge } from '@/components/ui/badge';
 import DashboardLayout from '@/components/DashboardLayout';
 
 const Dashboard = () => {
-  const [stats] = useState({
+  const [stats, setStats] = useState({
     totalWeddings: 0,
     totalCouples: 0,
     totalGuests: 0,
@@ -32,8 +32,37 @@ const Dashboard = () => {
     monthlyRevenue: 0
   });
 
-  const [recentWeddings] = useState<any[]>([]);
-  const [upcomingEvents] = useState<any[]>([]);
+  const [recentWeddings, setRecentWeddings] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+
+  // Mock data - replace with actual API calls
+  useEffect(() => {
+    // Simulate API calls
+    setStats({
+      totalWeddings: 24,
+      totalCouples: 24,
+      totalGuests: 480,
+      totalMenuItems: 45,
+      totalPackages: 12,
+      totalInventory: 156,
+      upcomingWeddings: 8,
+      pendingRSVPs: 23,
+      totalRevenue: 125000,
+      monthlyRevenue: 18500
+    });
+
+    setRecentWeddings([
+      { id: 1, couple: 'John & Jane Smith', date: '2024-02-14', venue: 'Garden Manor', status: 'confirmed' },
+      { id: 2, couple: 'Mike & Sarah Johnson', date: '2024-02-21', venue: 'Riverside Hall', status: 'pending' },
+      { id: 3, couple: 'David & Lisa Brown', date: '2024-03-01', venue: 'Mountain View Resort', status: 'confirmed' },
+    ]);
+
+    setUpcomingEvents([
+      { id: 1, couple: 'Alex & Emma Wilson', date: '2024-01-15', venue: 'Sunset Gardens', daysLeft: 3 },
+      { id: 2, couple: 'Tom & Jessica Davis', date: '2024-01-22', venue: 'Grand Ballroom', daysLeft: 10 },
+      { id: 3, couple: 'Chris & Maria Garcia', date: '2024-01-28', venue: 'Beach Resort', daysLeft: 16 },
+    ]);
+  }, []);
 
   const statCards = [
     {

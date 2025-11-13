@@ -38,6 +38,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
+import { usePrice } from '@/utils/currency';
 
 type Couple = {
   couple_id: number;
@@ -71,12 +72,16 @@ type Wedding = {
   totalCost: number;
   productionCost: number;
   paymentStatus: string;
+  preference_id?: number;
+  ceremony_type?: string;
+  restriction_name?: string;
 };
 
 const CoupleDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { format, convert } = usePrice();
   const [couple, setCouple] = useState<Couple | null>(null);
   const [weddings, setWeddings] = useState<Wedding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -199,6 +204,10 @@ const CoupleDetail = () => {
         variant: 'destructive',
       });
     }
+  };
+
+  const getWeddingCountForPreference = (prefId: number) => {
+    return weddings.filter(w => w.preference_id === prefId).length;
   };
 
   if (loading) {
@@ -345,6 +354,11 @@ const CoupleDetail = () => {
                             {pref.restriction_name} ({pref.restriction_type})
                           </Badge>
                         )}
+                        {getWeddingCountForPreference(pref.preference_id) > 0 && (
+                          <span className="text-sm text-muted-foreground">
+                            Used by {getWeddingCountForPreference(pref.preference_id)} wedding(s)
+                          </span>
+                        )}
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -418,8 +432,20 @@ const CoupleDetail = () => {
                         <span>{wedding.guestCount} guests</span>
                       </div>
                       <div className="text-sm font-semibold">
-                        ${Number(wedding.totalCost || 0).toLocaleString()}
+                        {format(convert(wedding.totalCost || 0))}
                       </div>
+                      {wedding.ceremony_type && (
+                        <div className="flex gap-2 mt-2">
+                          <Badge variant="outline" className="text-xs">
+                            {wedding.ceremony_type}
+                          </Badge>
+                          {wedding.restriction_name && (
+                            <Badge variant="secondary" className="text-xs">
+                              {wedding.restriction_name}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
                     </CardContent>
                   </Card>
                 ))}
@@ -446,14 +472,24 @@ const CoupleDetail = () => {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="ceremony_type">Ceremony Type *</Label>
-                <Input
-                  id="ceremony_type"
+                <Select
                   value={preferenceForm.ceremony_type}
-                  onChange={(e) =>
-                    setPreferenceForm({ ...preferenceForm, ceremony_type: e.target.value })
+                  onValueChange={(value) =>
+                    setPreferenceForm({ ...preferenceForm, ceremony_type: value })
                   }
-                  placeholder="e.g. Civil, Church, Beach"
-                />
+                >
+                  <SelectTrigger id="ceremony_type">
+                    <SelectValue placeholder="Select ceremony type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Civil">Civil</SelectItem>
+                    <SelectItem value="Church">Church</SelectItem>
+                    <SelectItem value="Garden">Garden</SelectItem>
+                    <SelectItem value="Beach">Beach</SelectItem>
+                    <SelectItem value="Outdoor">Outdoor</SelectItem>
+                    <SelectItem value="Indoor">Indoor</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="restriction_id">Dietary Restriction *</Label>

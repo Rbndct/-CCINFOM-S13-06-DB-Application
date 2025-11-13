@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -35,9 +35,69 @@ import {
 import DashboardLayout from '@/components/DashboardLayout';
 
 const Inventory = () => {
-  const [inventoryItems] = useState<any[]>([]);
+  const [inventoryItems, setInventoryItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
+
+  // Mock data - replace with actual API calls
+  useEffect(() => {
+    setInventoryItems([
+      {
+        id: 1,
+        item_name: 'Round Tables (8-person)',
+        category: 'Furniture',
+        condition: 'Excellent',
+        quantity_available: 25,
+        rental_cost: 15.00,
+        total_value: 375.00
+      },
+      {
+        id: 2,
+        item_name: 'White Table Linens',
+        category: 'Linens',
+        condition: 'Good',
+        quantity_available: 50,
+        rental_cost: 5.00,
+        total_value: 250.00
+      },
+      {
+        id: 3,
+        item_name: 'Chandelier (Crystal)',
+        category: 'Lighting',
+        condition: 'Excellent',
+        quantity_available: 8,
+        rental_cost: 75.00,
+        total_value: 600.00
+      },
+      {
+        id: 4,
+        item_name: 'Sound System',
+        category: 'Audio/Visual',
+        condition: 'Good',
+        quantity_available: 3,
+        rental_cost: 200.00,
+        total_value: 600.00
+      },
+      {
+        id: 5,
+        item_name: 'Wedding Arch (White)',
+        category: 'Decorations',
+        condition: 'Fair',
+        quantity_available: 12,
+        rental_cost: 45.00,
+        total_value: 540.00
+      },
+      {
+        id: 6,
+        item_name: 'Chairs (White)',
+        category: 'Furniture',
+        condition: 'Good',
+        quantity_available: 200,
+        rental_cost: 3.00,
+        total_value: 600.00
+      }
+    ]);
+  }, []);
 
   const getConditionBadge = (condition: string) => {
     switch (condition) {

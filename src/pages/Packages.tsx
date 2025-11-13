@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -36,9 +36,97 @@ import DashboardLayout from '@/components/DashboardLayout';
 
 const Packages = () => {
   const [activeTab, setActiveTab] = useState('templates');
-  const [packages] = useState<any[]>([]);
+  const [packages, setPackages] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+
+  // Mock data - replace with actual API calls
+  useEffect(() => {
+    // Templates (default packages available to all weddings)
+    const templates = [
+      {
+        id: 1,
+        package_name: 'Premium Wedding Package',
+        package_type: 'Full Service',
+        package_price: 5000.00,
+        menu_items: [
+          { name: 'Grilled Salmon', quantity: 1 },
+          { name: 'Caesar Salad', quantity: 1 },
+          { name: 'Chocolate Cake', quantity: 1 },
+          { name: 'Wine Selection', quantity: 2 }
+        ],
+        total_items: 4,
+        usage_count: 12,
+        is_template: true
+      },
+      {
+        id: 2,
+        package_name: 'Budget Package',
+        package_type: 'Basic',
+        package_price: 2500.00,
+        menu_items: [
+          { name: 'Vegetarian Pasta', quantity: 1 },
+          { name: 'Garden Salad', quantity: 1 },
+          { name: 'Vanilla Ice Cream', quantity: 1 }
+        ],
+        total_items: 3,
+        usage_count: 8,
+        is_template: true
+      },
+      {
+        id: 3,
+        package_name: 'Luxury Package',
+        package_type: 'Premium',
+        package_price: 8000.00,
+        menu_items: [
+          { name: 'Beef Tenderloin', quantity: 1 },
+          { name: 'Lobster Bisque', quantity: 1 },
+          { name: 'Truffle Risotto', quantity: 1 },
+          { name: 'Chocolate Soufflé', quantity: 1 },
+          { name: 'Premium Wine', quantity: 3 }
+        ],
+        total_items: 5,
+        usage_count: 5,
+        is_template: true
+      },
+      {
+        id: 4,
+        package_name: 'Vegetarian Package',
+        package_type: 'Specialty',
+        package_price: 3200.00,
+        menu_items: [
+          { name: 'Vegetarian Pasta', quantity: 1 },
+          { name: 'Quinoa Salad', quantity: 1 },
+          { name: 'Fruit Tart', quantity: 1 }
+        ],
+        total_items: 3,
+        usage_count: 6,
+        is_template: true
+      }
+    ];
+
+    // Wedding-specific packages
+    const weddingSpecific = [
+      {
+        id: 101,
+        package_name: 'Custom Beach Wedding Package',
+        package_type: 'Custom',
+        package_price: 6500.00,
+        menu_items: [
+          { name: 'Seafood Platter', quantity: 1 },
+          { name: 'Tropical Salad', quantity: 1 },
+          { name: 'Tropical Cake', quantity: 1 }
+        ],
+        total_items: 3,
+        usage_count: 1,
+        is_template: false,
+        wedding_id: 1,
+        wedding_name: 'John & Jane Wedding'
+      }
+    ];
+
+    setPackages([...templates, ...weddingSpecific]);
+  }, []);
 
   const getTypeBadge = (type: string) => {
     const colors = {

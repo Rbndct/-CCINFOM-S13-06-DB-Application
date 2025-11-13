@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -32,9 +32,63 @@ import {
 import DashboardLayout from '@/components/DashboardLayout';
 
 const DietaryRestrictions = () => {
-  const [restrictions] = useState<any[]>([]);
+  const [restrictions, setRestrictions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
+
+  // Mock data - replace with actual API calls
+  useEffect(() => {
+    setRestrictions([
+      {
+        id: 1,
+        restriction_name: 'Vegetarian',
+        severity_level: 'Moderate',
+        restriction_type: 'Dietary',
+        affected_guests: 12,
+        menu_items_count: 8
+      },
+      {
+        id: 2,
+        restriction_name: 'Gluten-Free',
+        severity_level: 'High',
+        restriction_type: 'Medical',
+        affected_guests: 5,
+        menu_items_count: 6
+      },
+      {
+        id: 3,
+        restriction_name: 'Nut Allergy',
+        severity_level: 'Critical',
+        restriction_type: 'Allergy',
+        affected_guests: 3,
+        menu_items_count: 4
+      },
+      {
+        id: 4,
+        restriction_name: 'Lactose Intolerant',
+        severity_level: 'Moderate',
+        restriction_type: 'Medical',
+        affected_guests: 8,
+        menu_items_count: 7
+      },
+      {
+        id: 5,
+        restriction_name: 'Vegan',
+        severity_level: 'Moderate',
+        restriction_type: 'Dietary',
+        affected_guests: 6,
+        menu_items_count: 5
+      },
+      {
+        id: 6,
+        restriction_name: 'Halal',
+        severity_level: 'High',
+        restriction_type: 'Religious',
+        affected_guests: 4,
+        menu_items_count: 9
+      }
+    ]);
+  }, []);
 
   const getSeverityBadge = (severity: string) => {
     switch (severity) {

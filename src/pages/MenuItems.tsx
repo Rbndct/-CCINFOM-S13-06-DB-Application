@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Plus, 
   Search, 
@@ -37,10 +37,101 @@ import DashboardLayout from '@/components/DashboardLayout';
 
 const MenuItems = () => {
   const [activeTab, setActiveTab] = useState('templates');
-  const [menuItems] = useState<any[]>([]);
+  const [menuItems, setMenuItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
 
+  // Mock data - replace with actual API calls
+  useEffect(() => {
+    // Templates (default items available to all weddings)
+    const templates = [
+      {
+        id: 1,
+        menu_name: 'Grilled Salmon',
+        menu_cost: 15.50,
+        menu_price: 25.00,
+        menu_type: 'Main Course',
+        stock: 50,
+        restriction_id: null,
+        restriction_name: null,
+        profit_margin: 9.50,
+        is_template: true,
+        usage_count: 12
+      },
+      {
+        id: 2,
+        menu_name: 'Vegetarian Pasta',
+        menu_cost: 8.75,
+        menu_price: 18.00,
+        menu_type: 'Main Course',
+        stock: 30,
+        restriction_id: 1,
+        restriction_name: 'Vegetarian',
+        profit_margin: 9.25,
+        is_template: true,
+        usage_count: 8
+      },
+      {
+        id: 3,
+        menu_name: 'Caesar Salad',
+        menu_cost: 4.25,
+        menu_price: 12.00,
+        menu_type: 'Appetizer',
+        stock: 75,
+        restriction_id: null,
+        restriction_name: null,
+        profit_margin: 7.75,
+        is_template: true,
+        usage_count: 15
+      },
+      {
+        id: 4,
+        menu_name: 'Chocolate Cake',
+        menu_cost: 6.00,
+        menu_price: 15.00,
+        menu_type: 'Dessert',
+        stock: 20,
+        restriction_id: 2,
+        restriction_name: 'Gluten-Free',
+        profit_margin: 9.00,
+        is_template: true,
+        usage_count: 10
+      },
+      {
+        id: 5,
+        menu_name: 'Beef Tenderloin',
+        menu_cost: 22.00,
+        menu_price: 35.00,
+        menu_type: 'Main Course',
+        stock: 15,
+        restriction_id: null,
+        restriction_name: null,
+        profit_margin: 13.00,
+        is_template: true,
+        usage_count: 6
+      }
+    ];
+
+    // Wedding-specific items (examples)
+    const weddingSpecific = [
+      {
+        id: 101,
+        menu_name: 'Custom Wedding Cake',
+        menu_cost: 45.00,
+        menu_price: 75.00,
+        menu_type: 'Dessert',
+        stock: 5,
+        restriction_id: null,
+        restriction_name: null,
+        profit_margin: 30.00,
+        is_template: false,
+        wedding_id: 1,
+        wedding_name: 'John & Jane Wedding'
+      }
+    ];
+
+    setMenuItems([...templates, ...weddingSpecific]);
+  }, []);
 
   const getStockStatus = (stock: number) => {
     if (stock === 0) {

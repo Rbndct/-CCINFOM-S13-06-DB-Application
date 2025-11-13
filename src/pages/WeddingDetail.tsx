@@ -51,7 +51,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/DashboardLayout';
-import { tablesAPI, weddingsAPI } from '@/api';
+import { tablesAPI } from '@/api';
 
 const WeddingDetail = () => {
   const { id } = useParams();
@@ -95,40 +95,119 @@ const WeddingDetail = () => {
   const [packageAssignPackageId, setPackageAssignPackageId] = useState('');
   const [packageFormLoading, setPackageFormLoading] = useState(false);
   
-  // Available packages for this wedding
-  const [availablePackages] = useState<any[]>([]);
+  // Available packages for this wedding (mock data)
+  const [availablePackages, setAvailablePackages] = useState<any[]>([]);
 
   useEffect(() => {
-    const loadWedding = async () => {
-      if (!id) {
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        const response = await weddingsAPI.getById(Number(id));
-        setWedding(response.data);
-      } catch (error: any) {
-        if (error.response?.status === 404) {
-          toast({
-            title: 'Wedding not found',
-            description: 'The wedding you are looking for does not exist.',
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: 'Error',
-            description: error.response?.data?.message || error.message || 'Failed to load wedding details.',
-            variant: 'destructive',
-          });
+    // Mock data - replace with actual API call
+    const weddingId = parseInt(id || '1');
+    
+    // Simulate API call
+    setTimeout(() => {
+      setWedding({
+        id: weddingId,
+        couple: 'John & Jane Smith',
+        partner1: 'John Smith',
+        partner2: 'Jane Smith',
+        weddingDate: '2024-02-14',
+        weddingTime: '16:00',
+        venue: 'Garden Manor',
+        guestCount: 120,
+        confirmedGuests: 105,
+        pendingRSVPs: 15,
+        totalCost: 25000,
+        productionCost: 18000,
+        paymentStatus: 'paid',
+        plannerContact: 'Sarah Johnson - (555) 123-4567',
+        menuItems: 25,
+        packages: 3,
+        inventoryItems: 45,
+        dietaryRestrictions: 12
+      });
+      
+      // Initialize mock data scoped to wedding ID
+      setGuests([
+        {
+          id: 1,
+          firstName: 'Alice',
+          lastName: 'Johnson',
+          dietaryRestriction: 'Vegetarian',
+          rsvpStatus: 'accepted',
+          weddingId: weddingId
+        },
+        {
+          id: 2,
+          firstName: 'Bob',
+          lastName: 'Williams',
+          dietaryRestriction: '',
+          rsvpStatus: 'accepted',
+          weddingId: weddingId
+        },
+        {
+          id: 3,
+          firstName: 'Carol',
+          lastName: 'Brown',
+          dietaryRestriction: 'Gluten-free',
+          rsvpStatus: 'pending',
+          weddingId: weddingId
         }
-        navigate('/dashboard/weddings');
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadWedding();
-  }, [id, navigate, toast]);
+      ]);
+      
+      setTables([
+        {
+          id: 1,
+          tableNumber: 'T-001',
+          category: 'VIP',
+          capacity: 8,
+          weddingId: weddingId,
+          assignedGuests: [1, 2]
+        },
+        {
+          id: 2,
+          tableNumber: 'T-002',
+          category: 'General',
+          capacity: 10,
+          weddingId: weddingId,
+          assignedGuests: [3]
+        }
+      ]);
+      
+      setAvailablePackages([
+        {
+          id: 1,
+          packageName: 'Premium Package',
+          packageType: 'Full Service',
+          weddingId: weddingId
+        },
+        {
+          id: 2,
+          packageName: 'Budget Package',
+          packageType: 'Basic',
+          weddingId: weddingId
+        },
+        {
+          id: 3,
+          packageName: 'Luxury Package',
+          packageType: 'Premium',
+          weddingId: weddingId
+        }
+      ]);
+      
+      setTablePackageAssignments([
+        {
+          id: 1,
+          tableId: 1,
+          tableNumber: 'T-001',
+          packageId: 1,
+          packageName: 'Premium Package',
+          packageType: 'Full Service',
+          weddingId: weddingId
+        }
+      ]);
+      
+      setLoading(false);
+    }, 500);
+  }, [id]);
 
   useEffect(() => {
     const loadSeating = async () => {
@@ -636,9 +715,9 @@ const WeddingDetail = () => {
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{wedding.guestCount ?? 0}</div>
+              <div className="text-2xl font-bold">{wedding.guestCount}</div>
               <p className="text-xs text-muted-foreground">
-                Track confirmed RSVPs once guest data is available
+                {wedding.confirmedGuests} confirmed, {wedding.pendingRSVPs} pending
               </p>
             </CardContent>
           </Card>
@@ -651,7 +730,7 @@ const WeddingDetail = () => {
             <CardContent>
               <div className="mb-2">{getPaymentStatusBadge(wedding.paymentStatus)}</div>
               <p className="text-xs text-muted-foreground">
-                Total: ${Number(wedding.totalCost ?? 0).toLocaleString()}
+                Total: ${wedding.totalCost.toLocaleString()}
               </p>
             </CardContent>
           </Card>
@@ -821,13 +900,13 @@ const WeddingDetail = () => {
 
           {/* Tables Tab */}
           <TabsContent value="tables" className="space-y-4">
-            <Card>
+          <Card>
               <CardHeader>
                 <CardTitle>Add Table</CardTitle>
                 <CardDescription>Add a new table to this wedding</CardDescription>
               </CardHeader>
               <CardContent>
-                <form onSubmit={handleAddTable} className="space-y-4">
+              <form onSubmit={handleAddTable} className="space-y-4">
                 {/* Mandatory Couple Table CTA */}
                 {tables.filter(t => t.table_category === 'couple').length === 0 && (
                   <div className="p-3 rounded border bg-muted/30 flex items-center justify-between">
@@ -853,8 +932,8 @@ const WeddingDetail = () => {
                       <p className="text-sm text-red-500">{tableFormErrors.tableCategory}</p>
                     )}
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
                       <Label htmlFor="tableCapacity">Capacity *</Label>
                       <Input
                         id="tableCapacity"

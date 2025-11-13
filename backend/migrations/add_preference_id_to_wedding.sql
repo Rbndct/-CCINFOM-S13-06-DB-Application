@@ -17,4 +17,3 @@ ADD CONSTRAINT fk_wedding_preference
 CREATE INDEX idx_wedding_preference_id ON wedding(preference_id);
 
 
-
