@@ -11,34 +11,36 @@ const api = axios.create({
 
 // Request interceptor
 api.interceptors.request.use(
-    (config) => {
-      // You can add auth tokens here if needed
-      // const token = localStorage.getItem('token');
-      // if (token) {
-      //   config.headers.Authorization = `Bearer ${token}`;
-      // }
-      return config;
-    },
-    (error) => {
-      return Promise.reject(error);
-    });
+  (config) => {
+    // You can add auth tokens here if needed
+    // const token = localStorage.getItem('token');
+    // if (token) {
+    //   config.headers.Authorization = `Bearer ${token}`;
+    // }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
 
 // Response interceptor
 api.interceptors.response.use(
-    (response) => {
-      return response.data;
-    },
-    (error) => {
-      // Handle errors globally
-      if (error.response) {
-        console.error('API Error:', error.response.data);
-      } else if (error.request) {
-        console.error('Network Error:', error.message);
-      } else {
-        console.error('Error:', error.message);
-      }
-      return Promise.reject(error);
-    });
+  (response) => {
+    return response.data;
+  },
+  (error) => {
+    // Handle errors globally
+    if (error.response) {
+      console.error('API Error:', error.response.data);
+    } else if (error.request) {
+      console.error('Network Error:', error.message);
+    } else {
+      console.error('Error:', error.message);
+    }
+    return Promise.reject(error);
+  }
+);
 
 // API methods
 export const guestsAPI = {
@@ -50,7 +52,11 @@ export const guestsAPI = {
 };
 
 export const weddingsAPI = {
+<<<<<<< HEAD
   getAll: () => api.get('/weddings'),
+=======
+  getAll: (params) => api.get('/weddings', { params }),
+>>>>>>> 5a2393e (Commit all current changes)
   getById: (id) => api.get(`/weddings/${id}`),
   create: (data) => api.post('/weddings', data),
   update: (id, data) => api.put(`/weddings/${id}`, data),
@@ -58,7 +64,7 @@ export const weddingsAPI = {
 };
 
 export const couplesAPI = {
-  getAll: (params) => api.get('/couples', {params}),
+  getAll: (params) => api.get('/couples', { params }),
   getById: (id) => api.get(`/couples/${id}`),
   getWeddings: (id) => api.get(`/couples/${id}/weddings`),
   create: (data) => api.post('/couples', data),
@@ -85,13 +91,9 @@ export const testAPI = {
 
 export const tablesAPI = {
   getSeating: (weddingId) => api.get(`/tables/seating/${weddingId}`),
-  createCoupleTable: (weddingId) =>
-      api.post(`/tables/seating/${weddingId}/couple`),
-  createGuestTable: (weddingId, capacity) =>
-      api.post(`/tables/seating/${weddingId}/guest`, {capacity}),
-  assignGuests: (weddingId, tableId, guestIds) => api.post(
-      `/tables/seating/${weddingId}/guest/${tableId}/assign`,
-      {guest_ids: guestIds}),
+  createCoupleTable: (weddingId) => api.post(`/tables/seating/${weddingId}/couple`),
+  createGuestTable: (weddingId, capacity) => api.post(`/tables/seating/${weddingId}/guest`, { capacity }),
+  assignGuests: (weddingId, tableId, guestIds) => api.post(`/tables/seating/${weddingId}/guest/${tableId}/assign`, { guest_ids: guestIds }),
   deleteTable: (tableId) => api.delete(`/tables/seating/${tableId}`),
 };
 

@@ -821,13 +821,13 @@ const WeddingDetail = () => {
 
           {/* Tables Tab */}
           <TabsContent value="tables" className="space-y-4">
-          <Card>
+            <Card>
               <CardHeader>
                 <CardTitle>Add Table</CardTitle>
                 <CardDescription>Add a new table to this wedding</CardDescription>
               </CardHeader>
               <CardContent>
-              <form onSubmit={handleAddTable} className="space-y-4">
+                <form onSubmit={handleAddTable} className="space-y-4">
                 {/* Mandatory Couple Table CTA */}
                 {tables.filter(t => t.table_category === 'couple').length === 0 && (
                   <div className="p-3 rounded border bg-muted/30 flex items-center justify-between">
@@ -853,8 +853,8 @@ const WeddingDetail = () => {
                       <p className="text-sm text-red-500">{tableFormErrors.tableCategory}</p>
                     )}
                   </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
                       <Label htmlFor="tableCapacity">Capacity *</Label>
                       <Input
                         id="tableCapacity"

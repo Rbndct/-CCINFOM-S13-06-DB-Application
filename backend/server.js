@@ -30,7 +30,7 @@ app.use('/health', healthRoute);
 
 // Test route to verify connection
 app.get('/test', (req, res) => {
-  res.json({
+  res.json({ 
     message: 'Wedding System Management API is running!',
     timestamp: new Date().toISOString()
   });
@@ -41,7 +41,10 @@ app.get('/test', (req, res) => {
 // Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({error: 'Something went wrong!', message: err.message});
+  res.status(500).json({ 
+    error: 'Something went wrong!', 
+    message: err.message 
+  });
 });
 
 // Start server
