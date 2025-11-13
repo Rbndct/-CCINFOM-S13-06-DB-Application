@@ -35,6 +35,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
@@ -90,9 +91,20 @@ const CoupleDetail = () => {
   const [dietaryRestrictions, setDietaryRestrictions] = useState<any[]>([]);
   const [preferenceForm, setPreferenceForm] = useState({
     ceremony_type: '',
-    restriction_id: ''
+    restriction_ids: [] as number[]
   });
   const [preferenceLoading, setPreferenceLoading] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
+    partner1_name: '',
+    partner2_name: '',
+    partner1_phone: '',
+    partner2_phone: '',
+    partner1_email: '',
+    partner2_email: '',
+    planner_contact: ''
+  });
+  const [editLoading, setEditLoading] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -106,6 +118,16 @@ const CoupleDetail = () => {
     try {
       const response = await couplesAPI.getById(id!);
       setCouple(response.data);
+      // Initialize edit form with current data
+      setEditForm({
+        partner1_name: response.data.partner1_name || '',
+        partner2_name: response.data.partner2_name || '',
+        partner1_phone: response.data.partner1_phone || '',
+        partner2_phone: response.data.partner2_phone || '',
+        partner1_email: response.data.partner1_email || '',
+        partner2_email: response.data.partner2_email || '',
+        planner_contact: response.data.planner_contact || ''
+      });
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -115,6 +137,48 @@ const CoupleDetail = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editForm.partner1_name.trim() || !editForm.partner2_name.trim()) {
+      toast({
+        title: 'Validation Error',
+        description: 'Partner names are required',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      await couplesAPI.update(parseInt(id!), editForm);
+      toast({ title: 'Couple updated successfully' });
+      setIsEditing(false);
+      await fetchCouple();
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || 'Failed to update couple',
+        variant: 'destructive',
+      });
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
+  const handleCancelEdit = () => {
+    if (couple) {
+      setEditForm({
+        partner1_name: couple.partner1_name || '',
+        partner2_name: couple.partner2_name || '',
+        partner1_phone: couple.partner1_phone || '',
+        partner2_phone: couple.partner2_phone || '',
+        partner1_email: couple.partner1_email || '',
+        partner2_email: couple.partner2_email || '',
+        planner_contact: couple.planner_contact || ''
+      });
+    }
+    setIsEditing(false);
   };
 
   const fetchWeddings = async () => {
@@ -137,24 +201,25 @@ const CoupleDetail = () => {
 
   const handleAddPreference = () => {
     setEditingPreference(null);
-    setPreferenceForm({ ceremony_type: '', restriction_id: '' });
+    setPreferenceForm({ ceremony_type: '', restriction_ids: [] });
     setPreferenceDialogOpen(true);
   };
 
   const handleEditPreference = (pref: Preference) => {
     setEditingPreference(pref);
+    // For editing, we'll only edit the single preference, but allow adding more restrictions
     setPreferenceForm({
       ceremony_type: pref.ceremony_type,
-      restriction_id: pref.restriction_id.toString()
+      restriction_ids: pref.restriction_id ? [pref.restriction_id] : []
     });
     setPreferenceDialogOpen(true);
   };
 
   const handleSavePreference = async () => {
-    if (!preferenceForm.ceremony_type || !preferenceForm.restriction_id) {
+    if (!preferenceForm.ceremony_type || preferenceForm.restriction_ids.length === 0) {
       toast({
         title: 'Validation Error',
-        description: 'Please fill in all fields',
+        description: 'Please select ceremony type and at least one dietary restriction',
         variant: 'destructive',
       });
       return;
@@ -163,18 +228,34 @@ const CoupleDetail = () => {
     setPreferenceLoading(true);
     try {
       if (editingPreference) {
+        // Update the existing preference with the first restriction
         await couplesAPI.updatePreference(editingPreference.preference_id, {
           ceremony_type: preferenceForm.ceremony_type,
-          restriction_id: parseInt(preferenceForm.restriction_id)
+          restriction_id: preferenceForm.restriction_ids[0]
         });
+        // Create additional preferences for remaining restrictions
+        for (let i = 1; i < preferenceForm.restriction_ids.length; i++) {
+          await couplesAPI.createPreference({
+            couple_id: parseInt(id!),
+            ceremony_type: preferenceForm.ceremony_type,
+            restriction_id: preferenceForm.restriction_ids[i]
+          });
+        }
         toast({ title: 'Preference updated successfully' });
       } else {
-        await couplesAPI.createPreference({
-          couple_id: parseInt(id!),
-          ceremony_type: preferenceForm.ceremony_type,
-          restriction_id: parseInt(preferenceForm.restriction_id)
+        // Create a preference for each selected restriction
+        const promises = preferenceForm.restriction_ids.map(restrictionId =>
+          couplesAPI.createPreference({
+            couple_id: parseInt(id!),
+            ceremony_type: preferenceForm.ceremony_type,
+            restriction_id: restrictionId
+          })
+        );
+        await Promise.all(promises);
+        toast({ 
+          title: 'Preferences created successfully',
+          description: `Created ${preferenceForm.restriction_ids.length} preference(s)`
         });
-        toast({ title: 'Preference created successfully' });
       }
       setPreferenceDialogOpen(false);
       await fetchCouple();
@@ -260,67 +341,187 @@ const CoupleDetail = () => {
               <p className="text-muted-foreground">Couple Details</p>
             </div>
           </div>
+          {!isEditing ? (
+            <Button onClick={() => setIsEditing(true)}>
+              <Edit className="w-4 h-4 mr-2" />
+              Edit Couple Data
+            </Button>
+          ) : (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={handleCancelEdit} disabled={editLoading}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEdit} disabled={editLoading}>
+                {editLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </Button>
+            </div>
+          )}
         </div>
 
         {/* Couple Information */}
         <Card>
           <CardHeader>
             <CardTitle>Contact Information</CardTitle>
-            <CardDescription>Partner details and planner contact</CardDescription>
+            <CardDescription>Partner details and planner email</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2 flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    Partner 1
-                  </h3>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Name:</span>
-                      <span>{couple.partner1_name}</span>
+            {isEditing ? (
+              <div className="space-y-6">
+                <div className="grid md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        Partner 1
+                      </h3>
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="edit_partner1_name">Name *</Label>
+                          <Input
+                            id="edit_partner1_name"
+                            value={editForm.partner1_name}
+                            onChange={(e) => setEditForm({ ...editForm, partner1_name: e.target.value })}
+                            disabled={editLoading}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_partner1_phone">Phone</Label>
+                          <Input
+                            id="edit_partner1_phone"
+                            value={editForm.partner1_phone}
+                            onChange={(e) => setEditForm({ ...editForm, partner1_phone: e.target.value })}
+                            disabled={editLoading}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_partner1_email">Email</Label>
+                          <Input
+                            id="edit_partner1_email"
+                            type="email"
+                            value={editForm.partner1_email}
+                            onChange={(e) => setEditForm({ ...editForm, partner1_email: e.target.value })}
+                            disabled={editLoading}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-muted-foreground" />
-                      <span>{couple.partner1_phone}</span>
+                  </div>
+                  <div className="space-y-4">
+                    <div>
+                      <h3 className="font-semibold mb-3 flex items-center gap-2">
+                        <User className="w-4 h-4" />
+                        Partner 2
+                      </h3>
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="edit_partner2_name">Name *</Label>
+                          <Input
+                            id="edit_partner2_name"
+                            value={editForm.partner2_name}
+                            onChange={(e) => setEditForm({ ...editForm, partner2_name: e.target.value })}
+                            disabled={editLoading}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_partner2_phone">Phone</Label>
+                          <Input
+                            id="edit_partner2_phone"
+                            value={editForm.partner2_phone}
+                            onChange={(e) => setEditForm({ ...editForm, partner2_phone: e.target.value })}
+                            disabled={editLoading}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="edit_partner2_email">Email</Label>
+                          <Input
+                            id="edit_partner2_email"
+                            type="email"
+                            value={editForm.partner2_email}
+                            onChange={(e) => setEditForm({ ...editForm, partner2_email: e.target.value })}
+                            disabled={editLoading}
+                          />
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-muted-foreground" />
-                      <span>{couple.partner1_email}</span>
+                  </div>
+                </div>
+                <div className="pt-6 border-t">
+                  <div>
+                    <Label htmlFor="edit_planner_contact">Planner Email</Label>
+                    <Input
+                      id="edit_planner_contact"
+                      type="email"
+                      value={editForm.planner_contact}
+                      onChange={(e) => setEditForm({ ...editForm, planner_contact: e.target.value })}
+                      disabled={editLoading}
+                      placeholder="planner@example.com"
+                    />
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold mb-2 flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Partner 1
+                    </h3>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Name:</span>
+                        <span>{couple.partner1_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        <span>{couple.partner1_phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                        <span>{couple.partner1_email}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-semibold mb-2 flex items-center gap-2">
+                      <User className="w-4 h-4" />
+                      Partner 2
+                    </h3>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Name:</span>
+                        <span>{couple.partner2_name}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-muted-foreground" />
+                        <span>{couple.partner2_phone}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-muted-foreground" />
+                        <span>{couple.partner2_email}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
               </div>
-              <div className="space-y-4">
-                <div>
-                  <h3 className="font-semibold mb-2 flex items-center gap-2">
-                    <User className="w-4 h-4" />
-                    Partner 2
-                  </h3>
-                  <div className="space-y-1 text-sm">
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">Name:</span>
-                      <span>{couple.partner2_name}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Phone className="w-4 h-4 text-muted-foreground" />
-                      <span>{couple.partner2_phone}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Mail className="w-4 h-4 text-muted-foreground" />
-                      <span>{couple.partner2_email}</span>
-                    </div>
-                  </div>
+            )}
+            {!isEditing && (
+              <div className="mt-6 pt-6 border-t">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold">Planner Email:</span>
+                  <span>{couple.planner_contact || 'N/A'}</span>
                 </div>
               </div>
-            </div>
-            <div className="mt-6 pt-6 border-t">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Planner Contact:</span>
-                <span>{couple.planner_contact}</span>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 
@@ -492,24 +693,48 @@ const CoupleDetail = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="restriction_id">Dietary Restriction *</Label>
-                <Select
-                  value={preferenceForm.restriction_id}
-                  onValueChange={(value) =>
-                    setPreferenceForm({ ...preferenceForm, restriction_id: value })
-                  }
-                >
-                  <SelectTrigger id="restriction_id">
-                    <SelectValue placeholder="Select dietary restriction" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {dietaryRestrictions.map((dr) => (
-                      <SelectItem key={dr.restriction_id} value={dr.restriction_id.toString()}>
-                        {dr.restriction_name} ({dr.restriction_type})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <Label>Dietary Restrictions *</Label>
+                <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
+                  {dietaryRestrictions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No dietary restrictions available</p>
+                  ) : (
+                    dietaryRestrictions.map((dr) => (
+                      <div key={dr.restriction_id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`restriction-${dr.restriction_id}`}
+                          checked={preferenceForm.restriction_ids.includes(dr.restriction_id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setPreferenceForm({
+                                ...preferenceForm,
+                                restriction_ids: [...preferenceForm.restriction_ids, dr.restriction_id]
+                              });
+                            } else {
+                              setPreferenceForm({
+                                ...preferenceForm,
+                                restriction_ids: preferenceForm.restriction_ids.filter(id => id !== dr.restriction_id)
+                              });
+                            }
+                          }}
+                        />
+                        <label
+                          htmlFor={`restriction-${dr.restriction_id}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
+                        >
+                          {dr.restriction_name} ({dr.restriction_type})
+                          {dr.severity_level && (
+                            <span className="text-muted-foreground ml-2">- {dr.severity_level}</span>
+                          )}
+                        </label>
+                      </div>
+                    ))
+                  )}
+                </div>
+                {preferenceForm.restriction_ids.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {preferenceForm.restriction_ids.length} restriction(s) selected
+                  </p>
+                )}
               </div>
             </div>
             <DialogFooter>

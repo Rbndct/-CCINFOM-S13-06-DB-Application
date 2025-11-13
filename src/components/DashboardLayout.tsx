@@ -33,8 +33,8 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     {
       label: 'Overview',
       items: [
-        { to: '/dashboard/weddings', label: 'Weddings', icon: Calendar },
         { to: '/dashboard/couples', label: 'Couples', icon: Heart },
+        { to: '/dashboard/weddings', label: 'Weddings', icon: Calendar },
       ],
     },
     {
