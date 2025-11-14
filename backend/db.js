@@ -3,6 +3,16 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+// Validate required environment variables
+const requiredEnvVars = ['DB_HOST', 'DB_USER', 'DB_NAME'];
+const missingVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingVars.length > 0) {
+  console.warn('⚠️  Missing environment variables:', missingVars.join(', '));
+  console.warn('   Using default values. For production, set these in .env file.');
+  console.warn('   See .env.example for required variables.');
+}
+
 // Get database configuration
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',

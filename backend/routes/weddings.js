@@ -41,14 +41,18 @@ router.get('/', async (req, res) => {
       whereClauses.push(`(
         EXISTS (SELECT 1 FROM guest g WHERE g.wedding_id = w.wedding_id AND g.restriction_id IS NOT NULL)
         OR EXISTS (
-          SELECT 1 FROM couple_preferences cp2 WHERE cp2.couple_id = c.couple_id AND cp2.restriction_id IS NOT NULL
+          SELECT 1 FROM couple_preferences cp2 
+          INNER JOIN couple_preference_restrictions cpr2 ON cp2.preference_id = cpr2.preference_id
+          WHERE cp2.couple_id = c.couple_id
         )
       )`);
     } else if (has_restrictions === 'N') {
       whereClauses.push(`(
         NOT EXISTS (SELECT 1 FROM guest g WHERE g.wedding_id = w.wedding_id AND g.restriction_id IS NOT NULL)
         AND NOT EXISTS (
-          SELECT 1 FROM couple_preferences cp2 WHERE cp2.couple_id = c.couple_id AND cp2.restriction_id IS NOT NULL
+          SELECT 1 FROM couple_preferences cp2 
+          INNER JOIN couple_preference_restrictions cpr2 ON cp2.preference_id = cpr2.preference_id
+          WHERE cp2.couple_id = c.couple_id
         )
       )`);
     }
@@ -78,6 +82,9 @@ router.get('/', async (req, res) => {
     const preferenceJoin = hasPreferenceColumn ?
         'LEFT JOIN couple_preferences cp ON w.preference_id = cp.preference_id' :
         'LEFT JOIN couple_preferences cp ON 1=0';
+    const groupByFields = hasPreferenceColumn ?
+        'w.wedding_id, w.couple_id, c.partner1_name, c.partner2_name, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.total_cost, w.production_cost, w.payment_status, c.planner_contact, cp.ceremony_type, w.preference_id, cp.preference_id' :
+        'w.wedding_id, w.couple_id, c.partner1_name, c.partner2_name, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.total_cost, w.production_cost, w.payment_status, c.planner_contact, cp.ceremony_type';
 
     const [rows] = await promisePool.query(
         `
@@ -97,27 +104,62 @@ router.get('/', async (req, res) => {
         c.planner_contact as plannerContact,
         ${preferenceSelect}
         cp.ceremony_type,
-        cp.restriction_id,
-        dr.restriction_name,
-        dr.restriction_type,
-        dr.severity_level
+        COALESCE(
+          JSON_ARRAYAGG(
+            CASE 
+              WHEN dr.restriction_id IS NOT NULL THEN
+                JSON_OBJECT(
+                  'restriction_id', dr.restriction_id,
+                  'restriction_name', dr.restriction_name,
+                  'restriction_type', dr.restriction_type,
+                  'severity_level', dr.severity_level
+                )
+              ELSE NULL
+            END
+          ),
+          JSON_ARRAY()
+        ) as restrictions
       FROM wedding w
       INNER JOIN couple c ON w.couple_id = c.couple_id
       ${preferenceJoin}
-      LEFT JOIN dietary_restriction dr ON cp.restriction_id = dr.restriction_id
-      LEFT JOIN (
-        SELECT x.* FROM couple_preferences x
-        INNER JOIN (
-          SELECT couple_id, MAX(preference_id) AS max_pref
-          FROM couple_preferences
-          GROUP BY couple_id
-        ) t ON x.couple_id = t.couple_id AND x.preference_id = t.max_pref
-      ) cp2 ON cp2.couple_id = c.couple_id
+      LEFT JOIN couple_preference_restrictions cpr ON cp.preference_id = cpr.preference_id
+      LEFT JOIN dietary_restriction dr ON cpr.restriction_id = dr.restriction_id
       ${whereSql}
+      GROUP BY ${groupByFields}
       ORDER BY w.wedding_date DESC
     `,
         params);
-    res.json({success: true, data: rows, count: rows.length});
+
+    // Parse JSON arrays and filter out null values
+    const processedRows = rows.map(row => {
+      let restrictions = [];
+      try {
+        const parsed = typeof row.restrictions === 'string' ?
+            JSON.parse(row.restrictions) :
+            row.restrictions;
+        restrictions = Array.isArray(parsed) ?
+            parsed.filter(r => r && r.restriction_id !== null) :
+            [];
+      } catch (e) {
+        console.warn('Error parsing restrictions JSON:', e);
+        restrictions = [];
+      }
+
+      // For backward compatibility, include first restriction fields at top
+      // level
+      const firstRestriction = restrictions[0] || null;
+
+      return {
+        ...row,
+        restriction_id: firstRestriction?.restriction_id || null,
+        restriction_name: firstRestriction?.restriction_name || null,
+        restriction_type: firstRestriction?.restriction_type || null,
+        severity_level: firstRestriction?.severity_level || null,
+        all_restrictions: restrictions
+      };
+    });
+
+    res.json({success: true, data: processedRows, count: processedRows.length});
   } catch (error) {
     console.error('Error fetching weddings:', error);
     res.status(500).json({
@@ -152,6 +194,9 @@ router.get('/:id', async (req, res) => {
     const preferenceJoin = hasPreferenceColumn ?
         'LEFT JOIN couple_preferences cp ON w.preference_id = cp.preference_id' :
         'LEFT JOIN couple_preferences cp ON 1=0';
+    const groupByFields = hasPreferenceColumn ?
+        'w.wedding_id, w.couple_id, c.partner1_name, c.partner2_name, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.total_cost, w.production_cost, w.payment_status, c.planner_contact, cp.ceremony_type, w.preference_id, cp.preference_id' :
+        'w.wedding_id, w.couple_id, c.partner1_name, c.partner2_name, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.total_cost, w.production_cost, w.payment_status, c.planner_contact, cp.ceremony_type';
 
     const [rows] = await promisePool.query(
         `
@@ -171,15 +216,28 @@ router.get('/:id', async (req, res) => {
         c.planner_contact as plannerContact,
         ${preferenceSelect}
         cp.ceremony_type,
-        cp.restriction_id,
-        dr.restriction_name,
-        dr.restriction_type,
-        dr.severity_level
+        COALESCE(
+          JSON_ARRAYAGG(
+            CASE 
+              WHEN dr.restriction_id IS NOT NULL THEN
+                JSON_OBJECT(
+                  'restriction_id', dr.restriction_id,
+                  'restriction_name', dr.restriction_name,
+                  'restriction_type', dr.restriction_type,
+                  'severity_level', dr.severity_level
+                )
+              ELSE NULL
+            END
+          ),
+          JSON_ARRAY()
+        ) as restrictions
       FROM wedding w
       INNER JOIN couple c ON w.couple_id = c.couple_id
       ${preferenceJoin}
-      LEFT JOIN dietary_restriction dr ON cp.restriction_id = dr.restriction_id
+      LEFT JOIN couple_preference_restrictions cpr ON cp.preference_id = cpr.preference_id
+      LEFT JOIN dietary_restriction dr ON cpr.restriction_id = dr.restriction_id
       WHERE w.wedding_id = ?
+      GROUP BY ${groupByFields}
     `,
         [req.params.id]);
 
@@ -187,7 +245,34 @@ router.get('/:id', async (req, res) => {
       return res.status(404).json({success: false, error: 'Wedding not found'});
     }
 
-    res.json({success: true, data: rows[0]});
+    // Parse JSON arrays and filter out null values
+    const row = rows[0];
+    let restrictions = [];
+    try {
+      const parsed = typeof row.restrictions === 'string' ?
+          JSON.parse(row.restrictions) :
+          row.restrictions;
+      restrictions = Array.isArray(parsed) ?
+          parsed.filter(r => r && r.restriction_id !== null) :
+          [];
+    } catch (e) {
+      console.warn('Error parsing restrictions JSON:', e);
+      restrictions = [];
+    }
+
+    // For backward compatibility, include first restriction fields at top level
+    const firstRestriction = restrictions[0] || null;
+
+    const processedData = {
+      ...row,
+      restriction_id: firstRestriction?.restriction_id || null,
+      restriction_name: firstRestriction?.restriction_name || null,
+      restriction_type: firstRestriction?.restriction_type || null,
+      severity_level: firstRestriction?.severity_level || null,
+      all_restrictions: restrictions
+    };
+
+    res.json({success: true, data: processedData});
   } catch (error) {
     console.error('Error fetching wedding:', error);
     res.status(500).json({
@@ -294,15 +379,30 @@ router.post('/', async (req, res) => {
         c.planner_contact as plannerContact,
         ${prefSelect}
         cp.ceremony_type,
-        cp.restriction_id,
-        dr.restriction_name,
-        dr.restriction_type,
-        dr.severity_level
+        COALESCE(
+          JSON_ARRAYAGG(
+            CASE 
+              WHEN dr.restriction_id IS NOT NULL THEN
+                JSON_OBJECT(
+                  'restriction_id', dr.restriction_id,
+                  'restriction_name', dr.restriction_name,
+                  'restriction_type', dr.restriction_type,
+                  'severity_level', dr.severity_level
+                )
+              ELSE NULL
+            END
+          ),
+          JSON_ARRAY()
+        ) as restrictions
       FROM wedding w
       INNER JOIN couple c ON w.couple_id = c.couple_id
       ${prefJoin}
-      LEFT JOIN dietary_restriction dr ON cp.restriction_id = dr.restriction_id
+      LEFT JOIN couple_preference_restrictions cpr ON cp.preference_id = cpr.preference_id
+      LEFT JOIN dietary_restriction dr ON cpr.restriction_id = dr.restriction_id
       WHERE w.wedding_id = ?
+      GROUP BY w.wedding_id, w.couple_id, c.partner1_name, c.partner2_name, w.wedding_date, 
+               w.wedding_time, w.venue, w.guest_count, w.total_cost, w.production_cost, 
+               w.payment_status, c.planner_contact, cp.ceremony_type
     `,
         [result.insertId]);
 

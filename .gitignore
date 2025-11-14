@@ -16,6 +16,14 @@ dist-ssr
 backend/port.txt
 backend/:*
 
+# Environment variables - NEVER commit sensitive credentials
+.env
+.env.local
+.env.*.local
+backend/.env
+backend/.env.local
+backend/.env.*.local
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -40,6 +40,7 @@ import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
 import { usePrice } from '@/utils/currency';
+import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
 
 type Couple = {
   couple_id: number;
@@ -53,11 +54,20 @@ type Couple = {
   preferences?: Preference[];
 };
 
+type DietaryRestriction = {
+  restriction_id: number;
+  restriction_name: string;
+  restriction_type?: string;
+  severity_level?: string;
+};
+
 type Preference = {
   preference_id: number;
   couple_id: number;
   ceremony_type: string;
-  restriction_id: number;
+  dietaryRestrictions: DietaryRestriction[];
+  // Legacy support for old data format
+  restriction_id?: number;
   restriction_name?: string;
   restriction_type?: string;
   severity_level?: string;
@@ -74,8 +84,21 @@ type Wedding = {
   productionCost: number;
   paymentStatus: string;
   preference_id?: number;
+  pref_id?: number;
   ceremony_type?: string;
   restriction_name?: string;
+  restrictions?: Array<{
+    restriction_id: number;
+    restriction_name: string;
+    restriction_type: string;
+    severity_level: string;
+  }>;
+  all_restrictions?: Array<{
+    restriction_id: number;
+    restriction_name: string;
+    restriction_type: string;
+    severity_level: string;
+  }>;
 };
 
 const CoupleDetail = () => {
@@ -207,19 +230,32 @@ const CoupleDetail = () => {
 
   const handleEditPreference = (pref: Preference) => {
     setEditingPreference(pref);
-    // For editing, we'll only edit the single preference, but allow adding more restrictions
+    // Extract restriction IDs from dietaryRestrictions array or legacy restriction_id
+    const restrictionIds = pref.dietaryRestrictions && pref.dietaryRestrictions.length > 0
+      ? pref.dietaryRestrictions.map(r => r.restriction_id)
+      : (pref.restriction_id ? [pref.restriction_id] : []);
+    
     setPreferenceForm({
       ceremony_type: pref.ceremony_type,
-      restriction_ids: pref.restriction_id ? [pref.restriction_id] : []
+      restriction_ids: restrictionIds
     });
     setPreferenceDialogOpen(true);
   };
 
   const handleSavePreference = async () => {
-    if (!preferenceForm.ceremony_type || preferenceForm.restriction_ids.length === 0) {
+    if (!preferenceForm.ceremony_type) {
       toast({
         title: 'Validation Error',
-        description: 'Please select ceremony type and at least one dietary restriction',
+        description: 'Please select a ceremony type',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (preferenceForm.restriction_ids.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select at least one dietary restriction',
         variant: 'destructive',
       });
       return;
@@ -228,33 +264,25 @@ const CoupleDetail = () => {
     setPreferenceLoading(true);
     try {
       if (editingPreference) {
-        // Update the existing preference with the first restriction
+        // Update existing preference with array of restriction IDs
         await couplesAPI.updatePreference(editingPreference.preference_id, {
           ceremony_type: preferenceForm.ceremony_type,
-          restriction_id: preferenceForm.restriction_ids[0]
+          restriction_ids: preferenceForm.restriction_ids
         });
-        // Create additional preferences for remaining restrictions
-        for (let i = 1; i < preferenceForm.restriction_ids.length; i++) {
-          await couplesAPI.createPreference({
-            couple_id: parseInt(id!),
-            ceremony_type: preferenceForm.ceremony_type,
-            restriction_id: preferenceForm.restriction_ids[i]
-          });
-        }
-        toast({ title: 'Preference updated successfully' });
-      } else {
-        // Create a preference for each selected restriction
-        const promises = preferenceForm.restriction_ids.map(restrictionId =>
-          couplesAPI.createPreference({
-            couple_id: parseInt(id!),
-            ceremony_type: preferenceForm.ceremony_type,
-            restriction_id: restrictionId
-          })
-        );
-        await Promise.all(promises);
         toast({ 
-          title: 'Preferences created successfully',
-          description: `Created ${preferenceForm.restriction_ids.length} preference(s)`
+          title: 'Preference updated successfully',
+          description: `Updated with ${preferenceForm.restriction_ids.length} dietary restriction(s)`
+        });
+      } else {
+        // Create a single preference with array of restriction IDs
+        await couplesAPI.createPreference({
+          couple_id: parseInt(id!),
+          ceremony_type: preferenceForm.ceremony_type,
+          restriction_ids: preferenceForm.restriction_ids
+        });
+        toast({ 
+          title: 'Preference created successfully',
+          description: `Created with ${preferenceForm.restriction_ids.length} dietary restriction(s)`
         });
       }
       setPreferenceDialogOpen(false);
@@ -288,7 +316,11 @@ const CoupleDetail = () => {
   };
 
   const getWeddingCountForPreference = (prefId: number) => {
-    return weddings.filter(w => w.preference_id === prefId).length;
+    // Count distinct weddings that use this preference
+    const matchingWeddings = weddings.filter(w => 
+      (w.preference_id === prefId || w.pref_id === prefId)
+    );
+    return new Set(matchingWeddings.map(w => w.id)).size; // Use Set to ensure distinct
   };
 
   if (loading) {
@@ -542,45 +574,79 @@ const CoupleDetail = () => {
           <CardContent>
             {couple.preferences && couple.preferences.length > 0 ? (
               <div className="space-y-3">
-                {couple.preferences.map((pref) => (
-                  <div
-                    key={pref.preference_id}
-                    className="flex items-center justify-between p-4 border rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3">
-                        <Badge variant="outline">{pref.ceremony_type}</Badge>
-                        {pref.restriction_name && (
-                          <Badge variant="secondary">
-                            {pref.restriction_name} ({pref.restriction_type})
+                {couple.preferences.map((pref) => {
+                  // Handle both new format (dietaryRestrictions array) and legacy format
+                  const restrictions = pref.dietaryRestrictions && pref.dietaryRestrictions.length > 0
+                    ? pref.dietaryRestrictions
+                    : (pref.restriction_id ? [{
+                        restriction_id: pref.restriction_id,
+                        restriction_name: pref.restriction_name || 'Unknown',
+                        restriction_type: pref.restriction_type,
+                        severity_level: pref.severity_level
+                      }] : []);
+                  
+                  return (
+                    <div
+                      key={pref.preference_id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-2">
+                          <Badge variant="outline" className="font-mono text-xs">
+                            Pref ID: {pref.preference_id}
                           </Badge>
-                        )}
-                        {getWeddingCountForPreference(pref.preference_id) > 0 && (
-                          <span className="text-sm text-muted-foreground">
-                            Used by {getWeddingCountForPreference(pref.preference_id)} wedding(s)
-                          </span>
+                          <Badge variant="outline" className="font-semibold">
+                            {pref.ceremony_type}
+                          </Badge>
+                          <Badge variant="secondary" className="text-xs">
+                            {restrictions.length} restriction{restrictions.length !== 1 ? 's' : ''}
+                          </Badge>
+                          {getWeddingCountForPreference(pref.preference_id) > 0 && (
+                            <span className="text-sm text-muted-foreground">
+                              Used by {getWeddingCountForPreference(pref.preference_id)} wedding(s)
+                            </span>
+                          )}
+                        </div>
+                        {restrictions.length > 0 ? (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {restrictions.map((restriction) => (
+                              <Badge 
+                                key={restriction.restriction_id} 
+                                className={`${getTypeColor(restriction.restriction_type || '')} border flex items-center gap-1`}
+                              >
+                                {getTypeIcon(restriction.restriction_type || '')}
+                                <span>{restriction.restriction_name}</span>
+                                <span className="text-xs font-mono">(ID: {restriction.restriction_id})</span>
+                                {restriction.severity_level && (
+                                  <span className="text-xs ml-1">- {restriction.severity_level}</span>
+                                )}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">No dietary restrictions</span>
                         )}
                       </div>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleEditPreference(pref)}
+                        >
+                          <Edit className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeletePreference(pref.preference_id)}
+                          className="text-red-600"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditPreference(pref)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeletePreference(pref.preference_id)}
-                        className="text-red-600"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
@@ -615,7 +681,7 @@ const CoupleDetail = () => {
                           {new Date(wedding.weddingDate).toLocaleDateString()}
                         </CardTitle>
                         <Badge variant={wedding.paymentStatus === 'paid' ? 'default' : 'secondary'}>
-                          {wedding.paymentStatus}
+                          {wedding.paymentStatus === 'pending' ? 'Pending' : wedding.paymentStatus.charAt(0).toUpperCase() + wedding.paymentStatus.slice(1)}
                         </Badge>
                       </div>
                     </CardHeader>
@@ -636,15 +702,26 @@ const CoupleDetail = () => {
                         {format(convert(wedding.totalCost || 0))}
                       </div>
                       {wedding.ceremony_type && (
-                        <div className="flex gap-2 mt-2">
-                          <Badge variant="outline" className="text-xs">
+                        <div className="mt-2">
+                          <Badge variant="outline" className="text-xs mb-2">
                             {wedding.ceremony_type}
                           </Badge>
-                          {wedding.restriction_name && (
-                            <Badge variant="secondary" className="text-xs">
-                              {wedding.restriction_name}
-                            </Badge>
-                          )}
+                          {(() => {
+                            const restrictions = wedding.all_restrictions || wedding.restrictions || [];
+                            return restrictions.length > 0 ? (
+                              <div className="flex flex-wrap gap-1 mt-2">
+                                {restrictions.map((r: any) => (
+                                  <Badge 
+                                    key={r.restriction_id} 
+                                    className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1`}
+                                  >
+                                    {getTypeIcon(r.restriction_type || '')}
+                                    <span>{r.restriction_name}</span>
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : null;
+                          })()}
                         </div>
                       )}
                     </CardContent>

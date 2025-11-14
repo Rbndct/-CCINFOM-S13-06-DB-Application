@@ -193,53 +193,65 @@ const Couples = () => {
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Weddings</CardTitle>
+              <CardTitle className="text-sm font-medium">Couples with Preferences</CardTitle>
               <User className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {couples.reduce((sum, couple) => sum + couple.wedding_count, 0)}
+                {couples.filter(c => c.preference_id).length}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {couples.length > 0 ? Math.round((couples.filter(c => c.preference_id).length / couples.length) * 100) : 0}% of total
+              </p>
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">This Month</CardTitle>
+              <CardTitle className="text-sm font-medium">Multiple Preferences</CardTitle>
               <Heart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {couples.filter(c => {
-                  if (!c.last_wedding || c.last_wedding === '1970-01-01') return false;
-                  const lastWedding = new Date(c.last_wedding);
-                  const now = new Date();
-                  return lastWedding.getMonth() === now.getMonth() && 
-                         lastWedding.getFullYear() === now.getFullYear();
-                }).length}
+                {(() => {
+                  // Count couples with multiple preferences (would need backend support)
+                  // For now, count couples with multiple restrictions
+                  return couples.filter(c => {
+                    const restrictions = c.all_restrictions || [];
+                    return restrictions.length > 1;
+                  }).length;
+                })()}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Couples with multiple restrictions
+              </p>
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Upcoming This Year</CardTitle>
+              <CardTitle className="text-sm font-medium">Most Common Restriction</CardTitle>
               <Heart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {couples.filter(c => {
-                  if (!c.last_wedding || c.last_wedding === '1970-01-01') return false;
-                  const lastWedding = new Date(c.last_wedding);
-                  const now = new Date();
-                  const currentYear = now.getFullYear();
-                  const currentMonth = now.getMonth();
-                  // Show events within current year that occur after current month
-                  return lastWedding.getFullYear() === currentYear && 
-                         lastWedding.getMonth() > currentMonth &&
-                         lastWedding > now;
-                }).length}
+                {(() => {
+                  const restrictionCounts: Record<string, number> = {};
+                  couples.forEach(c => {
+                    const restrictions = c.all_restrictions || [];
+                    restrictions.forEach((r: any) => {
+                      if (r && r.restriction_type) {
+                        restrictionCounts[r.restriction_type] = (restrictionCounts[r.restriction_type] || 0) + 1;
+                      }
+                    });
+                  });
+                  const mostCommon = Object.entries(restrictionCounts).sort((a, b) => b[1] - a[1])[0];
+                  return mostCommon ? mostCommon[0] : 'N/A';
+                })()}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                By type
+              </p>
             </CardContent>
           </Card>
         </div>

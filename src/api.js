@@ -142,7 +142,7 @@ api.interceptors.request.use(
 
 // API methods
 export const guestsAPI = {
-  getAll: () => api.get('/guests'),
+  getAll: (params) => api.get('/guests', {params}),
   getById: (id) => api.get(`/guests/${id}`),
   create: (data) => api.post('/guests', data),
   update: (id, data) => api.put(`/guests/${id}`, data),
