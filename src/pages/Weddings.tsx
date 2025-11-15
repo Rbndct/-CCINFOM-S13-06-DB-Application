@@ -431,7 +431,7 @@ const Weddings = () => {
         {/* Filters and Search */}
         <Card>
           <CardHeader>
-            <CardTitle>Wedding List</CardTitle>
+            <CardTitle>Wedding Directory</CardTitle>
             <CardDescription>
               View and manage all wedding bookings
             </CardDescription>

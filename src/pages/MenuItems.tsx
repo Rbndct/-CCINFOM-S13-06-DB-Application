@@ -70,6 +70,7 @@ const MenuItems = () => {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [showFilters, setShowFilters] = useState(false);
   const { toast } = useToast();
   
   // Dialog states
@@ -430,7 +431,7 @@ const MenuItems = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Menu Items</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Menu Items Overview</h1>
             <p className="text-muted-foreground">
               Manage menu items, pricing, and inventory
             </p>
@@ -491,7 +492,7 @@ const MenuItems = () => {
         {/* Menu Items List with Tabs */}
         <Card>
           <CardHeader>
-            <CardTitle>Menu Items</CardTitle>
+            <CardTitle>Menu Items Directory</CardTitle>
             <CardDescription>
               {activeTab === 'templates' 
                 ? 'Template library - Default menu items available to all weddings'
@@ -513,7 +514,7 @@ const MenuItems = () => {
 
               <TabsContent value="templates" className="space-y-4">
                 {/* Filter and Sort Section */}
-                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <div className="flex items-center space-x-2 mb-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -523,43 +524,55 @@ const MenuItems = () => {
                       className="pl-8"
                     />
                   </div>
-                  <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Filter by type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="Appetizer">Appetizer</SelectItem>
-                      <SelectItem value="Main Course">Main Course</SelectItem>
-                      <SelectItem value="Dessert">Dessert</SelectItem>
-                      <SelectItem value="Beverage">Beverage</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="type">Type</SelectItem>
-                      <SelectItem value="price">Price</SelectItem>
-                      <SelectItem value="cost">Cost</SelectItem>
-                      <SelectItem value="stock">Stock</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                    title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
-                  >
-                    <ArrowUpDown className="h-4 w-4" />
+                  <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filters
                   </Button>
                   <Button variant="outline" onClick={handleResetFilters}>
-                    <X className="w-4 h-4 mr-2" />
-                    Reset
+                    Reset Filters
                   </Button>
                 </div>
+                
+                {showFilters && (
+                  <div className="grid md:grid-cols-4 gap-3 mb-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Type</label>
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="Appetizer">Appetizer</SelectItem>
+                          <SelectItem value="Main Course">Main Course</SelectItem>
+                          <SelectItem value="Dessert">Dessert</SelectItem>
+                          <SelectItem value="Beverage">Beverage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Sort By</label>
+                      <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="type">Type</SelectItem>
+                          <SelectItem value="price">Price</SelectItem>
+                          <SelectItem value="cost">Cost</SelectItem>
+                          <SelectItem value="stock">Stock</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Order</label>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      >
+                        <ArrowUpDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <Table>
                   <TableHeader>
@@ -740,53 +753,65 @@ const MenuItems = () => {
 
               <TabsContent value="wedding-specific" className="space-y-4">
                 {/* Filter and Sort Section */}
-                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <div className="flex items-center space-x-2 mb-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search wedding items..."
+                      placeholder="Search menu items..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-8"
                     />
                   </div>
-                  <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Filter by type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="Appetizer">Appetizer</SelectItem>
-                      <SelectItem value="Main Course">Main Course</SelectItem>
-                      <SelectItem value="Dessert">Dessert</SelectItem>
-                      <SelectItem value="Beverage">Beverage</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="type">Type</SelectItem>
-                      <SelectItem value="price">Price</SelectItem>
-                      <SelectItem value="cost">Cost</SelectItem>
-                      <SelectItem value="stock">Stock</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                    title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
-                  >
-                    <ArrowUpDown className="h-4 w-4" />
+                  <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filters
                   </Button>
                   <Button variant="outline" onClick={handleResetFilters}>
-                    <X className="w-4 h-4 mr-2" />
-                    Reset
+                    Reset Filters
                   </Button>
                 </div>
+                
+                {showFilters && (
+                  <div className="grid md:grid-cols-4 gap-3 mb-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Type</label>
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="Appetizer">Appetizer</SelectItem>
+                          <SelectItem value="Main Course">Main Course</SelectItem>
+                          <SelectItem value="Dessert">Dessert</SelectItem>
+                          <SelectItem value="Beverage">Beverage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Sort By</label>
+                      <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="type">Type</SelectItem>
+                          <SelectItem value="price">Price</SelectItem>
+                          <SelectItem value="cost">Cost</SelectItem>
+                          <SelectItem value="stock">Stock</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Order</label>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      >
+                        <ArrowUpDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <Table>
                   <TableHeader>

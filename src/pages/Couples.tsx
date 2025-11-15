@@ -47,6 +47,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI } from '@/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
+import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
 
 const Couples = () => {
   const navigate = useNavigate();
@@ -183,7 +184,7 @@ const Couples = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Couples</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Couples Overview</h1>
             <p className="text-muted-foreground">
               Manage couple information and contact details
             </p>
@@ -461,16 +462,21 @@ const Couples = () => {
                                   );
                                 }
                                 return (
-                                  <div className="flex flex-wrap gap-1.5 items-start">
-                                    {restrictions.slice(0, 2).map((r: any, idx: number) => (
-                                      <Badge 
-                                        key={idx} 
-                                        variant="secondary" 
-                                        className="text-xs font-medium"
-                                      >
-                                        {r.restriction_name || r.restriction_type || 'Unknown'}
-                                      </Badge>
-                                    ))}
+                                  <div className="flex flex-wrap gap-1 items-start">
+                                    {restrictions.slice(0, 2).map((r: any, idx: number) => {
+                                      const restrictionName = r.restriction_name || r.restriction_type || 'Unknown';
+                                      const restrictionType = r.restriction_type || '';
+                                      return (
+                                        <Badge 
+                                          key={idx} 
+                                          variant="outline"
+                                          className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                        >
+                                          {getTypeIcon(restrictionType)}
+                                          {restrictionName}
+                                        </Badge>
+                                      );
+                                    })}
                                     {restrictions.length > 2 && (
                                       <Badge variant="outline" className="text-xs font-medium">
                                         +{restrictions.length - 2} more

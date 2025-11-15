@@ -608,20 +608,25 @@ const CoupleDetail = () => {
                           )}
                         </div>
                         {restrictions.length > 0 ? (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {restrictions.map((restriction) => (
-                              <Badge 
-                                key={restriction.restriction_id} 
-                                className={`${getTypeColor(restriction.restriction_type || '')} border flex items-center gap-1`}
-                              >
-                                {getTypeIcon(restriction.restriction_type || '')}
-                                <span>{restriction.restriction_name}</span>
-                                <span className="text-xs font-mono">(ID: {restriction.restriction_id})</span>
-                                {restriction.severity_level && (
-                                  <span className="text-xs ml-1">- {restriction.severity_level}</span>
-                                )}
-                              </Badge>
-                            ))}
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {restrictions.map((restriction) => {
+                              const restrictionName = restriction.restriction_name || '';
+                              const restrictionType = restriction.restriction_type || '';
+                              const restrictionId = restriction.restriction_id;
+                              return (
+                                <Badge 
+                                  key={restrictionId} 
+                                  variant="outline"
+                                  className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                >
+                                  {getTypeIcon(restrictionType)}
+                                  {restrictionName}
+                                  {restriction.severity_level && (
+                                    <span className="text-xs ml-1">- {restriction.severity_level}</span>
+                                  )}
+                                </Badge>
+                              );
+                            })}
                           </div>
                         ) : (
                           <span className="text-sm text-muted-foreground">No dietary restrictions</span>

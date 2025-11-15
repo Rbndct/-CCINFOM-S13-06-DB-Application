@@ -69,6 +69,7 @@ const Packages = () => {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
+  const [showFilters, setShowFilters] = useState(false);
   const { toast } = useToast();
   
   // Dialog states
@@ -92,11 +93,10 @@ const Packages = () => {
   useEffect(() => {
     const fetchMenuItems = async () => {
       try {
-        const response = await menuItemsAPI.getAll();
-        if (response && response.success && response.data) {
-          setAvailableMenuItems(response.data || []);
-        } else if (response && response.data) {
-          setAvailableMenuItems(response.data || []);
+        const response = await menuItemsAPI.getAll({});
+        if (response && response.data) {
+          const data = response.data.success ? response.data.data : response.data;
+          setAvailableMenuItems(Array.isArray(data) ? data : []);
         }
       } catch (error) {
         console.error('Error fetching menu items:', error);
@@ -110,10 +110,14 @@ const Packages = () => {
     const fetchPackages = async () => {
       try {
         setLoading(true);
-        const response = await packagesAPI.getAll();
-        if (response && response.success && response.data) {
+        const response = await packagesAPI.getAll({});
+        if (response && response.data) {
+          // Handle both wrapped and direct response formats
+          const data = response.data.success ? response.data.data : response.data;
+          const packagesArray = Array.isArray(data) ? data : [];
+          
           // Transform data to match UI expectations
-          const packagesData = response.data.map((pkg: any) => ({
+          const packagesData = packagesArray.map((pkg: any) => ({
             id: pkg.package_id,
             package_id: pkg.package_id,
             package_name: pkg.package_name,
@@ -123,19 +127,6 @@ const Packages = () => {
             total_items: pkg.total_items || (pkg.menu_items ? pkg.menu_items.length : 0),
             usage_count: pkg.usage_count || 0,
             is_template: true // All packages are templates (shared across weddings)
-          }));
-          setPackages(packagesData);
-        } else if (response && response.data) {
-          const packagesData = response.data.map((pkg: any) => ({
-            id: pkg.package_id,
-            package_id: pkg.package_id,
-            package_name: pkg.package_name,
-            package_type: pkg.package_type,
-            package_price: parseFloat(pkg.package_price) || 0,
-            menu_items: pkg.menu_items || [],
-            total_items: pkg.total_items || (pkg.menu_items ? pkg.menu_items.length : 0),
-            usage_count: pkg.usage_count || 0,
-            is_template: true
           }));
           setPackages(packagesData);
         } else {
@@ -224,9 +215,11 @@ const Packages = () => {
       }
       
       // Refresh packages
-      const response = await packagesAPI.getAll();
-      if (response && response.success && response.data) {
-        const packagesData = response.data.map((pkg: any) => ({
+      const response = await packagesAPI.getAll({});
+      if (response && response.data) {
+        const data = response.data.success ? response.data.data : response.data;
+        const packagesArray = Array.isArray(data) ? data : [];
+        const packagesData = packagesArray.map((pkg: any) => ({
           id: pkg.package_id,
           package_id: pkg.package_id,
           package_name: pkg.package_name,
@@ -261,9 +254,11 @@ const Packages = () => {
       setDeleteDialogOpen(false);
       
       // Refresh packages
-      const response = await packagesAPI.getAll();
-      if (response && response.success && response.data) {
-        const packagesData = response.data.map((pkg: any) => ({
+      const response = await packagesAPI.getAll({});
+      if (response && response.data) {
+        const data = response.data.success ? response.data.data : response.data;
+        const packagesArray = Array.isArray(data) ? data : [];
+        const packagesData = packagesArray.map((pkg: any) => ({
           id: pkg.package_id,
           package_id: pkg.package_id,
           package_name: pkg.package_name,
@@ -378,7 +373,7 @@ const Packages = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Packages</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Packages Overview</h1>
             <p className="text-muted-foreground">
               Manage wedding packages and pricing
             </p>
@@ -439,7 +434,7 @@ const Packages = () => {
         {/* Packages List with Tabs */}
         <Card>
           <CardHeader>
-            <CardTitle>Wedding Packages</CardTitle>
+            <CardTitle>Packages Directory</CardTitle>
             <CardDescription>
               {activeTab === 'templates' 
                 ? 'Template library - Default packages available to all weddings'
@@ -470,11 +465,54 @@ const Packages = () => {
                       className="pl-8"
                     />
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
                     <Filter className="w-4 h-4 mr-2" />
-                    Filter
+                    Filters
+                  </Button>
+                  <Button variant="outline" onClick={handleResetFilters}>
+                    Reset Filters
                   </Button>
                 </div>
+                
+                {showFilters && (
+                  <div className="grid md:grid-cols-4 gap-3 mb-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Type</label>
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="Full Service">Full Service</SelectItem>
+                          <SelectItem value="Basic">Basic</SelectItem>
+                          <SelectItem value="Premium">Premium</SelectItem>
+                          <SelectItem value="Specialty">Specialty</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Sort By</label>
+                      <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="type">Type</SelectItem>
+                          <SelectItem value="price">Price</SelectItem>
+                          <SelectItem value="usage">Usage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Order</label>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      >
+                        <ArrowUpDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <Table>
                   <TableHeader>
@@ -526,7 +564,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">
-                              ${(pkg.package_price || 0).toLocaleString()}
+                              {formatCurrency(pkg.package_price || 0)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -549,7 +587,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium text-green-600">
-                              ${((pkg.package_price || 0) * (pkg.usage_count || 0)).toLocaleString()}
+                              {formatCurrency((pkg.package_price || 0) * (pkg.usage_count || 0))}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -641,17 +679,60 @@ const Packages = () => {
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search wedding packages..."
+                      placeholder="Search packages..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-8"
                     />
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
                     <Filter className="w-4 h-4 mr-2" />
-                    Filter
+                    Filters
+                  </Button>
+                  <Button variant="outline" onClick={handleResetFilters}>
+                    Reset Filters
                   </Button>
                 </div>
+                
+                {showFilters && (
+                  <div className="grid md:grid-cols-4 gap-3 mb-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Type</label>
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="Full Service">Full Service</SelectItem>
+                          <SelectItem value="Basic">Basic</SelectItem>
+                          <SelectItem value="Premium">Premium</SelectItem>
+                          <SelectItem value="Specialty">Specialty</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Sort By</label>
+                      <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="type">Type</SelectItem>
+                          <SelectItem value="price">Price</SelectItem>
+                          <SelectItem value="usage">Usage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Order</label>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      >
+                        <ArrowUpDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <Table>
                   <TableHeader>
@@ -695,7 +776,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">
-                              ${(pkg.package_price || 0).toLocaleString()}
+                              {formatCurrency(pkg.package_price || 0)}
                             </div>
                           </TableCell>
                           <TableCell>
