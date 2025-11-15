@@ -182,5 +182,265 @@ router.delete('/:id', async (req, res) => {
   }
 });
 
+// ============================================================================
+// INVENTORY ALLOCATION ENDPOINTS
+// ============================================================================
+
+// Get all allocations for a wedding
+router.get('/allocations/:wedding_id', async (req, res) => {
+  try {
+    const {wedding_id} = req.params;
+    const [rows] = await promisePool.query(
+      `SELECT 
+        ia.allocation_id,
+        ia.wedding_id,
+        ia.inventory_id,
+        ia.quantity_used,
+        ia.rental_cost,
+        ia.created_at,
+        ia.updated_at,
+        ii.item_name,
+        ii.category,
+        ii.item_condition,
+        ii.quantity_available,
+        (ia.quantity_used * ia.rental_cost) AS total_cost
+      FROM inventory_allocation ia
+      INNER JOIN inventory_items ii ON ia.inventory_id = ii.inventory_id
+      WHERE ia.wedding_id = ?
+      ORDER BY ia.created_at DESC`,
+      [wedding_id]
+    );
+
+    res.json({
+      success: true,
+      data: rows
+    });
+  } catch (error) {
+    console.error('Error fetching inventory allocations:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch inventory allocations',
+      message: error.message
+    });
+  }
+});
+
+// Create new inventory allocation
+router.post('/allocations', async (req, res) => {
+  try {
+    const {wedding_id, inventory_id, quantity_used, rental_cost} = req.body;
+
+    if (!wedding_id || !inventory_id || quantity_used === undefined || rental_cost === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: wedding_id, inventory_id, quantity_used, rental_cost'
+      });
+    }
+
+    // Check if inventory item exists and has enough quantity
+    const [itemRows] = await promisePool.query(
+      'SELECT quantity_available, rental_cost FROM inventory_items WHERE inventory_id = ?',
+      [inventory_id]
+    );
+
+    if (itemRows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inventory item not found'
+      });
+    }
+
+    const availableQuantity = itemRows[0].quantity_available;
+    if (quantity_used > availableQuantity) {
+      return res.status(400).json({
+        success: false,
+        error: `Quantity used (${quantity_used}) exceeds available quantity (${availableQuantity})`
+      });
+    }
+
+    // Use provided rental_cost or fallback to item's rental_cost
+    const finalRentalCost = rental_cost || itemRows[0].rental_cost;
+
+    const [result] = await promisePool.query(
+      `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, rental_cost)
+       VALUES (?, ?, ?, ?)`,
+      [wedding_id, inventory_id, quantity_used, finalRentalCost]
+    );
+
+    // Fetch the created allocation with item details
+    const [newAllocation] = await promisePool.query(
+      `SELECT 
+        ia.allocation_id,
+        ia.wedding_id,
+        ia.inventory_id,
+        ia.quantity_used,
+        ia.rental_cost,
+        ia.created_at,
+        ia.updated_at,
+        ii.item_name,
+        ii.category,
+        ii.item_condition,
+        ii.quantity_available,
+        (ia.quantity_used * ia.rental_cost) AS total_cost
+      FROM inventory_allocation ia
+      INNER JOIN inventory_items ii ON ia.inventory_id = ii.inventory_id
+      WHERE ia.allocation_id = ?`,
+      [result.insertId]
+    );
+
+    res.status(201).json({
+      success: true,
+      data: newAllocation[0],
+      message: 'Inventory allocation created successfully'
+    });
+  } catch (error) {
+    console.error('Error creating inventory allocation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create inventory allocation',
+      message: error.message
+    });
+  }
+});
+
+// Update inventory allocation
+router.put('/allocations/:allocation_id', async (req, res) => {
+  try {
+    const {allocation_id} = req.params;
+    const {quantity_used, rental_cost} = req.body;
+
+    if (quantity_used === undefined && rental_cost === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'At least one field (quantity_used or rental_cost) must be provided'
+      });
+    }
+
+    // Get current allocation to check inventory availability
+    const [currentAllocation] = await promisePool.query(
+      `SELECT ia.inventory_id, ia.quantity_used, ii.quantity_available
+       FROM inventory_allocation ia
+       INNER JOIN inventory_items ii ON ia.inventory_id = ii.inventory_id
+       WHERE ia.allocation_id = ?`,
+      [allocation_id]
+    );
+
+    if (currentAllocation.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inventory allocation not found'
+      });
+    }
+
+    const newQuantity = quantity_used !== undefined ? quantity_used : currentAllocation[0].quantity_used;
+    const availableQuantity = currentAllocation[0].quantity_available;
+    const currentQuantity = currentAllocation[0].quantity_used;
+
+    // Check if new quantity exceeds available (accounting for current allocation)
+    const effectiveAvailable = availableQuantity + currentQuantity;
+    if (newQuantity > effectiveAvailable) {
+      return res.status(400).json({
+        success: false,
+        error: `Quantity used (${newQuantity}) exceeds available quantity (${effectiveAvailable})`
+      });
+    }
+
+    // Build update query dynamically
+    const updates = [];
+    const params = [];
+    
+    if (quantity_used !== undefined) {
+      updates.push('quantity_used = ?');
+      params.push(quantity_used);
+    }
+    
+    if (rental_cost !== undefined) {
+      updates.push('rental_cost = ?');
+      params.push(rental_cost);
+    }
+    
+    params.push(allocation_id);
+
+    const [result] = await promisePool.query(
+      `UPDATE inventory_allocation 
+       SET ${updates.join(', ')}
+       WHERE allocation_id = ?`,
+      params
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inventory allocation not found'
+      });
+    }
+
+    // Fetch updated allocation with item details
+    const [updatedAllocation] = await promisePool.query(
+      `SELECT 
+        ia.allocation_id,
+        ia.wedding_id,
+        ia.inventory_id,
+        ia.quantity_used,
+        ia.rental_cost,
+        ia.created_at,
+        ia.updated_at,
+        ii.item_name,
+        ii.category,
+        ii.item_condition,
+        ii.quantity_available,
+        (ia.quantity_used * ia.rental_cost) AS total_cost
+      FROM inventory_allocation ia
+      INNER JOIN inventory_items ii ON ia.inventory_id = ii.inventory_id
+      WHERE ia.allocation_id = ?`,
+      [allocation_id]
+    );
+
+    res.json({
+      success: true,
+      data: updatedAllocation[0],
+      message: 'Inventory allocation updated successfully'
+    });
+  } catch (error) {
+    console.error('Error updating inventory allocation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update inventory allocation',
+      message: error.message
+    });
+  }
+});
+
+// Delete inventory allocation
+router.delete('/allocations/:allocation_id', async (req, res) => {
+  try {
+    const {allocation_id} = req.params;
+
+    const [result] = await promisePool.query(
+      'DELETE FROM inventory_allocation WHERE allocation_id = ?',
+      [allocation_id]
+    );
+
+    if (result.affectedRows === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inventory allocation not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Inventory allocation deleted successfully'
+    });
+  } catch (error) {
+    console.error('Error deleting inventory allocation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete inventory allocation',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;
 
