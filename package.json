@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "vite --open",
     "dev:backend": "cd backend && npm i && npm run dev",
-    "dev:frontend": "npm i && npm run dev",
+    "dev:frontend": "npm i && vite --open",
     "dev:all": "npx concurrently -n \"BACKEND,FRONTEND\" -c \"blue,green\" \"npm run dev:backend\" \"npm run dev:frontend\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
