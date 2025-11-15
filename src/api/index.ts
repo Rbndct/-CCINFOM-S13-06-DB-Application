@@ -268,4 +268,11 @@ export const inventoryAPI = {
   delete: (id) => api.delete(`/inventory/${id}`),
 };
 
+export const inventoryAllocationAPI = {
+  getAllByWedding: (weddingId) => api.get(`/inventory/allocations/${weddingId}`),
+  create: (data) => api.post('/inventory/allocations', data),
+  update: (allocationId, data) => api.put(`/inventory/allocations/${allocationId}`, data),
+  delete: (allocationId) => api.delete(`/inventory/allocations/${allocationId}`),
+};
+
 export default api;

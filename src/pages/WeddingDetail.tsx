@@ -25,7 +25,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Heart,
-  X
+  X,
+  Search,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -65,8 +67,9 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, menuItemsAPI, packagesAPI } from '@/api';
+import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, menuItemsAPI, packagesAPI, inventoryAPI, inventoryAllocationAPI } from '@/api';
 import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
+import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 
 // Helper function to safely parse and format dates
 const safeFormatDate = (dateValue: any): string => {
@@ -170,10 +173,27 @@ const WeddingDetail = () => {
   const [menuItemsLoading, setMenuItemsLoading] = useState(false);
   const [packagesLoading, setPackagesLoading] = useState(false);
   
+  // Inventory allocation state
+  const [inventoryAllocations, setInventoryAllocations] = useState<any[]>([]);
+  const [availableInventoryItems, setAvailableInventoryItems] = useState<any[]>([]);
+  const [inventoryAllocationLoading, setInventoryAllocationLoading] = useState(false);
+  const [addAllocationOpen, setAddAllocationOpen] = useState(false);
+  const [editAllocationOpen, setEditAllocationOpen] = useState(false);
+  const [deleteAllocationOpen, setDeleteAllocationOpen] = useState(false);
+  const [selectedAllocation, setSelectedAllocation] = useState<any>(null);
+  const [allocationFormData, setAllocationFormData] = useState({
+    inventory_id: '',
+    quantity_used: '',
+    rental_cost: ''
+  });
+  const [allocationFormLoading, setAllocationFormLoading] = useState(false);
+  const [allocationFormErrors, setAllocationFormErrors] = useState<Record<string, string>>({});
+  
   // Guest filtering and sorting state
   const [guestFilterName, setGuestFilterName] = useState('');
   const [guestFilterRsvp, setGuestFilterRsvp] = useState('');
   const [guestFilterRestriction, setGuestFilterRestriction] = useState('');
+  const [showGuestFilters, setShowGuestFilters] = useState(false);
   const [guestSortBy, setGuestSortBy] = useState<'name' | 'rsvp' | 'table'>('name');
   const [guestSortOrder, setGuestSortOrder] = useState<'asc' | 'desc'>('asc');
   const [guestCurrentPage, setGuestCurrentPage] = useState(1);
@@ -221,7 +241,7 @@ const WeddingDetail = () => {
         if (weddingData) {
           
           // Calculate RSVP counts - will be updated when guests are fetched
-          setWedding({
+      setWedding({
             ...weddingData,
             acceptedGuests: 0, // Will be updated when guests are fetched
             pendingRSVPs: 0, // Will be updated when guests are fetched
@@ -351,7 +371,9 @@ const WeddingDetail = () => {
         try {
           const restrictionsResponse = await dietaryRestrictionsAPI.getAll();
           if (restrictionsResponse && restrictionsResponse.data) {
-            setDietaryRestrictions(restrictionsResponse.data);
+            // Filter out "None" from the display (it's a system restriction)
+            const displayableRestrictions = restrictionsResponse.data.filter((r: any) => r.restriction_name !== 'None');
+            setDietaryRestrictions(displayableRestrictions);
           }
         } catch (e) {
           console.error('Error fetching dietary restrictions:', e);
@@ -374,7 +396,7 @@ const WeddingDetail = () => {
         }
         
         // Set loading to false after all data is loaded
-        setLoading(false);
+      setLoading(false);
         
       } catch (error: any) {
         console.error('Error fetching wedding data:', error);
@@ -543,7 +565,7 @@ const WeddingDetail = () => {
         console.error('Error loading seating:', error);
         setTables([]); // Set empty array on error
       } finally {
-        setSeatingLoading(false);
+      setSeatingLoading(false);
       }
     };
     loadSeating();
@@ -613,6 +635,48 @@ const WeddingDetail = () => {
     };
     
     loadMenuItemsAndPackages();
+  }, [id]);
+
+  // Fetch inventory allocations and available inventory items
+  useEffect(() => {
+    const loadInventoryData = async () => {
+      if (!id) return;
+      
+      // Fetch inventory allocations for this wedding
+      try {
+        setInventoryAllocationLoading(true);
+        const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
+        if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        } else if (allocationsResponse && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        } else {
+          setInventoryAllocations([]);
+        }
+      } catch (e) {
+        console.error('Error fetching inventory allocations:', e);
+        setInventoryAllocations([]);
+      }
+      
+      // Fetch available inventory items
+      try {
+        const itemsResponse = await inventoryAPI.getAll({});
+        if (itemsResponse && itemsResponse.success && itemsResponse.data) {
+          setAvailableInventoryItems(itemsResponse.data || []);
+        } else if (itemsResponse && itemsResponse.data) {
+          setAvailableInventoryItems(itemsResponse.data || []);
+        } else {
+          setAvailableInventoryItems([]);
+        }
+      } catch (e) {
+        console.error('Error fetching inventory items:', e);
+        setAvailableInventoryItems([]);
+      } finally {
+        setInventoryAllocationLoading(false);
+      }
+    };
+    
+    loadInventoryData();
   }, [id]);
 
   // Initialize edit wedding form when dialog opens
@@ -898,18 +962,18 @@ const WeddingDetail = () => {
             pendingRSVPs: pending
           }));
         }
-        
-        // Reset form
-        setFirstName('');
-        setLastName('');
+      
+      // Reset form
+      setFirstName('');
+      setLastName('');
         setGuestRestrictionIds([]);
-        setRsvpStatus('pending');
-        setGuestFormErrors({});
-        
-        toast({
-          title: 'Guest Added',
+      setRsvpStatus('pending');
+      setGuestFormErrors({});
+      
+      toast({
+        title: 'Guest Added',
           description: `${fullName} has been added successfully`,
-        });
+      });
       }
     } catch (error: any) {
       console.error('Error adding guest:', error);
@@ -1557,6 +1621,230 @@ const WeddingDetail = () => {
     return tablePackageAssignments.find(a => a.tableId === tableId);
   };
 
+  // Helper to get all restrictions for a table (aggregate from all guests at that table)
+  const getTableRestrictions = (tableId: number) => {
+    const tableGuests = guests.filter(g => g.table_id === tableId);
+    const restrictionSet = new Set<number>();
+    const restrictions: any[] = [];
+    
+    tableGuests.forEach(guest => {
+      if (guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions)) {
+        guest.dietaryRestrictions.forEach((r: any) => {
+          const restrictionId = r.restriction_id || r.id;
+          if (restrictionId && !restrictionSet.has(restrictionId)) {
+            restrictionSet.add(restrictionId);
+            restrictions.push(r);
+          }
+        });
+      }
+    });
+    
+    return restrictions;
+  };
+
+  // Helper to check if a package is compatible with table restrictions
+  const checkPackageCompatibility = (packageId: number, tableId: number) => {
+    const tableRestrictions = getTableRestrictions(tableId);
+    const tableRestrictionIds = new Set(tableRestrictions.map(r => r.restriction_id || r.id));
+    
+    // Find the package
+    const pkg = packages.find(p => (p.package_id || p.id) === packageId);
+    if (!pkg) return { compatible: true, conflicts: [] };
+    
+    // Get menu items in the package
+    const packageMenuItems = pkg.menu_items || [];
+    const conflicts: any[] = [];
+    
+    // Check each menu item in the package
+    packageMenuItems.forEach((menuItem: any) => {
+      // If menu item has a restriction that conflicts with table restrictions
+      if (menuItem.restriction_id) {
+        // If the menu item's restriction matches a table restriction, it's a conflict
+        // (e.g., if table has vegan restriction, and menu item is non-vegan, that's a conflict)
+        // Actually, we need to think about this differently:
+        // - If a menu item has a restriction_id, it means it CANNOT be served to people with that restriction
+        // - So if table has guests with restriction X, and package has menu items with restriction_id X, that's a conflict
+        if (tableRestrictionIds.has(menuItem.restriction_id)) {
+          const conflictRestriction = tableRestrictions.find(r => 
+            (r.restriction_id || r.id) === menuItem.restriction_id
+          );
+          if (conflictRestriction && !conflicts.find(c => c.restriction_id === menuItem.restriction_id)) {
+            conflicts.push({
+              restriction_id: menuItem.restriction_id,
+              restriction_name: conflictRestriction.restriction_name || conflictRestriction.name,
+              menu_item: menuItem.menu_name || menuItem.name
+            });
+          }
+        }
+      }
+    });
+    
+    return {
+      compatible: conflicts.length === 0,
+      conflicts
+    };
+  };
+
+  // Inventory allocation handlers
+  const handleAddAllocation = async () => {
+    setAllocationFormErrors({});
+    
+    if (!allocationFormData.inventory_id) {
+      setAllocationFormErrors({ inventory_id: 'Inventory item is required' });
+      return;
+    }
+    if (!allocationFormData.quantity_used || parseInt(allocationFormData.quantity_used) <= 0) {
+      setAllocationFormErrors({ quantity_used: 'Valid quantity is required' });
+      return;
+    }
+    
+    const selectedItem = availableInventoryItems.find(item => 
+      item.inventory_id?.toString() === allocationFormData.inventory_id
+    );
+    
+    if (!selectedItem) {
+      setAllocationFormErrors({ inventory_id: 'Selected inventory item not found' });
+      return;
+    }
+    
+    const quantity = parseInt(allocationFormData.quantity_used);
+    if (quantity > selectedItem.quantity_available) {
+      setAllocationFormErrors({ 
+        quantity_used: `Quantity exceeds available (${selectedItem.quantity_available})` 
+      });
+      return;
+    }
+    
+    setAllocationFormLoading(true);
+    try {
+      const rentalCost = allocationFormData.rental_cost 
+        ? parseFloat(allocationFormData.rental_cost) 
+        : selectedItem.rental_cost;
+      
+      await inventoryAllocationAPI.create({
+        wedding_id: parseInt(id || '0'),
+        inventory_id: parseInt(allocationFormData.inventory_id),
+        quantity_used: quantity,
+        rental_cost: rentalCost
+      });
+      
+      toast({ title: 'Success', description: 'Inventory allocated successfully' });
+      setAddAllocationOpen(false);
+      setAllocationFormData({ inventory_id: '', quantity_used: '', rental_cost: '' });
+      
+      // Refresh allocations
+      const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id || '0');
+      if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+        setInventoryAllocations(allocationsResponse.data || []);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || 'Failed to allocate inventory',
+        variant: 'destructive',
+      });
+    } finally {
+      setAllocationFormLoading(false);
+    }
+  };
+
+  const handleEditAllocation = (allocation: any) => {
+    setSelectedAllocation(allocation);
+    setAllocationFormData({
+      inventory_id: allocation.inventory_id?.toString() || '',
+      quantity_used: allocation.quantity_used?.toString() || '',
+      rental_cost: allocation.rental_cost?.toString() || ''
+    });
+    setAllocationFormErrors({});
+    setEditAllocationOpen(true);
+  };
+
+  const handleSaveEditAllocation = async () => {
+    if (!selectedAllocation) return;
+    
+    setAllocationFormErrors({});
+    
+    if (!allocationFormData.quantity_used || parseInt(allocationFormData.quantity_used) <= 0) {
+      setAllocationFormErrors({ quantity_used: 'Valid quantity is required' });
+      return;
+    }
+    
+    const selectedItem = availableInventoryItems.find(item => 
+      item.inventory_id?.toString() === selectedAllocation.inventory_id?.toString()
+    );
+    
+    if (selectedItem) {
+      const quantity = parseInt(allocationFormData.quantity_used);
+      const currentQuantity = selectedAllocation.quantity_used || 0;
+      const effectiveAvailable = selectedItem.quantity_available + currentQuantity;
+      
+      if (quantity > effectiveAvailable) {
+        setAllocationFormErrors({ 
+          quantity_used: `Quantity exceeds available (${effectiveAvailable})` 
+        });
+        return;
+      }
+    }
+    
+    setAllocationFormLoading(true);
+    try {
+      const updateData: any = {};
+      if (allocationFormData.quantity_used) {
+        updateData.quantity_used = parseInt(allocationFormData.quantity_used);
+      }
+      if (allocationFormData.rental_cost) {
+        updateData.rental_cost = parseFloat(allocationFormData.rental_cost);
+      }
+      
+      await inventoryAllocationAPI.update(selectedAllocation.allocation_id, updateData);
+      
+      toast({ title: 'Success', description: 'Inventory allocation updated successfully' });
+      setEditAllocationOpen(false);
+      setSelectedAllocation(null);
+      setAllocationFormData({ inventory_id: '', quantity_used: '', rental_cost: '' });
+      
+      // Refresh allocations
+      const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id || '0');
+      if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+        setInventoryAllocations(allocationsResponse.data || []);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || 'Failed to update allocation',
+        variant: 'destructive',
+      });
+    } finally {
+      setAllocationFormLoading(false);
+    }
+  };
+
+  const handleDeleteAllocation = async () => {
+    if (!selectedAllocation || !id) return;
+    
+    setAllocationFormLoading(true);
+    try {
+      await inventoryAllocationAPI.delete(selectedAllocation.allocation_id);
+      toast({ title: 'Success', description: 'Inventory allocation deleted successfully' });
+      setDeleteAllocationOpen(false);
+      setSelectedAllocation(null);
+      
+      // Refresh allocations
+      const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
+      if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+        setInventoryAllocations(allocationsResponse.data || []);
+      }
+    } catch (error: any) {
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || 'Failed to delete allocation',
+        variant: 'destructive',
+      });
+    } finally {
+      setAllocationFormLoading(false);
+    }
+  };
+
   // Edit table state
   const [editTableOpen, setEditTableOpen] = useState(false);
   const [editingTable, setEditingTable] = useState<any>(null);
@@ -1759,6 +2047,23 @@ const WeddingDetail = () => {
       return;
     }
     
+    const tableId = parseInt(packageAssignTableId);
+    const packageId = parseInt(packageAssignPackageId);
+    
+    // Check for compatibility issues
+    const compatibility = checkPackageCompatibility(packageId, tableId);
+    
+    if (!compatibility.compatible && compatibility.conflicts.length > 0) {
+      const conflictMessages = compatibility.conflicts.map(c => 
+        `${c.menu_item} conflicts with ${c.restriction_name}`
+      ).join(', ');
+      
+      const confirmMsg = `Warning: This package contains items that conflict with table restrictions:\n\n${conflictMessages}\n\nDo you still want to assign this package?`;
+      if (!confirm(confirmMsg)) {
+        return;
+      }
+    }
+    
     setPackageFormLoading(true);
     
     try {
@@ -1770,9 +2075,9 @@ const WeddingDetail = () => {
       
       const newAssignment = {
         id: Date.now(),
-        tableId: parseInt(packageAssignTableId),
+        tableId: tableId,
         tableNumber: table?.tableNumber || '',
-        packageId: parseInt(packageAssignPackageId),
+        packageId: packageId,
         packageName: pkg?.packageName || '',
         packageType: pkg?.packageType || '',
         weddingId: parseInt(id || '1')
@@ -1800,7 +2105,8 @@ const WeddingDetail = () => {
       
       toast({
         title: 'Package Assigned',
-        description: `${newAssignment.packageName} assigned to ${newAssignment.tableNumber}`,
+        description: `${newAssignment.packageName} assigned to ${newAssignment.tableNumber}${!compatibility.compatible ? ' (with restrictions)' : ''}`,
+        variant: !compatibility.compatible ? 'default' : 'default',
       });
     } catch (error) {
       toast({
@@ -1982,8 +2288,8 @@ const WeddingDetail = () => {
             </p>
             <div className="flex justify-center mt-4 gap-2">
               <Button onClick={() => navigate('/dashboard/weddings')}>
-                Back to Weddings
-              </Button>
+              Back to Weddings
+            </Button>
               <Button variant="outline" onClick={() => window.location.reload()}>
                 Retry
               </Button>
@@ -1993,7 +2299,7 @@ const WeddingDetail = () => {
       </DashboardLayout>
     );
   }
-  
+
   // Safety check - if wedding is still null after loading, show error
   if (!wedding) {
     console.log('Component rendering: Safety check - wedding is null');
@@ -2014,7 +2320,7 @@ const WeddingDetail = () => {
 
   // Wrap main render in try-catch to prevent white screen crashes
   try {
-    return (
+  return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
@@ -2138,6 +2444,10 @@ const WeddingDetail = () => {
               <Package className="h-4 w-4" />
               Packages
             </TabsTrigger>
+            <TabsTrigger value="inventory-allocation" className="gap-2">
+              <Warehouse className="h-4 w-4" />
+              Inventory Allocation
+            </TabsTrigger>
           </TabsList>
 
           {/* Guests Tab */}
@@ -2181,48 +2491,13 @@ const WeddingDetail = () => {
                   </div>
                   <div className="space-y-2">
                     <Label>Dietary Restrictions *</Label>
-                    <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
-                      {dietaryRestrictions.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">Loading dietary restrictions...</p>
-                      ) : (
-                        dietaryRestrictions.map((dr) => (
-                          <div key={dr.restriction_id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`guest-restriction-${dr.restriction_id}`}
-                              checked={guestRestrictionIds.includes(dr.restriction_id)}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setGuestRestrictionIds([...guestRestrictionIds, dr.restriction_id]);
-                                } else {
-                                  setGuestRestrictionIds(guestRestrictionIds.filter(id => id !== dr.restriction_id));
-                                }
-                              }}
-                              disabled={guestFormLoading}
-                            />
-                            <label
-                              htmlFor={`guest-restriction-${dr.restriction_id}`}
-                              className="text-sm font-medium leading-none cursor-pointer flex-1 flex items-center gap-2"
-                            >
-                              <span className={`${getTypeColor(dr.restriction_type || '')} flex items-center gap-1 px-2 py-1 rounded`}>
-                                {getTypeIcon(dr.restriction_type || '')}
-                                {dr.restriction_name}
-                              </span>
-                              {dr.severity_level && (
-                                <span className="text-muted-foreground text-xs">- {dr.severity_level}</span>
-                              )}
-                            </label>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                    {guestRestrictionIds.length > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        {guestRestrictionIds.length} restriction(s) selected
-                      </p>
-                    )}
-                    {guestFormErrors.dietaryRestriction && (
-                      <p className="text-sm text-red-500">{guestFormErrors.dietaryRestriction}</p>
-                    )}
+                    <MultiSelectRestrictions
+                      restrictions={dietaryRestrictions}
+                      selectedIds={guestRestrictionIds}
+                      onSelectionChange={setGuestRestrictionIds}
+                      disabled={guestFormLoading}
+                      error={guestFormErrors.dietaryRestriction}
+                    />
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="rsvpStatus">RSVP Status *</Label>
@@ -2267,78 +2542,99 @@ const WeddingDetail = () => {
                 {/* Filters */}
                 <div className="mb-4 space-y-4">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <div className="flex-1 min-w-[200px]">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                       <Input
-                        placeholder="Filter by name..."
+                        placeholder="Search guests..."
                         value={guestFilterName}
                         onChange={(e) => {
                           setGuestFilterName(e.target.value);
                           setGuestCurrentPage(1);
                         }}
-                        className="h-9"
+                        className="pl-8"
                       />
                     </div>
-                    <div className="w-[150px]">
-                      <Select value={guestFilterRsvp || "all"} onValueChange={(val) => {
-                        setGuestFilterRsvp(val === "all" ? "" : val);
-                        setGuestCurrentPage(1);
-                      }}>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="RSVP Status" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Status</SelectItem>
-                          <SelectItem value="pending">Pending</SelectItem>
-                          <SelectItem value="accepted">Accepted</SelectItem>
-                          <SelectItem value="declined">Declined</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-[150px]">
-                      <Select value={guestFilterRestriction || "all"} onValueChange={(val) => {
-                        setGuestFilterRestriction(val === "all" ? "" : val);
-                        setGuestCurrentPage(1);
-                      }}>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Restriction" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Restrictions</SelectItem>
-                          {dietaryRestrictions.map((dr) => {
-                            const restrictionValue = dr.restriction_name || dr.restriction_id?.toString();
-                            if (!restrictionValue) return null;
-                            return (
-                              <SelectItem key={dr.restriction_id} value={restrictionValue}>
-                                {dr.restriction_name}
-                              </SelectItem>
-                            );
-                          })}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="w-[150px]">
-                      <Select value={`${guestSortBy}-${guestSortOrder}`} onValueChange={(val) => {
-                        const [sortBy, order] = val.split('-');
-                        setGuestSortBy(sortBy as 'name' | 'rsvp' | 'table');
-                        setGuestSortOrder(order as 'asc' | 'desc');
-                      }}>
-                        <SelectTrigger className="h-9">
-                          <SelectValue placeholder="Sort by" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="name-asc">Name (A-Z)</SelectItem>
-                          <SelectItem value="name-desc">Name (Z-A)</SelectItem>
-                          <SelectItem value="rsvp-asc">RSVP Status</SelectItem>
-                          <SelectItem value="table-asc">Table (A-Z)</SelectItem>
-                          <SelectItem value="table-desc">Table (Z-A)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={handleClearGuestFilters} className="h-9" disabled={!hasActiveFilters}>
+                    <Button variant="outline" onClick={() => setShowGuestFilters(s => !s)}>
                       <Filter className="w-4 h-4 mr-2" />
+                      Filters
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={handleClearGuestFilters}
+                    >
                       Reset Filters
                     </Button>
                   </div>
+
+                  {showGuestFilters && (
+                    <div className="grid md:grid-cols-4 gap-3">
+                      <div>
+                        <label className="text-sm text-muted-foreground">RSVP Status</label>
+                        <Select value={guestFilterRsvp || "all"} onValueChange={(val) => {
+                          setGuestFilterRsvp(val === "all" ? "" : val);
+                          setGuestCurrentPage(1);
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="All Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Status</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="accepted">Accepted</SelectItem>
+                            <SelectItem value="declined">Declined</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground">Dietary Restriction</label>
+                        <Select value={guestFilterRestriction || "all"} onValueChange={(val) => {
+                          setGuestFilterRestriction(val === "all" ? "" : val);
+                          setGuestCurrentPage(1);
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="All Restrictions" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Restrictions</SelectItem>
+                            {dietaryRestrictions.map((dr) => {
+                              const restrictionValue = dr.restriction_name || dr.restriction_id?.toString();
+                              if (!restrictionValue) return null;
+                              return (
+                                <SelectItem key={dr.restriction_id} value={restrictionValue}>
+                                  {dr.restriction_name}
+                                </SelectItem>
+                              );
+                            })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground">Sort By</label>
+                        <Select value={guestSortBy} onValueChange={(val: any) => {
+                          setGuestSortBy(val);
+                        }}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Sort by" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="name">Name</SelectItem>
+                            <SelectItem value="rsvp">RSVP Status</SelectItem>
+                            <SelectItem value="table">Table</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <label className="text-sm text-muted-foreground">Order</label>
+                        <Button
+                          variant="outline"
+                          className="w-full"
+                          onClick={() => setGuestSortOrder(guestSortOrder === 'asc' ? 'desc' : 'asc')}
+                        >
+                          <ArrowUpDown className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <Table>
@@ -2375,9 +2671,9 @@ const WeddingDetail = () => {
                             <TableCell className="font-medium">
                               {guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}
                             </TableCell>
-            <TableCell>
+                            <TableCell>
               {restrictions.length > 0 ? (
-                <div className="flex flex-wrap gap-1">
+                <div className="flex flex-col gap-1">
                   {restrictions.map((r: any, idx: number) => {
                     const restrictionName = r.restriction_name || r.name || r;
                     const restrictionType = r.restriction_type || '';
@@ -2386,10 +2682,12 @@ const WeddingDetail = () => {
                       <Badge 
                         key={restrictionId || restrictionName || `restriction-${idx}`} 
                         variant="outline" 
-                        className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                        className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1 w-fit`}
                       >
                         {getTypeIcon(restrictionType)}
-                        {restrictionName}
+                        <span className="max-w-[150px] truncate" title={restrictionName}>
+                          {restrictionName}
+                        </span>
                       </Badge>
                     );
                   })}
@@ -2397,7 +2695,7 @@ const WeddingDetail = () => {
               ) : (
                 <span className="text-muted-foreground">None</span>
               )}
-            </TableCell>
+                            </TableCell>
                             <TableCell>{getRsvpStatusBadge(guest.rsvpStatus)}</TableCell>
                             <TableCell>
                               {assignedTable ? (
@@ -2508,26 +2806,26 @@ const WeddingDetail = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Left side: Form fields */}
                   <div className="space-y-4">
-                    <form onSubmit={handleAddTable} className="space-y-4">
-                      {/* Mandatory Couple Table CTA */}
+              <form onSubmit={handleAddTable} className="space-y-4">
+                {/* Mandatory Couple Table CTA */}
                       {tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0 && (
-                        <div className="p-3 rounded border bg-muted/30 flex items-center justify-between">
-                          <div>
-                            <p className="text-sm font-medium">Couple Table Required</p>
-                            <p className="text-xs text-muted-foreground">Create the couple table before adding guest tables.</p>
-                          </div>
+                  <div className="p-3 rounded border bg-muted/30 flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Couple Table Required</p>
+                      <p className="text-xs text-muted-foreground">Create the couple table before adding guest tables.</p>
+                    </div>
                           <Button onClick={(e) => { e.preventDefault(); ensureCoupleTable(); }} disabled={seatingLoading} size="sm">Create Couple Table</Button>
-                        </div>
-                      )}
-                      <div className="space-y-2">
-                        <Label htmlFor="tableCategory">Table Category *</Label>
-                        <Select value={tableCategory} onValueChange={setTableCategory} disabled={tableFormLoading}>
-                          <SelectTrigger id="tableCategory" className={tableFormErrors.tableCategory ? 'border-red-500' : ''}>
-                            <SelectValue placeholder="Select table category" />
-                          </SelectTrigger>
+                  </div>
+                )}
+                  <div className="space-y-2">
+                    <Label htmlFor="tableCategory">Table Category *</Label>
+                    <Select value={tableCategory} onValueChange={setTableCategory} disabled={tableFormLoading}>
+                      <SelectTrigger id="tableCategory" className={tableFormErrors.tableCategory ? 'border-red-500' : ''}>
+                        <SelectValue placeholder="Select table category" />
+                      </SelectTrigger>
                           <SelectContent className="max-h-[300px] overflow-y-auto">
-                            <SelectItem value="couple">Couple</SelectItem>
-                            <SelectItem value="guest">Guest</SelectItem>
+                      <SelectItem value="couple">Couple</SelectItem>
+                      <SelectItem value="guest">Guest</SelectItem>
                             <SelectItem value="family">Family</SelectItem>
                             <SelectItem value="VIP">VIP</SelectItem>
                             <SelectItem value="entourage">Entourage</SelectItem>
@@ -2538,25 +2836,25 @@ const WeddingDetail = () => {
                             <SelectItem value="staff">Staff</SelectItem>
                             <SelectItem value="reserved">Reserved</SelectItem>
                             <SelectItem value="special_needs">Special Needs</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        {tableFormErrors.tableCategory && (
-                          <p className="text-sm text-red-500">{tableFormErrors.tableCategory}</p>
-                        )}
-                      </div>
-                      <div className="space-y-2">
-                        <Label htmlFor="tableCapacity">Capacity *</Label>
-                        <Input
-                          id="tableCapacity"
-                          type="number"
-                          value={tableCapacity}
-                          onChange={(e) => setTableCapacity(e.target.value)}
+                      </SelectContent>
+                    </Select>
+                    {tableFormErrors.tableCategory && (
+                      <p className="text-sm text-red-500">{tableFormErrors.tableCategory}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                      <Label htmlFor="tableCapacity">Capacity *</Label>
+                      <Input
+                        id="tableCapacity"
+                        type="number"
+                        value={tableCapacity}
+                        onChange={(e) => setTableCapacity(e.target.value)}
                           placeholder={tableCategory === 'couple' ? '2-15 for couple tables' : '1-15 for guest tables'}
                           min={tableCategory === 'couple' ? '2' : '1'}
                           max="15"
-                          className={tableFormErrors.tableCapacity ? 'border-red-500' : ''}
-                          disabled={tableFormLoading}
-                        />
+                        className={tableFormErrors.tableCapacity ? 'border-red-500' : ''}
+                        disabled={tableFormLoading}
+                      />
                         <p className="text-xs text-muted-foreground">
                           {tableCategory === 'couple' 
                             ? 'Minimum 2 (for both partners), Maximum 15' 
@@ -2564,24 +2862,24 @@ const WeddingDetail = () => {
                               ? 'Minimum 1, Maximum 15'
                               : 'Select a category first'}
                         </p>
-                        {tableFormErrors.tableCapacity && (
-                          <p className="text-sm text-red-500">{tableFormErrors.tableCapacity}</p>
-                        )}
-                      </div>
+                      {tableFormErrors.tableCapacity && (
+                        <p className="text-sm text-red-500">{tableFormErrors.tableCapacity}</p>
+                      )}
+                    </div>
                       <Button type="submit" disabled={tableFormLoading} className="w-full">
-                        {tableFormLoading ? (
-                          <>
-                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                            Adding...
-                          </>
-                        ) : (
-                          <>
-                            <Plus className="w-4 h-4 mr-2" />
-                            Add Table
-                          </>
-                        )}
-                      </Button>
-                    </form>
+                    {tableFormLoading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Adding...
+                      </>
+                    ) : (
+                      <>
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Table
+                      </>
+                    )}
+                  </Button>
+                </form>
                   </div>
                   
                   {/* Right side: Quick Add shortcuts */}
@@ -2887,11 +3185,11 @@ const WeddingDetail = () => {
                             </>
                           ) : (
                             <>
-                              <p className="text-sm font-medium mb-2">Assigned Guests:</p>
-                              {assignedGuestsList.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">No guests assigned</p>
-                              ) : (
-                                <ul className="space-y-1">
+                          <p className="text-sm font-medium mb-2">Assigned Guests:</p>
+                          {assignedGuestsList.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No guests assigned</p>
+                          ) : (
+                            <ul className="space-y-1">
                                   {assignedGuestsList.map((guest) => {
                                     const restrictions = Array.isArray(guest.dietaryRestrictions) 
                                       ? guest.dietaryRestrictions 
@@ -2907,7 +3205,7 @@ const WeddingDetail = () => {
                                               {restrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').map((r: any, idx: number) => (
                                                 <Badge key={r.restriction_id || r.restriction_name || `restriction-${idx}`} variant="secondary" className="text-xs">
                                                   {r.restriction_name || r}
-                                                </Badge>
+                                    </Badge>
                                               ))}
                                             </div>
                                           )}
@@ -2920,10 +3218,10 @@ const WeddingDetail = () => {
                                         >
                                           <X className="h-3 w-3" />
                                         </Button>
-                                      </li>
+                                </li>
                                     );
                                   })}
-                                </ul>
+                            </ul>
                               )}
                             </>
                           )}
@@ -3054,9 +3352,9 @@ const WeddingDetail = () => {
                             const tableNum = table.tableNumber || table.table_number || 'Unknown';
                             const category = table.category || table.table_category || 'General';
                             return (
-                              <SelectItem key={tableId || `table-${tableNum}`} value={(tableId ?? tableNum)?.toString() ?? ''}>
+                              <SelectItem key={tableId || `table-${tableNum}`} value={tableId ? tableId.toString() : `table-${tableNum}`}>
                                 {tableNum} ({category}) - {available} available
-                              </SelectItem>
+                            </SelectItem>
                             );
                           }).filter(Boolean)}
                         </SelectContent>
@@ -3072,13 +3370,13 @@ const WeddingDetail = () => {
                           {guests
                             .filter(guest => !guest.table_id) // Only show unassigned guests
                             .map((guest) => (
-                            <SelectItem key={guest.id || guest.guest_id || `guest-${guest.name}`} value={(guest.id ?? guest.guest_id)?.toString() ?? ''}>
+                            <SelectItem key={guest.id || guest.guest_id || `guest-${guest.name}`} value={(guest.id ?? guest.guest_id ?? `guest-${guest.name || 'unknown'}`).toString()}>
                               {guest.firstName || guest.name?.split(' ')[0] || 'Unknown'} {guest.lastName || guest.name?.split(' ').slice(1).join(' ') || ''}
                               {guest.table_id && <span className="text-xs text-muted-foreground ml-2">(Assigned)</span>}
                             </SelectItem>
                           ))}
                           {guests.filter(guest => !guest.table_id).length === 0 && (
-                            <SelectItem value="none" disabled>No unassigned guests available</SelectItem>
+                            <SelectItem value="placeholder-no-guests" disabled>No unassigned guests available</SelectItem>
                           )}
                         </SelectContent>
                       </Select>
@@ -3147,8 +3445,8 @@ const WeddingDetail = () => {
                           const assignedCount = guests.filter(g => g && g.table_id === tableId).length;
                           const capacity = table.capacity || 0;
                           const available = capacity - assignedCount;
-                          const categoryColors: Record<string, string> = {
-                            'VIP': 'bg-purple-200 border-purple-400',
+                        const categoryColors: Record<string, string> = {
+                          'VIP': 'bg-purple-200 border-purple-400',
                             'kids': 'bg-blue-200 border-blue-400',
                             'elderly': 'bg-orange-200 border-orange-400',
                             'family': 'bg-green-200 border-green-400',
@@ -3160,8 +3458,8 @@ const WeddingDetail = () => {
                             'special_needs': 'bg-red-200 border-red-400',
                             'couple': 'bg-pink-200 border-pink-400',
                             'guest': 'bg-blue-200 border-blue-400',
-                            'General': 'bg-gray-200 border-gray-400'
-                          };
+                          'General': 'bg-gray-200 border-gray-400'
+                        };
                           const tableCategory = table.category || table.table_category || 'General';
                           const tableNum = table.tableNumber || table.table_number || 'Unknown';
                           // Ensure table numbers are displayed correctly (C-001, T-001 format)
@@ -3176,8 +3474,8 @@ const WeddingDetail = () => {
                           const defaultY = 10 + Math.floor((tableId || 0) / 6) * 20;
                           const position = tablePositions[tableId] || { x: defaultX, y: defaultY };
                           
-                          return (
-                            <div
+                        return (
+                          <div
                               key={tableId || `table-${tableNum}`}
                               className="absolute cursor-move group"
                               style={{
@@ -3199,54 +3497,73 @@ const WeddingDetail = () => {
                             >
                               {/* Table with chairs */}
                               <div className="relative">
-                                {/* Chairs arranged around table in a circle */}
-                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                                  {Array.from({ length: Math.min(capacity, 20) }, (_, i) => {
-                                    const angle = (i * 360) / Math.min(capacity, 20);
-                                    const radian = (angle * Math.PI) / 180;
-                                    const chairRadius = 28;
-                                    const chairX = Math.cos(radian) * chairRadius;
-                                    const chairY = Math.sin(radian) * chairRadius;
-                                    const isOccupied = i < assignedCount;
-                                    
-                                    return (
+                                {/* Calculate table size based on capacity (min 2 seats = 60px, max 15 seats = 120px) */}
+                                {(() => {
+                                  const minSize = 60;
+                                  const maxSize = 120;
+                                  const sizeStep = (maxSize - minSize) / 13; // 13 steps from 2 to 15
+                                  const tableSize = Math.max(minSize, Math.min(maxSize, minSize + (capacity - 2) * sizeStep));
+                                  const chairRadius = tableSize * 0.35; // Scale chair radius with table size
+                                  
+                                  return (
+                                    <>
+                                      {/* Chairs arranged around table in a circle */}
+                                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                        {Array.from({ length: capacity }, (_, i) => {
+                                          const angle = (i * 360) / capacity;
+                                          const radian = (angle * Math.PI) / 180;
+                                          const chairX = Math.cos(radian) * chairRadius;
+                                          const chairY = Math.sin(radian) * chairRadius;
+                                          const isOccupied = i < assignedCount;
+                                          
+                                          return (
+                                            <div
+                                              key={i}
+                                              className="absolute rounded-full border-2 transition-all cursor-pointer"
+                                              style={{
+                                                width: '10px',
+                                                height: '10px',
+                                                left: `calc(50% + ${chairX}px)`,
+                                                top: `calc(50% + ${chairY}px)`,
+                                                transform: 'translate(-50%, -50%)',
+                                                backgroundColor: isOccupied 
+                                                  ? '#ef4444' // red-500 for occupied
+                                                  : '#22c55e', // green-500 for available
+                                                borderColor: isOccupied 
+                                                  ? '#dc2626' // red-600 border
+                                                  : '#16a34a', // green-600 border
+                                                boxShadow: isOccupied 
+                                                  ? '0 0 0 1px rgba(220, 38, 38, 0.2)' 
+                                                  : '0 0 0 1px rgba(34, 197, 94, 0.2)'
+                                              }}
+                                              title={`Seat ${i + 1}: ${isOccupied ? 'Occupied' : 'Available'}`}
+                                            />
+                                          );
+                                        })}
+                                      </div>
+                                      
+                                      {/* Table center - dynamic size */}
                                       <div
-                                        key={i}
-                                        className="absolute rounded-full border transition-all"
+                                        className={`rounded-lg border-2 p-2 flex flex-col items-center justify-center text-xs transition-all hover:shadow-lg hover:scale-105 ${categoryColors[tableCategory] || categoryColors[tableCategory.toLowerCase()] || 'bg-gray-200 border-gray-400'}`}
                                         style={{
-                                          width: '8px',
-                                          height: '8px',
-                                          left: `calc(50% + ${chairX}px)`,
-                                          top: `calc(50% + ${chairY}px)`,
-                                          transform: 'translate(-50%, -50%)',
-                                          backgroundColor: isOccupied 
-                                            ? 'hsl(340, 65%, 55%)' 
-                                            : 'hsl(var(--muted))',
-                                          borderColor: isOccupied 
-                                            ? 'hsl(340, 65%, 55%)' 
-                                            : 'hsl(var(--border))',
-                                          borderWidth: '1.5px'
+                                          width: `${tableSize}px`,
+                                          height: `${tableSize}px`
                                         }}
-                                        title={isOccupied ? 'Occupied' : 'Available'}
-                                      />
-                                    );
-                                  })}
-                                </div>
-                                
-                                {/* Table center */}
-                                <div
-                                  className={`w-20 h-20 rounded-lg border-2 p-2 flex flex-col items-center justify-center text-xs transition-all hover:shadow-lg hover:scale-105 ${categoryColors[tableCategory] || categoryColors[tableCategory.toLowerCase()] || 'bg-gray-200 border-gray-400'}`}
-                                >
-                                  <div className="font-semibold text-[11px] leading-tight">{displayTableNum}</div>
-                                  <div className="text-[8px] text-muted-foreground mt-0.5">ID: {tableId}</div>
-                                  <div className="text-[10px] mt-1 font-medium">{assignedCount}/{capacity}</div>
-                                  {available === 0 && (
-                                    <div className="text-[8px] text-red-600 mt-0.5 font-bold">Full</div>
-                                  )}
-                                </div>
+                                        title={`${displayTableNum} - ${assignedCount}/${capacity} guests`}
+                                      >
+                                        <div className="font-semibold text-[11px] leading-tight">{displayTableNum}</div>
+                                        <div className="text-[8px] text-muted-foreground mt-0.5">ID: {tableId}</div>
+                                        <div className="text-[10px] mt-1 font-medium">{assignedCount}/{capacity}</div>
+                                        {available === 0 && (
+                                          <div className="text-[8px] text-red-600 mt-0.5 font-bold">Full</div>
+                                        )}
+                                      </div>
+                                    </>
+                                  );
+                                })()}
                               </div>
-                            </div>
-                          );
+                          </div>
+                        );
                         } catch (e) {
                           console.error('Error rendering table in layout:', e, table);
                           return null;
@@ -3290,20 +3607,20 @@ const WeddingDetail = () => {
                             const isAssigned = guest.table_id !== null && guest.table_id !== undefined;
                             const assignedTable = isAssigned ? tables.find(t => (t.id || t.table_id) === guest.table_id) : null;
                             return (
-                              <div key={guest.id} className="flex items-center space-x-2 p-2 rounded hover:bg-muted">
-                                <Checkbox
-                                  checked={selectedGuestIds.includes(guest.id)}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      setSelectedGuestIds([...selectedGuestIds, guest.id]);
-                                    } else {
-                                      setSelectedGuestIds(selectedGuestIds.filter(id => id !== guest.id));
-                                    }
-                                  }}
-                                />
-                                <div className="flex-1">
+                            <div key={guest.id} className="flex items-center space-x-2 p-2 rounded hover:bg-muted">
+                              <Checkbox
+                                checked={selectedGuestIds.includes(guest.id)}
+                                onCheckedChange={(checked) => {
+                                  if (checked) {
+                                    setSelectedGuestIds([...selectedGuestIds, guest.id]);
+                                  } else {
+                                    setSelectedGuestIds(selectedGuestIds.filter(id => id !== guest.id));
+                                  }
+                                }}
+                              />
+                              <div className="flex-1">
                                   <div className="flex items-center gap-2">
-                                    <p className="text-sm font-medium">
+                                <p className="text-sm font-medium">
                                       {guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}
                                     </p>
                                     {isAssigned && (
@@ -3322,14 +3639,14 @@ const WeddingDetail = () => {
                                           ))
                                         : guest.dietaryRestriction && guest.dietaryRestriction !== 'None' && (
                                             <Badge variant="secondary" className="text-xs">
-                                              {guest.dietaryRestriction}
-                                            </Badge>
+                                    {guest.dietaryRestriction}
+                                  </Badge>
                                           )
                                       }
                                     </div>
-                                  )}
-                                </div>
+                                )}
                               </div>
+                            </div>
                             );
                           })}
                         </div>
@@ -3356,7 +3673,7 @@ const WeddingDetail = () => {
                             return (
                               <SelectItem 
                                 key={tableId || `table-${tableNum}`} 
-                                value={(tableId ?? tableNum)?.toString() ?? ''}
+                                value={tableId ? tableId.toString() : `table-${tableNum}`}
                                 disabled={available === 0}
                               >
                                 {tableNum} ({category}) - {available} available
@@ -3505,9 +3822,9 @@ const WeddingDetail = () => {
                             const tableNum = table.tableNumber || table.table_number || 'Unknown';
                             const category = table.category || table.table_category || 'General';
                             return (
-                              <SelectItem key={tableId || `table-${tableNum}`} value={(tableId ?? tableNum)?.toString() ?? ''}>
+                              <SelectItem key={tableId || `table-${tableNum}`} value={tableId ? tableId.toString() : `table-${tableNum}`}>
                                 {tableNum} ({category})
-                              </SelectItem>
+                            </SelectItem>
                             );
                           }).filter(Boolean)}
                         </SelectContent>
@@ -3520,15 +3837,93 @@ const WeddingDetail = () => {
                           <SelectValue placeholder="Select a package" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px] overflow-y-auto">
-                          {packages.map((pkg) => (
-                            <SelectItem key={pkg.package_id || pkg.id || `pkg-${pkg.package_name || pkg.packageName}`} value={(pkg.package_id ?? pkg.id ?? pkg.package_name ?? pkg.packageName)?.toString() ?? ''}>
-                              {pkg.package_name || pkg.packageName || 'Unknown'} ({pkg.package_type || pkg.packageType || 'Standard'})
-                            </SelectItem>
-                          ))}
+                          {packages.map((pkg) => {
+                            const pkgId = pkg.package_id || pkg.id;
+                            const tableId = packageAssignTableId ? parseInt(packageAssignTableId) : null;
+                            const compatibility = tableId && pkgId ? checkPackageCompatibility(pkgId, tableId) : { compatible: true, conflicts: [] };
+                            
+                            return (
+                              <SelectItem 
+                                key={pkgId || `pkg-${pkg.package_name || pkg.packageName}`} 
+                                value={(pkgId ?? pkg.package_id ?? `pkg-${pkg.package_name || pkg.packageName || 'unknown'}`).toString()}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {!compatibility.compatible && (
+                                    <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                  )}
+                                  <span>
+                                    {pkg.package_name || pkg.packageName || 'Unknown'} ({pkg.package_type || pkg.packageType || 'Standard'})
+                                    {!compatibility.compatible && ' ⚠️'}
+                                  </span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
                   </div>
+                  
+                  {/* Show compatibility warnings */}
+                  {packageAssignTableId && packageAssignPackageId && (() => {
+                    const tableId = parseInt(packageAssignTableId);
+                    const packageId = parseInt(packageAssignPackageId);
+                    const compatibility = checkPackageCompatibility(packageId, tableId);
+                    const tableRestrictions = getTableRestrictions(tableId);
+                    
+                    if (!compatibility.compatible && compatibility.conflicts.length > 0) {
+                      return (
+                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                          <div className="flex items-start gap-2">
+                            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                            <div className="flex-1">
+                              <p className="font-semibold text-amber-900 mb-2">Package Compatibility Warning</p>
+                              <p className="text-sm text-amber-800 mb-2">
+                                This package contains items that may conflict with table restrictions:
+                              </p>
+                              <div className="space-y-1 mb-2">
+                                {compatibility.conflicts.map((conflict, idx) => (
+                                  <div key={idx} className="text-sm text-amber-800">
+                                    • <strong>{conflict.menu_item}</strong> conflicts with <strong>{conflict.restriction_name}</strong>
+                                  </div>
+                                ))}
+                              </div>
+                              {tableRestrictions.length > 0 && (
+                                <div className="mt-2">
+                                  <p className="text-xs font-medium text-amber-900 mb-1">Table Restrictions:</p>
+                                  <div className="flex flex-wrap gap-1">
+                                    {tableRestrictions.map((r: any) => (
+                                      <Badge 
+                                        key={r.restriction_id || r.id} 
+                                        variant="outline" 
+                                        className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                      >
+                                        {getTypeIcon(r.restriction_type || '')}
+                                        {r.restriction_name || r.name}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    } else if (tableRestrictions.length > 0) {
+                      return (
+                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <p className="text-sm text-green-800">
+                              Package is compatible with table restrictions
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
+                  
                   <Button onClick={handleAssignPackage} disabled={packageFormLoading || tables.length === 0 || packages.length === 0}>
                     {packageFormLoading ? (
                       <>
@@ -3555,22 +3950,64 @@ const WeddingDetail = () => {
                 {tablePackageAssignments.length === 0 ? (
                   <p className="text-center text-muted-foreground py-4">No package assignments yet</p>
                 ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Table Number</TableHead>
-                        <TableHead>Package Name</TableHead>
-                        <TableHead>Package Type</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tablePackageAssignments.map((assignment) => (
-                        <TableRow key={assignment.id || `assignment-${assignment.tableId}-${assignment.packageId}`}>
-                          <TableCell className="font-medium">{assignment.tableNumber || 'N/A'}</TableCell>
-                          <TableCell>{assignment.packageName || 'N/A'}</TableCell>
-                          <TableCell>{assignment.packageType || 'N/A'}</TableCell>
-                          <TableCell>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Table Number</TableHead>
+                      <TableHead>Package Name</TableHead>
+                      <TableHead>Package Type</TableHead>
+                      <TableHead>Compatibility</TableHead>
+                      <TableHead>Table Restrictions</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                      {tablePackageAssignments.map((assignment) => {
+                        const compatibility = checkPackageCompatibility(assignment.packageId, assignment.tableId);
+                        const tableRestrictions = getTableRestrictions(assignment.tableId);
+                        
+                        return (
+                          <TableRow key={assignment.id || `assignment-${assignment.tableId}-${assignment.packageId}`}>
+                            <TableCell className="font-medium">{assignment.tableNumber || 'N/A'}</TableCell>
+                            <TableCell>{assignment.packageName || 'N/A'}</TableCell>
+                            <TableCell>{assignment.packageType || 'N/A'}</TableCell>
+                            <TableCell>
+                              {compatibility.compatible ? (
+                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                  Compatible
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
+                                  <AlertTriangle className="h-3 w-3 mr-1" />
+                                  Conflicts
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {tableRestrictions.length > 0 ? (
+                                <div className="flex flex-wrap gap-1">
+                                  {tableRestrictions.slice(0, 2).map((r: any) => (
+                                    <Badge 
+                                      key={r.restriction_id || r.id} 
+                                      variant="outline" 
+                                      className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                    >
+                                      {getTypeIcon(r.restriction_type || '')}
+                                      {r.restriction_name || r.name}
+                                    </Badge>
+                                  ))}
+                                  {tableRestrictions.length > 2 && (
+                                    <Badge variant="outline" className="text-xs">
+                                      +{tableRestrictions.length - 2} more
+                                    </Badge>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">None</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
@@ -3596,7 +4033,8 @@ const WeddingDetail = () => {
                             </Button>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      );
+                    })}
                     </TableBody>
                   </Table>
                 )}
@@ -3623,7 +4061,7 @@ const WeddingDetail = () => {
                   <div className="space-y-4">
                     <Table>
                       <TableHeader>
-                        <TableRow>
+                      <TableRow>
                           <TableHead>Item Name</TableHead>
                           <TableHead>Type</TableHead>
                           <TableHead>Cost</TableHead>
@@ -3672,8 +4110,8 @@ const WeddingDetail = () => {
                                 ) : (
                                   <span className="text-sm text-muted-foreground">None</span>
                                 )}
-                              </TableCell>
-                            </TableRow>
+                        </TableCell>
+                      </TableRow>
                           );
                         })}
                       </TableBody>
@@ -3766,9 +4204,119 @@ const WeddingDetail = () => {
                             </TableRow>
                           );
                         })}
+                  </TableBody>
+                </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Inventory Allocation Tab */}
+          <TabsContent value="inventory-allocation" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Inventory Allocation</CardTitle>
+                    <CardDescription>Allocate inventory items to this wedding</CardDescription>
+                  </div>
+                  <Button onClick={() => {
+                    setAllocationFormData({ inventory_id: '', quantity_used: '', rental_cost: '' });
+                    setAllocationFormErrors({});
+                    setAddAllocationOpen(true);
+                  }}>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Allocate Inventory
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {inventoryAllocationLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-muted-foreground">Loading allocations...</span>
+                  </div>
+                ) : inventoryAllocations.length === 0 ? (
+                  <div className="text-center py-12 text-muted-foreground">
+                    <Warehouse className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p className="text-lg">No inventory allocated yet</p>
+                    <p className="text-sm mt-2">Click "Allocate Inventory" to get started</p>
+                  </div>
+                ) : (
+                  <>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Item Name</TableHead>
+                          <TableHead>Category</TableHead>
+                          <TableHead>Condition</TableHead>
+                          <TableHead>Quantity Used</TableHead>
+                          <TableHead>Rental Cost (per unit)</TableHead>
+                          <TableHead>Total Cost</TableHead>
+                          <TableHead className="w-[100px]"></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {inventoryAllocations.map((allocation) => (
+                          <TableRow key={allocation.allocation_id}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                <Warehouse className="h-4 w-4 text-muted-foreground" />
+                                {allocation.item_name}
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="outline">{allocation.category}</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant="secondary">{allocation.item_condition}</Badge>
+                            </TableCell>
+                            <TableCell>{allocation.quantity_used}</TableCell>
+                            <TableCell>${(allocation.rental_cost || 0).toFixed(2)}</TableCell>
+                            <TableCell className="font-semibold">
+                              ${((allocation.quantity_used || 0) * (allocation.rental_cost || 0)).toFixed(2)}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => handleEditAllocation(allocation)}
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                                  onClick={() => {
+                                    setSelectedAllocation(allocation);
+                                    setDeleteAllocationOpen(true);
+                                  }}
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
                       </TableBody>
                     </Table>
-                  </div>
+                    <div className="mt-4 pt-4 border-t">
+                      <div className="flex justify-end">
+                        <div className="text-right">
+                          <p className="text-sm text-muted-foreground">Total Rental Cost</p>
+                          <p className="text-2xl font-bold">
+                            ${inventoryAllocations.reduce((sum, a) => 
+                              sum + ((a.quantity_used || 0) * (a.rental_cost || 0)), 0
+                            ).toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -3942,7 +4490,7 @@ const WeddingDetail = () => {
                       <SelectValue placeholder="Select preference (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="preference-none">None</SelectItem>
                       {couplePreferences.map((pref) => {
                         const prefValue = (pref.preference_id ?? pref.ceremony_type)?.toString();
                         if (!prefValue) return null;
@@ -4087,45 +4635,12 @@ const WeddingDetail = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit_guest_restrictions">Dietary Restrictions *</Label>
-                <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
-                  {dietaryRestrictions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Loading dietary restrictions...</p>
-                  ) : (
-                    dietaryRestrictions.map((restriction) => (
-                      <div key={restriction.restriction_id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`edit_restriction_${restriction.restriction_id}`}
-                          checked={editGuestRestrictionIds.includes(restriction.restriction_id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setEditGuestRestrictionIds([...editGuestRestrictionIds, restriction.restriction_id]);
-                            } else {
-                              setEditGuestRestrictionIds(editGuestRestrictionIds.filter(id => id !== restriction.restriction_id));
-                            }
-                          }}
-                          disabled={editGuestLoading}
-                        />
-                        <label
-                          htmlFor={`edit_restriction_${restriction.restriction_id}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1 flex items-center gap-2"
-                        >
-                          <span className={`${getTypeColor(restriction.restriction_type || '')} flex items-center gap-1 px-2 py-1 rounded`}>
-                            {getTypeIcon(restriction.restriction_type || '')}
-                            {restriction.restriction_name}
-                          </span>
-                          {restriction.severity_level && (
-                            <span className="text-muted-foreground text-xs">- {restriction.severity_level}</span>
-                          )}
-                        </label>
-                      </div>
-                    ))
-                  )}
-                </div>
-                {editGuestRestrictionIds.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {editGuestRestrictionIds.length} restriction(s) selected
-                  </p>
-                )}
+                <MultiSelectRestrictions
+                  restrictions={dietaryRestrictions}
+                  selectedIds={editGuestRestrictionIds}
+                  onSelectionChange={setEditGuestRestrictionIds}
+                  disabled={editGuestLoading}
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit_guest_rsvp">RSVP Status *</Label>
@@ -4158,9 +4673,278 @@ const WeddingDetail = () => {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+
+        {/* Add Inventory Allocation Dialog */}
+        <Dialog open={addAllocationOpen} onOpenChange={setAddAllocationOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Allocate Inventory</DialogTitle>
+              <DialogDescription>
+                Select an inventory item and specify the quantity to allocate to this wedding
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="allocation_inventory_id">Inventory Item *</Label>
+                <Select 
+                  value={allocationFormData.inventory_id} 
+                  onValueChange={(val) => {
+                    setAllocationFormData({ ...allocationFormData, inventory_id: val });
+                    const selectedItem = availableInventoryItems.find(item => 
+                      item.inventory_id?.toString() === val
+                    );
+                    if (selectedItem) {
+                      setAllocationFormData(prev => ({
+                        ...prev,
+                        inventory_id: val,
+                        rental_cost: selectedItem.rental_cost?.toString() || ''
+                      }));
+                    }
+                  }}
+                  disabled={allocationFormLoading}
+                >
+                  <SelectTrigger id="allocation_inventory_id" className={allocationFormErrors.inventory_id ? 'border-red-500' : ''}>
+                    <SelectValue placeholder="Select an inventory item" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableInventoryItems.map((item) => (
+                      <SelectItem key={item.inventory_id} value={item.inventory_id ? item.inventory_id.toString() : `inventory-${item.item_name || 'unknown'}`}>
+                        {item.item_name} - {item.category} ({item.quantity_available} available)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {allocationFormErrors.inventory_id && (
+                  <p className="text-sm text-red-500">{allocationFormErrors.inventory_id}</p>
+                )}
+                {allocationFormData.inventory_id && (() => {
+                  const selectedItem = availableInventoryItems.find(item => 
+                    item.inventory_id?.toString() === allocationFormData.inventory_id
+                  );
+                  return selectedItem ? (
+                    <div className="p-3 bg-muted rounded-lg text-sm">
+                      <p><strong>Available:</strong> {selectedItem.quantity_available}</p>
+                      <p><strong>Condition:</strong> {selectedItem.item_condition}</p>
+                      <p><strong>Default Rental Cost:</strong> ${(selectedItem.rental_cost || 0).toFixed(2)} per unit</p>
+                    </div>
+                  ) : null;
+                })()}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="allocation_quantity">Quantity Used *</Label>
+                <Input
+                  id="allocation_quantity"
+                  type="number"
+                  min="1"
+                  value={allocationFormData.quantity_used}
+                  onChange={(e) => {
+                    const qty = e.target.value;
+                    setAllocationFormData({ ...allocationFormData, quantity_used: qty });
+                    if (allocationFormData.inventory_id) {
+                      const selectedItem = availableInventoryItems.find(item => 
+                        item.inventory_id?.toString() === allocationFormData.inventory_id
+                      );
+                      if (selectedItem && qty) {
+                        const total = parseFloat(qty) * (selectedItem.rental_cost || 0);
+                        // Don't auto-update rental_cost if user has manually set it
+                      }
+                    }
+                  }}
+                  className={allocationFormErrors.quantity_used ? 'border-red-500' : ''}
+                  disabled={allocationFormLoading}
+                  placeholder="Enter quantity"
+                />
+                {allocationFormErrors.quantity_used && (
+                  <p className="text-sm text-red-500">{allocationFormErrors.quantity_used}</p>
+                )}
+                {allocationFormData.inventory_id && allocationFormData.quantity_used && (() => {
+                  const selectedItem = availableInventoryItems.find(item => 
+                    item.inventory_id?.toString() === allocationFormData.inventory_id
+                  );
+                  if (selectedItem) {
+                    const qty = parseInt(allocationFormData.quantity_used) || 0;
+                    const cost = parseFloat(allocationFormData.rental_cost || selectedItem.rental_cost?.toString() || '0');
+                    const total = qty * cost;
+                    return (
+                      <p className="text-sm text-muted-foreground">
+                        Total cost: <strong>${total.toFixed(2)}</strong> ({qty} × ${cost.toFixed(2)})
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="allocation_rental_cost">Rental Cost (per unit) *</Label>
+                <Input
+                  id="allocation_rental_cost"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={allocationFormData.rental_cost}
+                  onChange={(e) => setAllocationFormData({ ...allocationFormData, rental_cost: e.target.value })}
+                  disabled={allocationFormLoading}
+                  placeholder="Enter rental cost per unit"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Leave empty to use default rental cost from inventory item
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setAddAllocationOpen(false)} disabled={allocationFormLoading}>
+                Cancel
+              </Button>
+              <Button onClick={handleAddAllocation} disabled={allocationFormLoading}>
+                {allocationFormLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Allocating...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Allocate
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Inventory Allocation Dialog */}
+        <Dialog open={editAllocationOpen} onOpenChange={setEditAllocationOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Inventory Allocation</DialogTitle>
+              <DialogDescription>
+                Update the quantity or rental cost for this allocation
+              </DialogDescription>
+            </DialogHeader>
+            {selectedAllocation && (
+              <div className="space-y-4">
+                <div className="p-3 bg-muted rounded-lg">
+                  <p className="font-medium">{selectedAllocation.item_name}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedAllocation.category} • {selectedAllocation.item_condition}
+                  </p>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_allocation_quantity">Quantity Used *</Label>
+                  <Input
+                    id="edit_allocation_quantity"
+                    type="number"
+                    min="1"
+                    value={allocationFormData.quantity_used}
+                    onChange={(e) => setAllocationFormData({ ...allocationFormData, quantity_used: e.target.value })}
+                    className={allocationFormErrors.quantity_used ? 'border-red-500' : ''}
+                    disabled={allocationFormLoading}
+                  />
+                  {allocationFormErrors.quantity_used && (
+                    <p className="text-sm text-red-500">{allocationFormErrors.quantity_used}</p>
+                  )}
+                  {(() => {
+                    const selectedItem = availableInventoryItems.find(item => 
+                      item.inventory_id?.toString() === selectedAllocation.inventory_id?.toString()
+                    );
+                    if (selectedItem) {
+                      const currentQty = selectedAllocation.quantity_used || 0;
+                      const effectiveAvailable = selectedItem.quantity_available + currentQty;
+                      return (
+                        <p className="text-xs text-muted-foreground">
+                          Available: {effectiveAvailable} (including current allocation)
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit_allocation_rental_cost">Rental Cost (per unit) *</Label>
+                  <Input
+                    id="edit_allocation_rental_cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={allocationFormData.rental_cost}
+                    onChange={(e) => setAllocationFormData({ ...allocationFormData, rental_cost: e.target.value })}
+                    disabled={allocationFormLoading}
+                  />
+                </div>
+                {allocationFormData.quantity_used && allocationFormData.rental_cost && (
+                  <div className="p-3 bg-muted rounded-lg">
+                    <p className="text-sm">
+                      <strong>Total Cost:</strong> ${(
+                        (parseInt(allocationFormData.quantity_used) || 0) * 
+                        (parseFloat(allocationFormData.rental_cost) || 0)
+                      ).toFixed(2)}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setEditAllocationOpen(false);
+                setSelectedAllocation(null);
+              }} disabled={allocationFormLoading}>
+                Cancel
+              </Button>
+              <Button onClick={handleSaveEditAllocation} disabled={allocationFormLoading}>
+                {allocationFormLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : (
+                  'Save Changes'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Inventory Allocation Dialog */}
+        <Dialog open={deleteAllocationOpen} onOpenChange={setDeleteAllocationOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Delete Inventory Allocation</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to remove this inventory allocation? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedAllocation && (
+              <div className="p-4 bg-muted rounded-lg">
+                <p className="font-medium">{selectedAllocation.item_name}</p>
+                <p className="text-sm text-muted-foreground">
+                  Quantity: {selectedAllocation.quantity_used} • 
+                  Total Cost: ${((selectedAllocation.quantity_used || 0) * (selectedAllocation.rental_cost || 0)).toFixed(2)}
+                </p>
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setDeleteAllocationOpen(false);
+                setSelectedAllocation(null);
+              }} disabled={allocationFormLoading}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleDeleteAllocation} disabled={allocationFormLoading}>
+                {allocationFormLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Deleting...
+                  </>
+                ) : (
+                  'Delete'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </DashboardLayout>
-    );
+  );
   } catch (renderError: any) {
     console.error('Error rendering WeddingDetail component:', renderError);
     return (

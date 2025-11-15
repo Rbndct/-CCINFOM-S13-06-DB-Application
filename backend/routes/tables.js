@@ -2,21 +2,22 @@ const express = require('express');
 const router = express.Router();
 const {promisePool} = require('../config/database');
 
-// Helper to get next guest table number for a wedding (format: t-001, t-002, etc.)
-async function getNextGuestTableNumber(weddingId) {
+// Helper to get next table number for a wedding (format: T-001, T-002, etc.)
+// All tables share the same numbering sequence regardless of category
+async function getNextTableNumber(weddingId) {
   const [rows] = await promisePool.query(
       `SELECT table_number
      FROM seating_table
-     WHERE wedding_id = ? AND table_category = 'guest'
+     WHERE wedding_id = ?
      ORDER BY table_id ASC`,
       [weddingId]);
   
-  // Extract numeric part from existing table numbers (t-001 -> 1, t-002 -> 2, etc.)
+  // Extract numeric part from existing table numbers (T-001 -> 1, C-001 -> 1, etc.)
   let maxNum = 0;
   for (const row of rows) {
     const tableNum = row.table_number || '';
-    // Handle both formats: "t-001" or just "1"
-    if (tableNum.startsWith('t-')) {
+    // Handle formats: "T-001", "C-001", "t-001", "c-001", or just numbers
+    if (tableNum.toLowerCase().startsWith('t-') || tableNum.toLowerCase().startsWith('c-')) {
       const numPart = parseInt(tableNum.substring(2), 10);
       if (!isNaN(numPart) && numPart > maxNum) {
         maxNum = numPart;
@@ -29,7 +30,7 @@ async function getNextGuestTableNumber(weddingId) {
     }
   }
   
-  // Return in format T-001, T-002, etc. (capital T)
+  // Return in format T-001, T-002, etc. (capital T, all tables use same sequence)
   const nextNum = maxNum + 1;
   return `T-${String(nextNum).padStart(3, '0')}`;
 }
@@ -49,8 +50,8 @@ router.post('/seating/:wedding_id/couple', async (req, res) => {
       });
     }
     
-    // Get next couple table number
-    const nextNum = await getNextCoupleTableNumber(weddingId);
+    // Get next table number (all tables share same sequence)
+    const nextNum = await getNextTableNumber(weddingId);
     
     const [ins] = await promisePool.query(
         `INSERT INTO seating_table (wedding_id, table_number, table_category, capacity) VALUES (?, ?, 'couple', ?)`,
@@ -92,7 +93,7 @@ router.post('/seating/:wedding_id/guest', async (req, res) => {
       });
     }
     
-    const nextNum = await getNextGuestTableNumber(weddingId);
+    const nextNum = await getNextTableNumber(weddingId);
     const [ins] = await promisePool.query(
         `INSERT INTO seating_table (wedding_id, table_number, table_category, capacity) VALUES (?, ?, ?, ?)`,
         [weddingId, nextNum, category, cap]);
@@ -190,35 +191,6 @@ router.get('/seating/:wedding_id', async (req, res) => {
   }
 });
 
-// Helper to get next couple table number for a wedding (format: C-001, C-002, etc.)
-async function getNextCoupleTableNumber(weddingId) {
-  const [rows] = await promisePool.query(
-      `SELECT table_number
-     FROM seating_table
-     WHERE wedding_id = ? AND table_category = 'couple'
-     ORDER BY table_id ASC`,
-      [weddingId]);
-  
-  // Extract numeric part from existing table numbers (C-001 -> 1, C-002 -> 2, etc.)
-  let maxNum = 0;
-  for (const row of rows) {
-    const tableNum = row.table_number || '';
-    // Handle both formats: "C-001" or just "C"
-    if (tableNum.startsWith('C-')) {
-      const numPart = parseInt(tableNum.substring(2), 10);
-      if (!isNaN(numPart) && numPart > maxNum) {
-        maxNum = numPart;
-      }
-    } else if (tableNum === 'C') {
-      // Legacy format, count as 0
-      if (maxNum === 0) maxNum = 0;
-    }
-  }
-  
-  // Return in format C-001, C-002, etc.
-  const nextNum = maxNum + 1;
-  return `C-${String(nextNum).padStart(3, '0')}`;
-}
 
 // Delete a table (ALLOW deleting ALL tables, including those with guests)
 router.delete('/seating/:table_id', async (req, res) => {

@@ -112,6 +112,7 @@ const CoupleDetail = () => {
   const [preferenceDialogOpen, setPreferenceDialogOpen] = useState(false);
   const [editingPreference, setEditingPreference] = useState<Preference | null>(null);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<any[]>([]);
+  const [noneRestrictionId, setNoneRestrictionId] = useState<number | null>(null);
   const [preferenceForm, setPreferenceForm] = useState({
     ceremony_type: '',
     restriction_ids: [] as number[]
@@ -216,7 +217,17 @@ const CoupleDetail = () => {
   const fetchDietaryRestrictions = async () => {
     try {
       const response = await dietaryRestrictionsAPI.getAll();
-      setDietaryRestrictions(response.data || []);
+      const allRestrictions = response.data || [];
+      
+      // Find and store the "None" restriction ID
+      const noneRestriction = allRestrictions.find((r: any) => r.restriction_name === 'None');
+      if (noneRestriction) {
+        setNoneRestrictionId(noneRestriction.restriction_id);
+      }
+      
+      // Filter out "None" from the displayed list
+      const displayableRestrictions = allRestrictions.filter((r: any) => r.restriction_name !== 'None');
+      setDietaryRestrictions(displayableRestrictions);
     } catch (error: any) {
       console.error('Error fetching dietary restrictions:', error);
     }
@@ -231,13 +242,19 @@ const CoupleDetail = () => {
   const handleEditPreference = (pref: Preference) => {
     setEditingPreference(pref);
     // Extract restriction IDs from dietaryRestrictions array or legacy restriction_id
-    const restrictionIds = pref.dietaryRestrictions && pref.dietaryRestrictions.length > 0
+    // Filter out "None" from the displayed selection
+    const allRestrictionIds = pref.dietaryRestrictions && pref.dietaryRestrictions.length > 0
       ? pref.dietaryRestrictions.map(r => r.restriction_id)
       : (pref.restriction_id ? [pref.restriction_id] : []);
     
+    // Filter out "None" restriction ID for display
+    const displayableIds = noneRestrictionId 
+      ? allRestrictionIds.filter(id => id !== noneRestrictionId)
+      : allRestrictionIds;
+    
     setPreferenceForm({
       ceremony_type: pref.ceremony_type,
-      restriction_ids: restrictionIds
+      restriction_ids: displayableIds
     });
     setPreferenceDialogOpen(true);
   };
@@ -252,13 +269,21 @@ const CoupleDetail = () => {
       return;
     }
 
-    if (preferenceForm.restriction_ids.length === 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select at least one dietary restriction',
-        variant: 'destructive',
-      });
-      return;
+    // Prepare restriction IDs: if none selected, use "None"; otherwise use selected ones
+    let finalRestrictionIds = [...preferenceForm.restriction_ids];
+    
+    // If no restrictions selected, automatically add "None"
+    if (finalRestrictionIds.length === 0) {
+      if (noneRestrictionId) {
+        finalRestrictionIds = [noneRestrictionId];
+      } else {
+        toast({
+          title: 'Validation Error',
+          description: 'Please select at least one dietary restriction',
+          variant: 'destructive',
+        });
+        return;
+      }
     }
 
     setPreferenceLoading(true);
@@ -267,22 +292,24 @@ const CoupleDetail = () => {
         // Update existing preference with array of restriction IDs
         await couplesAPI.updatePreference(editingPreference.preference_id, {
           ceremony_type: preferenceForm.ceremony_type,
-          restriction_ids: preferenceForm.restriction_ids
+          restriction_ids: finalRestrictionIds
         });
+        const displayCount = preferenceForm.restriction_ids.length || 1;
         toast({ 
           title: 'Preference updated successfully',
-          description: `Updated with ${preferenceForm.restriction_ids.length} dietary restriction(s)`
+          description: `Updated with ${displayCount} dietary restriction(s)`
         });
       } else {
         // Create a single preference with array of restriction IDs
         await couplesAPI.createPreference({
           couple_id: parseInt(id!),
           ceremony_type: preferenceForm.ceremony_type,
-          restriction_ids: preferenceForm.restriction_ids
+          restriction_ids: finalRestrictionIds
         });
+        const displayCount = preferenceForm.restriction_ids.length || 1;
         toast({ 
           title: 'Preference created successfully',
-          description: `Created with ${preferenceForm.restriction_ids.length} dietary restriction(s)`
+          description: `Created with ${displayCount} dietary restriction(s)`
         });
       }
       setPreferenceDialogOpen(false);
@@ -775,7 +802,7 @@ const CoupleDetail = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Dietary Restrictions *</Label>
+                <Label>Dietary Restrictions (Optional - "None" will be used if none selected)</Label>
                 <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
                   {dietaryRestrictions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No dietary restrictions available</p>
