@@ -1,9 +1,20 @@
-import { Settings as SettingsIcon, User, Bell, Shield, Database } from 'lucide-react';
+import { useState } from 'react';
+import { Settings as SettingsIcon, User, Bell, Shield, Database, DollarSign } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { ProfileSettings } from '@/components/settings/ProfileSettings';
+import { NotificationSettings } from '@/components/settings/NotificationSettings';
+import { SecuritySettings } from '@/components/settings/SecuritySettings';
+import { DatabaseSettings } from '@/components/settings/DatabaseSettings';
+import { CurrencySettings } from '@/components/settings/CurrencySettings';
 
 const Settings = () => {
+  const [profileOpen, setProfileOpen] = useState(false);
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [securityOpen, setSecurityOpen] = useState(false);
+  const [databaseOpen, setDatabaseOpen] = useState(false);
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
@@ -28,7 +39,9 @@ const Settings = () => {
               <CardDescription>Update your personal information</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline">Edit Profile</Button>
+              <Button variant="outline" onClick={() => setProfileOpen(true)}>
+                Edit Profile
+              </Button>
             </CardContent>
           </Card>
 
@@ -43,7 +56,9 @@ const Settings = () => {
               <CardDescription>Configure notification preferences</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline">Manage Notifications</Button>
+              <Button variant="outline" onClick={() => setNotificationOpen(true)}>
+                Manage Notifications
+              </Button>
             </CardContent>
           </Card>
 
@@ -58,7 +73,9 @@ const Settings = () => {
               <CardDescription>Password and security settings</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline">Security Settings</Button>
+              <Button variant="outline" onClick={() => setSecurityOpen(true)}>
+                Security Settings
+              </Button>
             </CardContent>
           </Card>
 
@@ -73,10 +90,21 @@ const Settings = () => {
               <CardDescription>Database configuration and backups</CardDescription>
             </CardHeader>
             <CardContent>
-              <Button variant="outline">Database Settings</Button>
+              <Button variant="outline" onClick={() => setDatabaseOpen(true)}>
+                Database Settings
+              </Button>
             </CardContent>
           </Card>
         </div>
+
+        {/* Currency Settings - Full Card */}
+        <CurrencySettings />
+
+        {/* Dialogs */}
+        <ProfileSettings open={profileOpen} onOpenChange={setProfileOpen} />
+        <NotificationSettings open={notificationOpen} onOpenChange={setNotificationOpen} />
+        <SecuritySettings open={securityOpen} onOpenChange={setSecurityOpen} />
+        <DatabaseSettings open={databaseOpen} onOpenChange={setDatabaseOpen} />
       </div>
     </DashboardLayout>
   );

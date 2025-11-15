@@ -258,4 +258,19 @@ export const packagesAPI = {
       api.get(`/packages/wedding/${weddingId}/assignments`),
 };
 
+export const databaseAPI = {
+  getStatus: () => api.get('/database/status'),
+  exportDatabase: () =>
+      api.post('/database/export', {}, {responseType: 'blob'}),
+  importDatabase: (file) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/database/import', formData, {
+      headers: {'Content-Type': 'multipart/form-data'},
+    });
+  },
+  createBackup: () => api.post('/database/backup'),
+  testConnection: () => api.get('/database/test'),
+};
+
 export default api;
