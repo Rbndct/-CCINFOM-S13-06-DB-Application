@@ -59,11 +59,15 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { weddingsAPI, couplesAPI, guestsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, formatRestrictionsList, getRestrictionCountText } from '@/utils/restrictionUtils';
+import { useDateFormat } from '@/context/DateFormatContext';
+import { useTimeFormat } from '@/context/TimeFormatContext';
 
 const Weddings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { formatCurrency } = useCurrencyFormat();
+  const { formatDate } = useDateFormat();
+  const { formatTime } = useTimeFormat();
   const [weddings, setWeddings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -83,6 +87,8 @@ const Weddings = () => {
   // Refs for date/time inputs
   const dateInputRef = useRef<HTMLInputElement>(null);
   const timeInputRef = useRef<HTMLInputElement>(null);
+  const dateFromInputRef = useRef<HTMLInputElement>(null);
+  const dateToInputRef = useRef<HTMLInputElement>(null);
   
   // Form state
   const [selectedCoupleId, setSelectedCoupleId] = useState('');
@@ -478,24 +484,34 @@ const Weddings = () => {
                   <label className="text-sm text-muted-foreground">From</label>
                   <div className="relative">
                     <Input 
+                      ref={dateFromInputRef}
                       type="date" 
                       value={dateFrom} 
                       onChange={(e) => setDateFrom(e.target.value)}
                       placeholder="mm/dd/yyyy"
+                      className="pr-10"
                     />
-                    <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Calendar 
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary transition-colors" 
+                      onClick={() => dateFromInputRef.current?.showPicker?.() || dateFromInputRef.current?.click()}
+                    />
                   </div>
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">To</label>
                   <div className="relative">
                     <Input 
+                      ref={dateToInputRef}
                       type="date" 
                       value={dateTo} 
                       onChange={(e) => setDateTo(e.target.value)}
                       placeholder="mm/dd/yyyy"
+                      className="pr-10"
                     />
-                    <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                    <Calendar 
+                      className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground cursor-pointer hover:text-primary transition-colors" 
+                      onClick={() => dateToInputRef.current?.showPicker?.() || dateToInputRef.current?.click()}
+                    />
                   </div>
                 </div>
                 <div>
@@ -514,8 +530,8 @@ const Weddings = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="any">Any</SelectItem>
-                      <SelectItem value="Y">Yes</SelectItem>
-                      <SelectItem value="N">No</SelectItem>
+                      <SelectItem value="Y">Yes (weddings with dietary restrictions)</SelectItem>
+                      <SelectItem value="N">No (weddings without dietary restrictions)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -575,8 +591,8 @@ const Weddings = () => {
                               try {
                                 const date = wedding.weddingDate || wedding.wedding_date;
                                 if (!date) return 'N/A';
-                                const d = new Date(date);
-                                return isNaN(d.getTime()) ? (typeof date === 'string' ? date.split('T')[0] : 'N/A') : d.toLocaleDateString();
+                                const d = typeof date === 'string' ? new Date(date) : date;
+                                return isNaN(d.getTime()) ? 'N/A' : formatDate(d);
                               } catch {
                                 return 'N/A';
                               }
@@ -586,7 +602,22 @@ const Weddings = () => {
                         <div className="flex items-center gap-2">
                           <Clock className="h-4 w-4 text-muted-foreground" />
                           <div className="text-sm text-muted-foreground">
-                            {wedding.weddingTime || wedding.wedding_time || 'N/A'}
+                            {(() => {
+                              const time = wedding.weddingTime || wedding.wedding_time;
+                              if (!time) return 'N/A';
+                              try {
+                                // If time is in HH:MM format, create a date object for formatting
+                                if (typeof time === 'string' && time.match(/^\d{2}:\d{2}/)) {
+                                  const [hours, minutes] = time.split(':');
+                                  const date = new Date();
+                                  date.setHours(parseInt(hours), parseInt(minutes));
+                                  return formatTime(date);
+                                }
+                                return time;
+                              } catch {
+                                return time;
+                              }
+                            })()}
                           </div>
                         </div>
                       </div>
