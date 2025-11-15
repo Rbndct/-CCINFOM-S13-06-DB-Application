@@ -371,7 +371,9 @@ const WeddingDetail = () => {
         try {
           const restrictionsResponse = await dietaryRestrictionsAPI.getAll();
           if (restrictionsResponse && restrictionsResponse.data) {
-            setDietaryRestrictions(restrictionsResponse.data);
+            // Filter out "None" from the display (it's a system restriction)
+            const displayableRestrictions = restrictionsResponse.data.filter((r: any) => r.restriction_name !== 'None');
+            setDietaryRestrictions(displayableRestrictions);
           }
         } catch (e) {
           console.error('Error fetching dietary restrictions:', e);

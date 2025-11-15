@@ -189,7 +189,10 @@ const Guests = () => {
   const fetchDietaryRestrictions = async () => {
     try {
       const response = await dietaryRestrictionsAPI.getAll();
-      setDietaryRestrictions(response.data || []);
+      const allRestrictions = response.data || [];
+      // Filter out "None" from the display (it's a system restriction)
+      const displayableRestrictions = allRestrictions.filter((r: any) => r.restriction_name !== 'None');
+      setDietaryRestrictions(displayableRestrictions);
     } catch (err: any) {
       console.error('Error fetching dietary restrictions:', err);
     }
