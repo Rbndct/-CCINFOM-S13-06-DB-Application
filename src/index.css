@@ -8,73 +8,73 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    --background: 30 20% 98%;
-    --foreground: 280 30% 15%;
+    /* Modern Pinkish Light & White Theme */
+    --background: 0 0% 100%;
+    --foreground: 330 20% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 280 30% 15%;
+    --card-foreground: 330 20% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 280 30% 15%;
+    --popover-foreground: 330 20% 15%;
 
-    --primary: 340 65% 55%;
+    /* Primary - Modern Rose Pink */
+    --primary: 340 75% 65%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 30 30% 92%;
-    --secondary-foreground: 280 30% 15%;
+    /* Secondary - Soft Lavender Pink */
+    --secondary: 320 50% 92%;
+    --secondary-foreground: 330 30% 25%;
 
-    --muted: 30 20% 95%;
-    --muted-foreground: 280 15% 45%;
+    /* Tertiary (Accent) - Light Peach Pink */
+    --accent: 15 60% 88%;
+    --accent-foreground: 330 30% 25%;
 
-    --accent: 45 90% 60%;
-    --accent-foreground: 280 30% 15%;
+    --muted: 330 20% 97%;
+    --muted-foreground: 330 15% 45%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 30 20% 88%;
-    --input: 30 20% 88%;
-    --ring: 340 65% 55%;
+    --border: 330 20% 90%;
+    --input: 330 20% 90%;
+    --ring: 340 75% 65%;
 
     --radius: 0.75rem;
-
-    --gradient-primary: linear-gradient(135deg, hsl(340 65% 55%), hsl(320 70% 65%));
-    --gradient-elegant: linear-gradient(180deg, hsl(30 20% 98%), hsl(340 10% 96%));
-    --shadow-elegant: 0 10px 40px -10px hsl(340 65% 55% / 0.2);
   }
 
   .dark {
-    --background: 280 30% 8%;
-    --foreground: 30 20% 95%;
+    /* Dark mode - Modern Pinkish Theme */
+    --background: 330 25% 8%;
+    --foreground: 330 20% 95%;
 
-    --card: 280 25% 12%;
-    --card-foreground: 30 20% 95%;
+    --card: 330 20% 12%;
+    --card-foreground: 330 20% 95%;
 
-    --popover: 280 25% 12%;
-    --popover-foreground: 30 20% 95%;
+    --popover: 330 20% 12%;
+    --popover-foreground: 330 20% 95%;
 
-    --primary: 340 65% 55%;
-    --primary-foreground: 0 0% 100%;
+    /* Primary - Brighter Pink for Dark Mode */
+    --primary: 340 75% 70%;
+    --primary-foreground: 330 25% 8%;
 
-    --secondary: 280 20% 18%;
-    --secondary-foreground: 30 20% 95%;
+    /* Secondary - Darker Lavender */
+    --secondary: 320 30% 20%;
+    --secondary-foreground: 330 20% 95%;
 
-    --muted: 280 20% 18%;
-    --muted-foreground: 30 15% 65%;
+    /* Tertiary (Accent) - Dark Peach */
+    --accent: 15 40% 25%;
+    --accent-foreground: 330 20% 95%;
 
-    --accent: 45 90% 60%;
-    --accent-foreground: 280 30% 8%;
+    --muted: 330 20% 18%;
+    --muted-foreground: 330 15% 65%;
 
     --destructive: 0 62.8% 50%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 280 20% 18%;
-    --input: 280 20% 18%;
-    --ring: 340 65% 55%;
-
-    --gradient-primary: linear-gradient(135deg, hsl(340 65% 55%), hsl(320 70% 65%));
-    --gradient-elegant: linear-gradient(180deg, hsl(280 30% 8%), hsl(280 25% 12%));
-    --shadow-elegant: 0 10px 40px -10px hsl(340 65% 55% / 0.3);
+    --border: 330 20% 20%;
+    --input: 330 20% 20%;
+    --ring: 340 75% 70%;
   }
 }
 
@@ -120,5 +120,16 @@ All colors MUST be HSL.
   * {
     scrollbar-width: thin;
     scrollbar-color: hsl(var(--muted-foreground) / 0.3) hsl(var(--muted));
+  }
+
+  /* Typography */
+  .font-display {
+    font-family: 'Playfair Display', 'Georgia', serif;
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
   }
 }
