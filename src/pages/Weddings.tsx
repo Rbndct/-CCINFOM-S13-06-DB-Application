@@ -78,7 +78,7 @@ const Weddings = () => {
   const [loading, setLoading] = useState(false);
   const [totalGuests, setTotalGuests] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 5;
   
   // Refs for date/time inputs
   const dateInputRef = useRef<HTMLInputElement>(null);
