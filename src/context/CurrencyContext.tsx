@@ -2,31 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState, useCallback } 
 
 export type SupportedCurrency = 'PHP' | 'USD' | 'EUR' | 'JPY' | 'GBP' | 'AUD' | 'CAD' | 'CHF' | 'CNY' | 'HKD' | 'SGD' | 'KRW' | 'INR' | 'NZD';
 
-export type Rates = Record<string, number>;
-
-export interface CurrencyInfo {
-  code: SupportedCurrency;
-  name: string;
-  symbol: string;
-  locale: string;
-}
-
-export const CURRENCY_INFO: Record<SupportedCurrency, CurrencyInfo> = {
-  PHP: { code: 'PHP', name: 'Philippine Peso', symbol: '₱', locale: 'en-PH' },
-  USD: { code: 'USD', name: 'US Dollar', symbol: '$', locale: 'en-US' },
-  EUR: { code: 'EUR', name: 'Euro', symbol: '€', locale: 'de-DE' },
-  JPY: { code: 'JPY', name: 'Japanese Yen', symbol: '¥', locale: 'ja-JP' },
-  GBP: { code: 'GBP', name: 'British Pound', symbol: '£', locale: 'en-GB' },
-  AUD: { code: 'AUD', name: 'Australian Dollar', symbol: 'A$', locale: 'en-AU' },
-  CAD: { code: 'CAD', name: 'Canadian Dollar', symbol: 'C$', locale: 'en-CA' },
-  CHF: { code: 'CHF', name: 'Swiss Franc', symbol: 'CHF', locale: 'de-CH' },
-  CNY: { code: 'CNY', name: 'Chinese Yuan', symbol: '¥', locale: 'zh-CN' },
-  HKD: { code: 'HKD', name: 'Hong Kong Dollar', symbol: 'HK$', locale: 'en-HK' },
-  SGD: { code: 'SGD', name: 'Singapore Dollar', symbol: 'S$', locale: 'en-SG' },
-  KRW: { code: 'KRW', name: 'South Korean Won', symbol: '₩', locale: 'ko-KR' },
-  INR: { code: 'INR', name: 'Indian Rupee', symbol: '₹', locale: 'en-IN' },
-  NZD: { code: 'NZD', name: 'New Zealand Dollar', symbol: 'NZ$', locale: 'en-NZ' },
-};
+export type Rates = Record<SupportedCurrency, number>;
 
 type CurrencyContextValue = {
   currency: SupportedCurrency;
@@ -34,198 +10,185 @@ type CurrencyContextValue = {
   rates: Rates;
   format: (value: number) => string;
   convert: (value: number, from: SupportedCurrency, to: SupportedCurrency) => number;
+  convertFromPHP: (phpAmount: number) => number; // Convert PHP (database base) to selected currency
+  convertToPHP: (amount: number, fromCurrency: SupportedCurrency) => number; // Convert from selected currency to PHP
   loading: boolean;
   error: string | null;
-  lastUpdated: number | null;
-  refreshRates: () => Promise<void>;
-  getCurrencyInfo: (code: SupportedCurrency) => CurrencyInfo;
 };
 
 const CurrencyContext = createContext<CurrencyContextValue | undefined>(undefined);
 
 const RATES_CACHE_KEY = 'currency_rates_v2';
 const CURRENCY_KEY = 'selected_currency_v2';
-const CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 hours
 
+// Always fetch rates with PHP as base currency (database standard)
 async function fetchRates(base: SupportedCurrency, symbols: SupportedCurrency[]): Promise<Rates> {
   try {
     // Try exchangerate-api.com first (more reliable)
     let url = `https://api.exchangerate-api.com/v4/latest/${base}`;
     let res = await fetch(url);
-    
+
     if (!res.ok) {
       // Fallback to exchangerate.host
       url = `https://api.exchangerate.host/latest?base=${base}&symbols=${symbols.join(',')}`;
       res = await fetch(url);
-      
+
       if (!res.ok) {
         throw new Error(`HTTP error! status: ${res.status}`);
       }
     }
-    
+
     const data = await res.json();
-    
+
     // exchangerate-api.com returns { rates: {...} }
     if (data.rates) {
-      // Filter to only requested symbols
-      const filteredRates: Rates = {};
+      const filteredRates: Partial<Rates> = {};
       symbols.forEach(symbol => {
         if (data.rates[symbol] !== undefined) {
           filteredRates[symbol] = data.rates[symbol];
         }
       });
-      return filteredRates;
+      return filteredRates as Rates;
     }
-    
+
     // exchangerate.host returns { success: true, rates: {...} }
     if (data.success !== false && data.rates) {
-      return data.rates;
+      return data.rates as Rates;
     }
-    
-    // If neither format matches, try to extract rates anyway
-    if (data.rates) {
-      return data.rates;
-    }
-    
+
     throw new Error('Unexpected API response format');
   } catch (error) {
     console.error('Error fetching exchange rates:', error);
-    // Return empty rates object instead of throwing - will use fallback
-    return {};
+    // Return fallback rates (1:1 for PHP, approximate for others)
+    const fallbackRates: Partial<Rates> = { PHP: 1 };
+    symbols.forEach(symbol => {
+      if (symbol !== base) {
+        fallbackRates[symbol] = 1; // Fallback to 1:1 if API fails
+      }
+    });
+    return fallbackRates as Rates;
   }
 }
 
 export function CurrencyProvider({ children }: { children: React.ReactNode }) {
   const [currency, setCurrencyState] = useState<SupportedCurrency>(() => {
     const stored = localStorage.getItem(CURRENCY_KEY) as SupportedCurrency;
-    return stored && CURRENCY_INFO[stored] ? stored : 'PHP';
+    return stored || 'PHP';
   });
-  const [rates, setRates] = useState<Rates>({});
-  const [loading, setLoading] = useState(false);
+  const [rates, setRates] = useState<Rates>({} as Rates);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<number | null>(null);
 
-  const loadRates = useCallback(async (forceRefresh = false) => {
-    const cached = localStorage.getItem(RATES_CACHE_KEY);
-    const now = Date.now();
-    const symbols: SupportedCurrency[] = Object.keys(CURRENCY_INFO) as SupportedCurrency[];
+  const setCurrency = useCallback((c: SupportedCurrency) => {
+    setCurrencyState(c);
+    localStorage.setItem(CURRENCY_KEY, c);
+  }, []);
 
-    // Always fetch with PHP as base since that's what's stored in database
-    const BASE_CURRENCY: SupportedCurrency = 'PHP';
-
-    // Check cache first (unless forcing refresh)
-    if (!forceRefresh && cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        // Cache is valid if it's for PHP base and not expired
-        if (now - parsed.timestamp < CACHE_DURATION && parsed.base === BASE_CURRENCY && parsed.rates) {
-          setRates(parsed.rates);
-          setLastUpdated(parsed.timestamp);
-          setError(null);
-          return;
-        }
-      } catch (e) {
-        console.warn('Error parsing cached rates:', e);
-      }
-    }
-
-    // Fetch new rates with PHP as base
-    setLoading(true);
-    setError(null);
-    try {
-      // Fetch all currencies relative to PHP (database base currency)
-      const fetchedRates = await fetchRates(BASE_CURRENCY, symbols.filter(s => s !== BASE_CURRENCY));
-      
-      // Check if we got valid rates
-      if (Object.keys(fetchedRates).length === 0) {
-        throw new Error('No rates received from API');
-      }
-      
-      // Add PHP rate (1 PHP = 1 PHP)
-      const fullRates: Rates = { [BASE_CURRENCY]: 1, ...fetchedRates };
-      setRates(fullRates);
-      setLastUpdated(now);
+  // Always fetch rates with PHP as base (database standard)
+  useEffect(() => {
+    const loadRates = async () => {
+      setLoading(true);
       setError(null);
-      localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ 
-        base: BASE_CURRENCY, 
-        rates: fullRates, 
-        timestamp: now 
-      }));
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch exchange rates';
-      setError(errorMessage);
-      console.warn('Using cached or fallback rates due to API error:', errorMessage);
-      
-      // Try to use cached rates even if expired
+
+      const cached = localStorage.getItem(RATES_CACHE_KEY);
+      const now = Date.now();
+      const BASE_CURRENCY: SupportedCurrency = 'PHP'; // Always PHP as base
+      const symbols: SupportedCurrency[] = ['PHP', 'USD', 'EUR', 'JPY', 'GBP', 'AUD', 'CAD', 'CHF', 'CNY', 'HKD', 'SGD', 'KRW', 'INR', 'NZD'];
+
+      // Check cache (24 hour expiry)
       if (cached) {
         try {
           const parsed = JSON.parse(cached);
-          if (parsed.rates && Object.keys(parsed.rates).length > 0) {
+          if (now - parsed.timestamp < 24 * 60 * 60 * 1000 && parsed.base === BASE_CURRENCY) {
             setRates(parsed.rates);
-            setLastUpdated(parsed.timestamp);
-            // Don't set error if we have cached rates
+            setLoading(false);
             return;
           }
         } catch (e) {
-          console.warn('Error parsing cached rates:', e);
+          console.warn('Failed to parse cached rates:', e);
         }
       }
-      
-      // If no cache or cache is invalid, use fallback rates (1:1 for all)
-      const fallbackRates: Rates = {};
-      symbols.forEach(symbol => {
-        fallbackRates[symbol] = 1;
-      });
-      setRates(fallbackRates);
-    } finally {
-      setLoading(false);
-    }
-  }, []); // Remove currency dependency since we always fetch PHP rates
 
-  useEffect(() => {
+      // Fetch fresh rates
+      try {
+        const fetchedRates = await fetchRates(BASE_CURRENCY, symbols.filter(s => s !== BASE_CURRENCY));
+        const fullRates: Rates = { PHP: 1, ...fetchedRates } as Rates;
+        setRates(fullRates);
+        localStorage.setItem(RATES_CACHE_KEY, JSON.stringify({ 
+          base: BASE_CURRENCY, 
+          rates: fullRates, 
+          timestamp: now 
+        }));
+      } catch (err: any) {
+        console.error('Error loading exchange rates:', err);
+        setError(err.message || 'Failed to load exchange rates');
+        // Use cached rates even if expired, or fallback
+        if (cached) {
+          try {
+            const parsed = JSON.parse(cached);
+            setRates(parsed.rates);
+          } catch {}
+        } else {
+          // Fallback to 1:1 rates
+          const fallback: Rates = {} as Rates;
+          symbols.forEach(s => {
+            fallback[s] = 1;
+          });
+          setRates(fallback);
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
     loadRates();
-  }, [loadRates]);
+  }, []); // Only run once on mount, not when currency changes
 
-  const setCurrency = (c: SupportedCurrency) => {
-    if (CURRENCY_INFO[c]) {
-      setCurrencyState(c);
-      localStorage.setItem(CURRENCY_KEY, c);
-    }
-  };
-
-  const refreshRates = useCallback(async () => {
-    await loadRates(true);
-  }, [loadRates]);
-
+  // Convert between currencies
   const convert = useCallback((value: number, from: SupportedCurrency, to: SupportedCurrency): number => {
     if (from === to) return value;
     if (!rates[from] || !rates[to]) return value;
     
-    // Convert to base currency first, then to target
-    const baseValue = value / rates[from];
-    return baseValue * rates[to];
+    // Convert from -> PHP -> to
+    // rates are with PHP as base, so rates[from] = how many PHP per 1 unit of 'from'
+    // To convert: value / rates[from] (to PHP) * rates[to] (to target)
+    const inPHP = value / rates[from];
+    return inPHP * rates[to];
+  }, [rates]);
+
+  // Convert PHP (database base) to selected display currency
+  const convertFromPHP = useCallback((phpAmount: number): number => {
+    if (currency === 'PHP') return phpAmount;
+    if (!rates[currency] || rates[currency] === 1) return phpAmount;
+    // rates[currency] = how many of selected currency per 1 PHP
+    return phpAmount * rates[currency];
+  }, [currency, rates]);
+
+  // Convert from selected currency to PHP (for input conversion if needed)
+  const convertToPHP = useCallback((amount: number, fromCurrency: SupportedCurrency): number => {
+    if (fromCurrency === 'PHP') return amount;
+    if (!rates[fromCurrency] || rates[fromCurrency] === 1) return amount;
+    // rates[fromCurrency] = how many of fromCurrency per 1 PHP
+    // So to convert to PHP: amount / rates[fromCurrency]
+    return amount / rates[fromCurrency];
   }, [rates]);
 
   const format = useMemo(() => {
     return (value: number) => {
-      const info = CURRENCY_INFO[currency];
-      try {
-        return new Intl.NumberFormat(info.locale, { 
-          style: 'currency', 
-          currency, 
-          minimumFractionDigits: 2, 
-          maximumFractionDigits: 2 
-        }).format(value);
-      } catch (e) {
-        // Fallback formatting
-        return `${info.symbol}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-      }
+      const locales: Record<SupportedCurrency, string> = {
+        PHP: 'en-PH', USD: 'en-US', EUR: 'de-DE', JPY: 'ja-JP', GBP: 'en-GB',
+        AUD: 'en-AU', CAD: 'en-CA', CHF: 'de-CH', CNY: 'zh-CN', HKD: 'en-HK',
+        SGD: 'en-SG', KRW: 'ko-KR', INR: 'en-IN', NZD: 'en-NZ'
+      };
+      const locale = locales[currency] || 'en-US';
+      return new Intl.NumberFormat(locale, { 
+        style: 'currency', 
+        currency, 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+      }).format(value);
     };
   }, [currency]);
-
-  const getCurrencyInfo = useCallback((code: SupportedCurrency): CurrencyInfo => {
-    return CURRENCY_INFO[code] || CURRENCY_INFO.PHP;
-  }, []);
 
   const value: CurrencyContextValue = { 
     currency, 
@@ -233,11 +196,10 @@ export function CurrencyProvider({ children }: { children: React.ReactNode }) {
     rates, 
     format, 
     convert,
+    convertFromPHP,
+    convertToPHP,
     loading,
-    error,
-    lastUpdated,
-    refreshRates,
-    getCurrencyInfo
+    error
   };
   
   return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>;
