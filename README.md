@@ -1,73 +1,231 @@
-# Welcome to your Lovable project
+# Wedding Management System
 
-## Project info
+A comprehensive wedding management application built with React, Express, and MySQL.
 
-**URL**: https://lovable.dev/projects/8ba0264a-8d09-46e4-beb8-5521ed0d0263
+## Project Overview
 
-## How can I edit this code?
+This project consists of:
+- **Frontend**: React + TypeScript + Vite (runs on port 8081)
+- **Backend**: Express.js + MySQL (runs on port 3001)
 
-There are several ways of editing your application.
+## Prerequisites
 
-**Use Lovable**
+- Node.js (v18 or higher) and npm
+- MySQL Database
+- Git
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/8ba0264a-8d09-46e4-beb8-5521ed0d0263) and start prompting.
+## Quick Start
 
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+### 1. Clone the Repository
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
 git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
 cd <YOUR_PROJECT_NAME>
+```
 
-# Step 3: Install the necessary dependencies.
-npm i
+### 2. Database Setup
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+1. Make sure MySQL is running
+2. Update database credentials in `backend/.env` (see `ENV_SETUP.md` for details)
+3. Run the database setup script:
+
+```sh
+cd backend
+mysql -u root -p < setup_database.sql
+```
+
+Or import it using your MySQL client:
+```sh
+mysql -u root -p wedding_management_db < backend/setup_database.sql
+```
+
+### 3. Install Dependencies and Start Development Servers
+
+**Option A: Start Both Backend and Frontend Together (Recommended)**
+
+This will install dependencies for both backend and frontend, then start both servers simultaneously:
+
+```sh
+npm run dev:all
+```
+
+This command will:
+- Install backend dependencies (`cd backend && npm i`)
+- Install frontend dependencies (`npm i`)
+- Start the backend server (auto-detects free port if 3001 is in use)
+- Start the frontend server (auto-detects free port if 8080 is in use)
+- Display colored output for both servers (BACKEND in blue, FRONTEND in green)
+- Frontend automatically detects backend port (handles auto-assigned ports)
+
+**Option B: Start Backend and Frontend Separately**
+
+If you prefer to run them separately, use these commands in different terminals:
+
+```sh
+# Terminal 1 - Backend
+npm run dev:backend
+
+# Terminal 2 - Frontend
+npm run dev:frontend
+```
+
+**Option C: Start Only Frontend (if backend is already running)**
+
+```sh
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+**Option D: Start Only Backend (if frontend is already running)**
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```sh
+cd backend
+npm run dev
+```
 
-**Use GitHub Codespaces**
+### 4. Access the Application
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- **Frontend**: http://localhost:8081 (or auto-assigned port if 8081 is in use - check terminal output)
+- **Backend API**: http://localhost:3001 (or auto-assigned port if 3001 is in use - check terminal output)
+- **Health Check**: http://localhost:3001/health (or use the auto-assigned port)
+- **Port Info**: http://localhost:3001/port (returns current backend port)
 
-## What technologies are used for this project?
+**Note:** If ports are auto-assigned, check the terminal output for the actual ports. The frontend will automatically detect and connect to the backend port.
 
-This project is built with:
+## Available Scripts
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### Root Directory Scripts
 
-## How can I deploy this project?
+- `npm run dev` - Start frontend development server only
+- `npm run dev:backend` - Install backend dependencies and start backend server
+- `npm run dev:frontend` - Install frontend dependencies and start frontend server
+- `npm run dev:all` - **Start both backend and frontend together** (installs dependencies automatically)
+- `npm run build` - Build frontend for production
+- `npm run lint` - Run ESLint
 
-Simply open [Lovable](https://lovable.dev/projects/8ba0264a-8d09-46e4-beb8-5521ed0d0263) and click on Share -> Publish.
+### Backend Scripts (in `backend/` directory)
 
-## Can I connect a custom domain to my Lovable project?
+- `npm run dev` - Start backend server with nodemon (auto-reload)
+- `npm start` - Start backend server (production mode)
 
-Yes, you can!
+## Project Structure
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+```
+.
+├── backend/           # Express.js backend
+│   ├── routes/        # API routes
+│   ├── migrations/    # Database migrations
+│   ├── server.js      # Backend server entry point
+│   └── setup_database.sql  # Database schema
+├── src/               # React frontend
+│   ├── pages/         # Page components
+│   ├── components/    # Reusable components
+│   └── api.js         # API client configuration
+└── package.json       # Root package.json with dev scripts
+```
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## Environment Setup
+
+See `ENV_SETUP.md` for detailed environment variable configuration.
+
+## Development Workflow
+
+1. **Start Development**: Run `npm run dev:all` from the root directory
+2. **Backend runs on**: http://localhost:3001 (or auto-assigned port if 3001 is in use)
+3. **Frontend runs on**: http://localhost:8081 (or auto-assigned port if 8081 is in use)
+4. Both servers support hot-reloading for automatic updates
+5. Frontend automatically detects backend port (even if auto-assigned)
+6. Use `Ctrl+C` to stop both servers
+
+### Auto Port Detection
+
+**Backend:**
+- If `PORT` is not set in `backend/.env`, backend uses port `0` (auto-assigns a free port)
+- If the specified port is in use, backend automatically finds a free port
+- Backend saves the actual port to `backend/port.txt` and returns it in `/port` and `/test` endpoints
+
+**Frontend:**
+- If port 8081 is in use, Vite automatically uses the next available port
+- Frontend detects backend port by trying common ports (3001, 3000, 3002, etc.)
+- Frontend stores the detected port in localStorage for faster future connections
+
+## Troubleshooting
+
+### Port Already in Use
+
+If you get a port already in use error:
+- Backend: Change port in `backend/server.js` or set `PORT` in `backend/.env`
+- Frontend: Change port in `vite.config.ts` or use `npm run dev -- --port <port>`
+
+### Database Connection Issues
+
+1. Verify MySQL is running
+2. Check database credentials in `backend/.env`
+3. Ensure database exists: `mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS wedding_management_db;"`
+
+### Dependencies Issues
+
+If you encounter dependency issues:
+- Delete `node_modules` and `package-lock.json`
+- Run `npm install` again
+- For backend: `cd backend && rm -rf node_modules package-lock.json && npm install`
+
+### Concurrently Not Found
+
+If you get an error about concurrently not being found, it should already be installed. If not:
+
+```sh
+# Install concurrently
+npm install concurrently --save-dev
+
+# Verify installation
+ls node_modules/.bin/concurrently
+```
+
+**Note:** The script uses `concurrently` from `node_modules/.bin/`. npm scripts automatically use the local version if it's installed. If it's not found, make sure you've run `npm install` in the root directory.
+
+## Technologies Used
+
+### Frontend
+- **React** - UI framework
+- **TypeScript** - Type safety
+- **Vite** - Build tool and dev server
+- **shadcn-ui** - UI component library
+- **Tailwind CSS** - Styling
+- **React Router** - Routing
+- **Axios** - HTTP client
+- **TanStack Query** - Data fetching
+
+### Backend
+- **Express.js** - Web framework
+- **MySQL2** - Database driver
+- **Node.js** - Runtime environment
+- **Nodemon** - Development auto-reload
+- **CORS** - Cross-origin resource sharing
+
+## Features
+
+- Couple Management
+- Wedding Planning
+- Guest Management with RSVP tracking
+- Dietary Restrictions Management
+- Table Seating Arrangements
+- Menu Items and Packages
+- Inventory Management
+- Reports and Analytics
+
+## Additional Documentation
+
+- `ENV_SETUP.md` - Environment variable configuration
+- `PROJECT_SETUP.md` - Detailed project setup instructions
+- `backend/README.md` - Backend-specific documentation
+
+## Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Submit a pull request
+
+## License
+
+MIT

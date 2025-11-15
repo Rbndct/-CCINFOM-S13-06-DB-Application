@@ -54,7 +54,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/DashboardLayout';
-import { weddingsAPI, couplesAPI } from '@/api';
+import { weddingsAPI, couplesAPI, guestsAPI } from '@/api';
 import { usePrice } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, formatRestrictionsList, getRestrictionCountText } from '@/utils/restrictionUtils';
 
@@ -74,6 +74,7 @@ const Weddings = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [couples, setCouples] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [totalGuests, setTotalGuests] = useState(0);
   
   // Refs for date/time inputs
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -150,7 +151,28 @@ const Weddings = () => {
         planner_contact: plannerFilter || undefined,
         has_restrictions: hasRestrictions,
       });
-      setWeddings(response.data || []);
+      const weddingsData = response.data || [];
+      setWeddings(weddingsData);
+      
+      // Calculate total guests by fetching actual guest counts
+      let total = 0;
+      try {
+        const guestCountPromises = weddingsData.map(async (wedding: any) => {
+          try {
+            const guestsResponse = await guestsAPI.getAll({ wedding_id: wedding.wedding_id || wedding.id });
+            return (guestsResponse.data || []).length;
+          } catch (e) {
+            return 0;
+          }
+        });
+        const counts = await Promise.all(guestCountPromises);
+        total = counts.reduce((sum, count) => sum + count, 0);
+      } catch (e) {
+        console.error('Error calculating guest counts:', e);
+        // Fallback to guest_count field if available
+        total = weddingsData.reduce((sum: number, w: any) => sum + (w.guest_count || w.guestCount || 0), 0);
+      }
+      setTotalGuests(total);
     } catch (error: any) {
       console.error('Error fetching weddings:', error);
       toast({
@@ -323,7 +345,7 @@ const Weddings = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {weddings.reduce((sum, wedding) => sum + (wedding.guestCount || 0), 0)}
+                {totalGuests}
               </div>
             </CardContent>
           </Card>
@@ -394,7 +416,7 @@ const Weddings = () => {
                 Filters
               </Button>
               <Button 
-                variant="ghost" 
+                variant="outline" 
                 onClick={() => {
                   setDateFrom('');
                   setDateTo('');
@@ -404,7 +426,6 @@ const Weddings = () => {
                   setSearchTerm('');
                   fetchWeddings();
                 }}
-                disabled={!dateFrom && !dateTo && !venueFilter && !plannerFilter && !hasRestrictions && !searchTerm}
               >
                 Reset Filters
               </Button>
@@ -486,21 +507,21 @@ const Weddings = () => {
                 ) : (
                   filteredWeddings.map((wedding) => (
                   <TableRow 
-                    key={wedding.id}
+                    key={wedding.id || wedding.wedding_id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/dashboard/weddings/${wedding.id}`)}
+                    onClick={() => navigate(`/dashboard/weddings/${wedding.id || wedding.wedding_id}`)}
                   >
                     <TableCell className="font-mono text-sm text-muted-foreground">
-                      #{wedding.id}
+                      #{wedding.id || wedding.wedding_id}
                     </TableCell>
                     <TableCell className="font-mono text-sm text-muted-foreground">
                       #{wedding.couple_id}
                     </TableCell>
                     <TableCell className="font-medium">
                       <div>
-                        <div className="font-semibold">{wedding.couple}</div>
+                        <div className="font-semibold">{wedding.couple || (wedding.partner1_name && wedding.partner2_name ? `${wedding.partner1_name} & ${wedding.partner2_name}` : 'N/A')}</div>
                         <div className="text-sm text-muted-foreground">
-                          {wedding.plannerContact}
+                          {wedding.plannerContact || wedding.planner_contact || 'N/A'}
                         </div>
                       </div>
                     </TableCell>
@@ -508,9 +529,20 @@ const Weddings = () => {
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <div>{new Date(wedding.weddingDate).toLocaleDateString()}</div>
+                          <div>
+                            {(() => {
+                              try {
+                                const date = wedding.weddingDate || wedding.wedding_date;
+                                if (!date) return 'N/A';
+                                const d = new Date(date);
+                                return isNaN(d.getTime()) ? (typeof date === 'string' ? date.split('T')[0] : 'N/A') : d.toLocaleDateString();
+                              } catch {
+                                return 'N/A';
+                              }
+                            })()}
+                          </div>
                           <div className="text-sm text-muted-foreground">
-                            {wedding.weddingTime}
+                            {wedding.weddingTime || wedding.wedding_time || 'N/A'}
                           </div>
                         </div>
                       </div>
@@ -555,19 +587,19 @@ const Weddings = () => {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 text-muted-foreground" />
-                        {wedding.guestCount}
+                        {wedding.guestCount || wedding.guest_count || 0}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-semibold">{format(convert(wedding.totalCost || 0))}</div>
+                        <div className="font-semibold">{format(convert(wedding.totalCost || wedding.total_cost || 0))}</div>
                         <div className="text-sm text-muted-foreground">
-                          Prod: {format(convert(wedding.productionCost || 0))}
+                          Prod: {format(convert(wedding.productionCost || wedding.production_cost || 0))}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      {getPaymentStatusBadge(wedding.paymentStatus)}
+                      {getPaymentStatusBadge(wedding.paymentStatus || wedding.payment_status || 'pending')}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
@@ -577,7 +609,7 @@ const Weddings = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/dashboard/weddings/${wedding.id}`)}>
+                          <DropdownMenuItem onClick={() => navigate(`/dashboard/weddings/${wedding.id || wedding.wedding_id}`)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>

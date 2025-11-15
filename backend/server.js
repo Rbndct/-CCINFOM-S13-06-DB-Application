@@ -29,6 +29,8 @@ const weddingsRoutes = require('./routes/weddings');
 const couplesRoutes = require('./routes/couples');
 const dietaryRoutes = require('./routes/dietaryRestrictions');
 const tablesRoutes = require('./routes/tables');
+const menuItemsRoutes = require('./routes/menu_items');
+const packagesRoutes = require('./routes/packages');
 const healthRoute = require('./routes/health');
 
 // Use routes
@@ -37,6 +39,8 @@ app.use('/weddings', weddingsRoutes);
 app.use('/couples', couplesRoutes);
 app.use('/dietary-restrictions', dietaryRoutes);
 app.use('/tables', tablesRoutes);
+app.use('/menu-items', menuItemsRoutes);
+app.use('/packages', packagesRoutes);
 app.use('/health', healthRoute);
 
 // Store the server instance globally for the test route
@@ -50,6 +54,27 @@ app.get('/test', (req, res) => {
     timestamp: new Date().toISOString(),
     port: port
   });
+});
+
+// Route to get the current port (for frontend auto-detection)
+app.get('/port', (req, res) => {
+  const port = serverInstance ? serverInstance.address().port : null;
+  if (port) {
+    res.json({ port: port });
+  } else {
+    res.status(500).json({ error: 'Server port not available' });
+  }
+});
+
+// Serve port.txt file for frontend auto-detection
+app.get('/port.txt', (req, res) => {
+  const port = serverInstance ? serverInstance.address().port : null;
+  if (port) {
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(port.toString());
+  } else {
+    res.status(500).send('Port not available');
+  }
 });
 
 // Error handling middleware

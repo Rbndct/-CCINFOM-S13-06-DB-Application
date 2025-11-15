@@ -1,12 +1,27 @@
 import axios from 'axios';
 
 // Function to get the API port
-// Priority: 1. VITE_API_PORT env var, 2. localStorage, 3. default 3001
-function getApiPort() {
+// Priority: 1. VITE_API_PORT env var, 2. port.txt file (backend auto-assigned), 3. localStorage, 4. default 3001
+async function getApiPort() {
   // Check environment variable (Vite uses import.meta.env)
   const envPort = import.meta.env.VITE_API_PORT;
   if (envPort) {
     return parseInt(envPort, 10);
+  }
+
+  // Try to read port from backend's port.txt file (if backend auto-assigned a port)
+  try {
+    const portResponse = await fetch('/api/port.txt');
+    if (portResponse.ok) {
+      const portText = await portResponse.text();
+      const port = parseInt(portText.trim(), 10);
+      if (!isNaN(port) && port > 0) {
+        localStorage.setItem('api_port', port.toString());
+        return port;
+      }
+    }
+  } catch (e) {
+    // Ignore errors reading port file
   }
 
   // Check localStorage for previously detected port
@@ -20,6 +35,7 @@ function getApiPort() {
 }
 
 // Function to detect the backend port by trying to connect
+// This handles auto-assigned ports from the backend (when PORT=0 or port is in use)
 async function detectBackendPort() {
   const commonPorts = [3001, 3000, 3002, 3067, 8080, 5000];
   const storedPort = localStorage.getItem('api_port');
@@ -28,12 +44,21 @@ async function detectBackendPort() {
   if (storedPort) {
     const port = parseInt(storedPort, 10);
     try {
-      const response =
-          await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
+      // Try /port endpoint first (faster, returns just the port)
+      const portResponse = await axios.get(`http://localhost:${port}/port`, {timeout: 2000});
+      if (portResponse.data && portResponse.data.port) {
+        const detectedPort = portResponse.data.port;
+        localStorage.setItem('api_port', detectedPort.toString());
+        updateApiPort(detectedPort);
+        return detectedPort;
+      }
+      // Fallback to /test endpoint
+      const response = await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
       if (response.data && response.data.port) {
-        // Update with the actual port from the response
-        localStorage.setItem('api_port', response.data.port.toString());
-        return response.data.port;
+        const detectedPort = response.data.port;
+        localStorage.setItem('api_port', detectedPort.toString());
+        updateApiPort(detectedPort);
+        return detectedPort;
       }
       return port;
     } catch (e) {
@@ -41,14 +66,23 @@ async function detectBackendPort() {
     }
   }
 
-  // Try common ports
+  // Try common ports (backend may have auto-assigned a different port)
   for (const port of commonPorts) {
     try {
-      const response =
-          await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
+      // Try /port endpoint first (faster)
+      const portResponse = await axios.get(`http://localhost:${port}/port`, {timeout: 2000});
+      if (portResponse.data && portResponse.data.port) {
+        const detectedPort = portResponse.data.port;
+        localStorage.setItem('api_port', detectedPort.toString());
+        updateApiPort(detectedPort);
+        return detectedPort;
+      }
+      // Fallback to /test endpoint
+      const response = await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
       if (response.data) {
         const detectedPort = response.data.port || port;
         localStorage.setItem('api_port', detectedPort.toString());
+        updateApiPort(detectedPort);
         return detectedPort;
       }
     } catch (e) {
@@ -144,6 +178,7 @@ api.interceptors.request.use(
 export const guestsAPI = {
   getAll: (params) => api.get('/guests', {params}),
   getById: (id) => api.get(`/guests/${id}`),
+  getByWedding: (weddingId) => api.get('/guests', {params: {wedding_id: weddingId}}),
   create: (data) => api.post('/guests', data),
   update: (id, data) => api.put(`/guests/${id}`, data),
   delete: (id) => api.delete(`/guests/${id}`),
@@ -185,14 +220,34 @@ export const testAPI = {
 
 export const tablesAPI = {
   getSeating: (weddingId) => api.get(`/tables/seating/${weddingId}`),
-  createCoupleTable: (weddingId) =>
-      api.post(`/tables/seating/${weddingId}/couple`),
-  createGuestTable: (weddingId, capacity) =>
-      api.post(`/tables/seating/${weddingId}/guest`, {capacity}),
+  createCoupleTable: (weddingId, data = {}) =>
+      api.post(`/tables/seating/${weddingId}/couple`, data),
+  createGuestTable: (weddingId, capacity, table_category = 'guest') =>
+      api.post(`/tables/seating/${weddingId}/guest`, {capacity, table_category}),
   assignGuests: (weddingId, tableId, guestIds) => api.post(
       `/tables/seating/${weddingId}/guest/${tableId}/assign`,
       {guest_ids: guestIds}),
+  updateTable: (tableId, data) => api.put(`/tables/seating/${tableId}`, data),
   deleteTable: (tableId) => api.delete(`/tables/seating/${tableId}`),
+};
+
+export const menuItemsAPI = {
+  getAll: (params) => api.get('/menu-items', {params}),
+  getById: (id) => api.get(`/menu-items/${id}`),
+  create: (data) => api.post('/menu-items', data),
+  update: (id, data) => api.put(`/menu-items/${id}`, data),
+  delete: (id) => api.delete(`/menu-items/${id}`),
+};
+
+export const packagesAPI = {
+  getAll: (params) => api.get('/packages', {params}),
+  getById: (id) => api.get(`/packages/${id}`),
+  create: (data) => api.post('/packages', data),
+  update: (id, data) => api.put(`/packages/${id}`, data),
+  delete: (id) => api.delete(`/packages/${id}`),
+  assignToTable: (data) => api.post('/packages/assign', data),
+  removeFromTable: (tableId, packageId) => api.delete(`/packages/assign/${tableId}/${packageId}`),
+  getTableAssignments: (weddingId) => api.get(`/packages/wedding/${weddingId}/assignments`),
 };
 
 export default api;
