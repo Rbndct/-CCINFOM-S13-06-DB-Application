@@ -31,6 +31,7 @@ const dietaryRoutes = require('./routes/dietary-restrictions');
 const tablesRoutes = require('./routes/tables');
 const menuItemsRoutes = require('./routes/menu-items');
 const packagesRoutes = require('./routes/packages');
+const databaseRoutes = require('./routes/database');
 const healthRoute = require('./routes/health');
 
 // Use routes
@@ -41,6 +42,7 @@ app.use('/dietary-restrictions', dietaryRoutes);
 app.use('/tables', tablesRoutes);
 app.use('/menu-items', menuItemsRoutes);
 app.use('/packages', packagesRoutes);
+app.use('/database', databaseRoutes);
 app.use('/health', healthRoute);
 
 // Store the server instance globally for the test route
