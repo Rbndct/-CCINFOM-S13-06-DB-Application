@@ -300,8 +300,13 @@ const Packages = () => {
     return <Badge className={colors[type] || 'bg-gray-100 text-gray-800'}>{type}</Badge>;
   };
 
-  // Filter and sort packages
-  const filteredAndSortedPackages = packages
+  const templatePackages = packages.filter(pkg => pkg.is_template);
+  const weddingPackages = packages.filter(pkg => !pkg.is_template);
+
+  const currentPackages = activeTab === 'templates' ? templatePackages : weddingPackages;
+
+  // Filter and sort packages based on current tab
+  const filteredAndSortedPackages = currentPackages
     .filter(pkg => {
       const matchesSearch = pkg.package_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            pkg.package_type?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -339,11 +344,6 @@ const Packages = () => {
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       }
     });
-
-  const templatePackages = packages.filter(pkg => pkg.is_template);
-  const weddingPackages = packages.filter(pkg => !pkg.is_template);
-
-  const currentPackages = activeTab === 'templates' ? templatePackages : weddingPackages;
   
   // Updated statistics - more relevant to packages
   const totalPackages = currentPackages.length;

@@ -85,7 +85,7 @@ const MenuItems = () => {
     menu_price: '',
     menu_type: '',
     stock: '',
-    restriction_id: ''
+    restriction_id: 'none'
   });
   const [formLoading, setFormLoading] = useState(false);
 
@@ -212,7 +212,7 @@ const MenuItems = () => {
       menu_price: '',
       menu_type: '',
       stock: '',
-      restriction_id: ''
+      restriction_id: 'none'
     });
     setSelectedItem(null);
     setAddDialogOpen(true);
