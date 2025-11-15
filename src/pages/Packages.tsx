@@ -52,7 +52,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { packagesAPI, menuItemsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';

@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useCurrency, SupportedCurrency } from '@/context/CurrencyContext';
 
 const CURRENCY_NAMES: Record<SupportedCurrency, string> = {

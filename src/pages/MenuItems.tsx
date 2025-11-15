@@ -53,7 +53,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { menuItemsAPI, dietaryRestrictionsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
