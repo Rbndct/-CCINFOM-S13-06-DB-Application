@@ -54,9 +54,10 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { packagesAPI, menuItemsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { formatCurrency } from '@/utils/currency';
+import { useCurrencyFormat } from '@/utils/currency';
 
 const Packages = () => {
+  const { formatCurrency } = useCurrencyFormat();
   const [activeTab, setActiveTab] = useState('templates');
   const [packages, setPackages] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');

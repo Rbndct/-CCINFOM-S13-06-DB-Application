@@ -57,9 +57,10 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { menuItemsAPI, dietaryRestrictionsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { formatCurrency } from '@/utils/currency';
+import { useCurrencyFormat } from '@/utils/currency';
 
 const MenuItems = () => {
+  const { formatCurrency } = useCurrencyFormat();
   const [activeTab, setActiveTab] = useState('templates');
   const [menuItems, setMenuItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');

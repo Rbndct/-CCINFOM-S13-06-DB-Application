@@ -39,7 +39,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
-import { formatCurrency } from '@/utils/currency';
+import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
 
 type Couple = {
@@ -105,6 +105,7 @@ const CoupleDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { formatCurrency } = useCurrencyFormat();
   const [couple, setCouple] = useState<Couple | null>(null);
   const [weddings, setWeddings] = useState<Wedding[]>([]);
   const [loading, setLoading] = useState(true);

@@ -55,12 +55,13 @@ import {
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { weddingsAPI, couplesAPI, guestsAPI } from '@/api';
-import { formatCurrency } from '@/utils/currency';
+import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, formatRestrictionsList, getRestrictionCountText } from '@/utils/restrictionUtils';
 
 const Weddings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { formatCurrency } = useCurrencyFormat();
   const [weddings, setWeddings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
