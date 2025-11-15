@@ -11,7 +11,9 @@ import {
   Edit,
   Trash2,
   MoreHorizontal,
-  User
+  User,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -67,6 +69,8 @@ const Couples = () => {
     planner_contact: '' // Backend uses planner_contact field
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const { toast } = useToast();
 
   useEffect(() => {
@@ -107,6 +111,17 @@ const Couples = () => {
            couple.partner1_email.toLowerCase().includes(searchLower) ||
            couple.partner2_email.toLowerCase().includes(searchLower);
   });
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredCouples.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedCouples = filteredCouples.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, ceremonyType, restrictionType, plannerEmail]);
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
@@ -188,6 +203,11 @@ const Couples = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{couples.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {couples.filter(c => c.preference_id).length > 0 
+                  ? `${couples.filter(c => c.preference_id).length} couples registered with preferences`
+                  : 'No couples with preferences yet'}
+              </p>
             </CardContent>
           </Card>
           
@@ -214,8 +234,7 @@ const Couples = () => {
             <CardContent>
               <div className="text-2xl font-bold">
                 {(() => {
-                  // Count couples with multiple preferences (would need backend support)
-                  // For now, count couples with multiple restrictions
+                  // Count couples with multiple restrictions/preferences
                   return couples.filter(c => {
                     const restrictions = c.all_restrictions || [];
                     return restrictions.length > 1;
@@ -223,7 +242,23 @@ const Couples = () => {
                 })()}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                Couples with multiple restrictions
+                {(() => {
+                  const multiPrefCouples = couples.filter(c => {
+                    const restrictions = c.all_restrictions || [];
+                    return restrictions.length > 1;
+                  });
+                  if (multiPrefCouples.length === 0) return 'No couples with multiple preferences';
+                  
+                  // Get unique restriction types from couples with multiple preferences
+                  const types = new Set<string>();
+                  multiPrefCouples.forEach(c => {
+                    (c.all_restrictions || []).forEach((r: any) => {
+                      if (r?.restriction_type) types.add(r.restriction_type);
+                    });
+                  });
+                  const typeList = Array.from(types).slice(0, 2).join(', ');
+                  return `Couples with 2+ restrictions (${typeList}${types.size > 2 ? '...' : ''})`;
+                })()}
               </p>
             </CardContent>
           </Card>
@@ -250,7 +285,21 @@ const Couples = () => {
                 })()}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                By type
+                {(() => {
+                  const restrictionCounts: Record<string, number> = {};
+                  couples.forEach(c => {
+                    const restrictions = c.all_restrictions || [];
+                    restrictions.forEach((r: any) => {
+                      if (r && r.restriction_type) {
+                        restrictionCounts[r.restriction_type] = (restrictionCounts[r.restriction_type] || 0) + 1;
+                      }
+                    });
+                  });
+                  const mostCommon = Object.entries(restrictionCounts).sort((a, b) => b[1] - a[1])[0];
+                  return mostCommon 
+                    ? `${mostCommon[1]} ${mostCommon[1] === 1 ? 'entry' : 'entries'} across all couples`
+                    : 'No restrictions recorded';
+                })()}
               </p>
             </CardContent>
           </Card>
@@ -334,20 +383,22 @@ const Couples = () => {
                 ) : null}
               </div>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Couple ID</TableHead>
-                    <TableHead>Couple</TableHead>
-                    <TableHead>Contact Information</TableHead>
-                    <TableHead>Planner Email</TableHead>
-                    <TableHead>Weddings</TableHead>
-                    <TableHead>Last Wedding</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredCouples.map((couple) => (
+              <>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Couple ID</TableHead>
+                      <TableHead>Couple</TableHead>
+                      <TableHead>Contact Information</TableHead>
+                      <TableHead>Preferences</TableHead>
+                      <TableHead>Planner Email</TableHead>
+                      <TableHead>Weddings</TableHead>
+                      <TableHead>Last Wedding</TableHead>
+                      <TableHead className="w-[50px]"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paginatedCouples.map((couple) => (
                     <TableRow 
                       key={couple.id}
                       className="cursor-pointer hover:bg-muted/50"
@@ -389,6 +440,49 @@ const Couples = () => {
                             <Mail className="h-3 w-3 text-muted-foreground" />
                             {couple.partner2_email}
                           </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1.5 min-w-[200px]">
+                          {couple.preference_id ? (
+                            <>
+                              {couple.ceremony_type && (
+                                <div className="mb-1.5">
+                                  <Badge variant="outline" className="text-xs font-medium">
+                                    {couple.ceremony_type}
+                                  </Badge>
+                                </div>
+                              )}
+                              {(() => {
+                                const restrictions = couple.all_restrictions || [];
+                                if (restrictions.length === 0) {
+                                  return (
+                                    <span className="text-xs text-muted-foreground">No restrictions</span>
+                                  );
+                                }
+                                return (
+                                  <div className="flex flex-wrap gap-1.5 items-start">
+                                    {restrictions.slice(0, 2).map((r: any, idx: number) => (
+                                      <Badge 
+                                        key={idx} 
+                                        variant="secondary" 
+                                        className="text-xs font-medium"
+                                      >
+                                        {r.restriction_name || r.restriction_type || 'Unknown'}
+                                      </Badge>
+                                    ))}
+                                    {restrictions.length > 2 && (
+                                      <Badge variant="outline" className="text-xs font-medium">
+                                        +{restrictions.length - 2} more
+                                      </Badge>
+                                    )}
+                                  </div>
+                                );
+                              })()}
+                            </>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">No preferences set</span>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>
@@ -445,8 +539,63 @@ const Couples = () => {
                       </TableCell>
                     </TableRow>
                   ))}
-                </TableBody>
-              </Table>
+                  </TableBody>
+                </Table>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredCouples.length)} of {filteredCouples.length} couples
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
           </CardContent>
         </Card>

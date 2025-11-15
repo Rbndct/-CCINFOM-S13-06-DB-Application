@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -13,7 +13,9 @@ import {
   Users,
   Lock,
   ArrowUpDown,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,7 +52,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import DashboardLayout from '@/components/layout/DashboardLayout';
+import DashboardLayout from '@/components/DashboardLayout';
 import { packagesAPI, menuItemsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -65,6 +67,8 @@ const Packages = () => {
   const [sortBy, setSortBy] = useState<'name' | 'type' | 'price' | 'usage'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const { toast } = useToast();
   
   // Dialog states
@@ -289,6 +293,7 @@ const Packages = () => {
     setFilterType('all');
     setSortBy('name');
     setSortOrder('asc');
+    setCurrentPage(1);
   };
 
   const getTypeBadge = (type: string) => {
@@ -306,15 +311,16 @@ const Packages = () => {
 
   const currentPackages = activeTab === 'templates' ? templatePackages : weddingPackages;
 
-  // Filter and sort packages based on current tab
-  const filteredAndSortedPackages = currentPackages
-    .filter(pkg => {
-      const matchesSearch = pkg.package_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           pkg.package_type?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterType === 'all' || pkg.package_type === filterType;
-      return matchesSearch && matchesFilter;
-    })
-    .sort((a, b) => {
+  // Filter and sort packages (only for current tab)
+  const filteredAndSortedPackages = useMemo(() => {
+    return currentPackages
+      .filter(pkg => {
+        const matchesSearch = pkg.package_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             pkg.package_type?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesFilter = filterType === 'all' || pkg.package_type === filterType;
+        return matchesSearch && matchesFilter;
+      })
+      .sort((a, b) => {
       let aVal: any, bVal: any;
       switch (sortBy) {
         case 'name':
@@ -345,6 +351,18 @@ const Packages = () => {
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       }
     });
+  }, [currentPackages, searchTerm, filterType, sortBy, sortOrder]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredAndSortedPackages.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedPackages = filteredAndSortedPackages.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType, sortBy, sortOrder, activeTab]);
   
   // Updated statistics - more relevant to packages
   const totalPackages = currentPackages.length;
@@ -442,51 +460,19 @@ const Packages = () => {
               </TabsList>
 
               <TabsContent value="templates" className="space-y-4">
-                {/* Filter and Sort Section */}
-                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <div className="flex items-center space-x-2 mb-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search packages..."
+                      placeholder="Search templates..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-8"
                     />
                   </div>
-                  <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Filter by type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="Full Service">Full Service</SelectItem>
-                      <SelectItem value="Basic">Basic</SelectItem>
-                      <SelectItem value="Premium">Premium</SelectItem>
-                      <SelectItem value="Specialty">Specialty</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="type">Type</SelectItem>
-                      <SelectItem value="price">Price</SelectItem>
-                      <SelectItem value="usage">Usage</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                    title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
-                  >
-                    <ArrowUpDown className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" onClick={handleResetFilters}>
-                    <X className="w-4 h-4 mr-2" />
-                    Reset
+                  <Button variant="outline">
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filter
                   </Button>
                 </div>
 
@@ -517,17 +503,17 @@ const Packages = () => {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredAndSortedPackages.map((pkg) => (
+                      paginatedPackages.map((pkg) => (
                         <TableRow key={pkg.id || pkg.package_id} className={pkg.is_template ? 'bg-muted/30' : ''}>
                           <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                                 <Package className="h-4 w-4 text-primary" />
                               </div>
-                              <div className="flex items-center gap-2">
-                                {pkg.package_name}
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="truncate">{pkg.package_name}</span>
                                 {pkg.is_template && (
-                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 flex-shrink-0">
                                     <Lock className="w-3 h-3 mr-1" />
                                     Template
                                   </Badge>
@@ -594,11 +580,64 @@ const Packages = () => {
                     )}
                   </TableBody>
                 </Table>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredAndSortedPackages.length)} of {filteredAndSortedPackages.length} packages
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="wedding-specific" className="space-y-4">
-                {/* Filter and Sort Section */}
-                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                <div className="flex items-center space-x-2 mb-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -608,40 +647,9 @@ const Packages = () => {
                       className="pl-8"
                     />
                   </div>
-                  <Select value={filterType} onValueChange={setFilterType}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Filter by type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="Full Service">Full Service</SelectItem>
-                      <SelectItem value="Basic">Basic</SelectItem>
-                      <SelectItem value="Premium">Premium</SelectItem>
-                      <SelectItem value="Specialty">Specialty</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                    <SelectTrigger className="w-full sm:w-[180px]">
-                      <SelectValue placeholder="Sort by" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="name">Name</SelectItem>
-                      <SelectItem value="type">Type</SelectItem>
-                      <SelectItem value="price">Price</SelectItem>
-                      <SelectItem value="usage">Usage</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button 
-                    variant="outline" 
-                    size="icon"
-                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                    title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
-                  >
-                    <ArrowUpDown className="h-4 w-4" />
-                  </Button>
-                  <Button variant="outline" onClick={handleResetFilters}>
-                    <X className="w-4 h-4 mr-2" />
-                    Reset
+                  <Button variant="outline">
+                    <Filter className="w-4 h-4 mr-2" />
+                    Filter
                   </Button>
                 </div>
 
@@ -672,7 +680,7 @@ const Packages = () => {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredAndSortedPackages.map((pkg) => (
+                      paginatedPackages.map((pkg) => (
                         <TableRow key={pkg.id || pkg.package_id}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
@@ -735,6 +743,60 @@ const Packages = () => {
                     )}
                   </TableBody>
                 </Table>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredAndSortedPackages.length)} of {filteredAndSortedPackages.length} packages
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>

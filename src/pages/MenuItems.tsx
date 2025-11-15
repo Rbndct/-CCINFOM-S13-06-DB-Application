@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -53,10 +53,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import DashboardLayout from '@/components/layout/DashboardLayout';
+import DashboardLayout from '@/components/DashboardLayout';
 import { menuItemsAPI, dietaryRestrictionsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2 } from 'lucide-react';
+import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormat } from '@/utils/currency';
 
 const MenuItems = () => {
@@ -68,6 +68,8 @@ const MenuItems = () => {
   const [sortBy, setSortBy] = useState<'name' | 'type' | 'price' | 'cost' | 'stock'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const { toast } = useToast();
   
   // Dialog states
@@ -86,7 +88,7 @@ const MenuItems = () => {
     menu_price: '',
     menu_type: '',
     stock: '',
-    restriction_id: 'none'
+    restriction_id: ''
   });
   const [formLoading, setFormLoading] = useState(false);
 
@@ -194,7 +196,7 @@ const MenuItems = () => {
       menu_price: (item.menu_price || 0).toString(),
       menu_type: item.menu_type || '',
       stock: (item.stock || 0).toString(),
-      restriction_id: (item.restriction_id ? item.restriction_id.toString() : 'none')
+      restriction_id: (item.restriction_id || '').toString()
     });
     setEditDialogOpen(true);
   };
@@ -213,7 +215,7 @@ const MenuItems = () => {
       menu_price: '',
       menu_type: '',
       stock: '',
-      restriction_id: 'none'
+      restriction_id: ''
     });
     setSelectedItem(null);
     setAddDialogOpen(true);
@@ -238,7 +240,7 @@ const MenuItems = () => {
         menu_price: parseFloat(formData.menu_price),
         menu_type: formData.menu_type,
         stock: parseInt(formData.stock),
-        restriction_id: formData.restriction_id && formData.restriction_id !== 'none' ? parseInt(formData.restriction_id) : null
+        restriction_id: formData.restriction_id ? parseInt(formData.restriction_id) : null
       };
       
       if (selectedItem) {
@@ -329,6 +331,7 @@ const MenuItems = () => {
     setFilterType('all');
     setSortBy('name');
     setSortOrder('asc');
+    setCurrentPage(1);
   };
 
   const getStockStatus = (stock: number) => {
@@ -352,14 +355,15 @@ const MenuItems = () => {
   };
 
   // Filter and sort menu items
-  const filteredAndSortedMenuItems = menuItems
-    .filter(item => {
-      const matchesSearch = item.menu_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           item.menu_type?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterType === 'all' || item.menu_type === filterType;
-      return matchesSearch && matchesFilter;
-    })
-    .sort((a, b) => {
+  const filteredAndSortedMenuItems = useMemo(() => {
+    return menuItems
+      .filter(item => {
+        const matchesSearch = item.menu_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             item.menu_type?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesFilter = filterType === 'all' || item.menu_type === filterType;
+        return matchesSearch && matchesFilter;
+      })
+      .sort((a, b) => {
       let aVal: any, bVal: any;
       switch (sortBy) {
         case 'name':
@@ -394,6 +398,18 @@ const MenuItems = () => {
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       }
     });
+  }, [menuItems, searchTerm, filterType, sortBy, sortOrder]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredAndSortedMenuItems.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedMenuItems = filteredAndSortedMenuItems.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType, sortBy, sortOrder, activeTab]);
 
   const templateItems = menuItems.filter(item => item.is_template);
   const weddingItems = menuItems.filter(item => !item.is_template);
@@ -575,7 +591,7 @@ const MenuItems = () => {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredAndSortedMenuItems.map((item) => (
+                      paginatedMenuItems.map((item) => (
                         <TableRow key={item.id || item.menu_item_id} className={item.is_template ? 'bg-muted/30' : ''}>
                           <TableCell>
                             <Badge variant="outline" className="font-mono text-xs">
@@ -583,14 +599,14 @@ const MenuItems = () => {
                             </Badge>
                           </TableCell>
                           <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                                 <Utensils className="h-4 w-4 text-primary" />
                               </div>
-                              <div className="flex items-center gap-2">
-                                {item.menu_name}
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="truncate">{item.menu_name}</span>
                                 {item.is_template && (
-                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 flex-shrink-0">
                                     <Lock className="w-3 h-3 mr-1" />
                                     Template
                                   </Badge>
@@ -666,6 +682,60 @@ const MenuItems = () => {
                     )}
                   </TableBody>
                 </Table>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredAndSortedMenuItems.length)} of {filteredAndSortedMenuItems.length} items
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="wedding-specific" className="space-y-4">
@@ -748,7 +818,7 @@ const MenuItems = () => {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredAndSortedMenuItems.map((item) => (
+                      paginatedMenuItems.map((item) => (
                         <TableRow key={item.id || item.menu_item_id}>
                           <TableCell>
                             <Badge variant="outline" className="font-mono text-xs">
@@ -829,6 +899,60 @@ const MenuItems = () => {
                     )}
                   </TableBody>
                 </Table>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredAndSortedMenuItems.length)} of {filteredAndSortedMenuItems.length} items
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -1016,7 +1140,7 @@ const MenuItems = () => {
                       <SelectValue placeholder="Select restriction (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">None</SelectItem>
+                      <SelectItem value="">None</SelectItem>
                       {dietaryRestrictions.map((restriction: any) => (
                         <SelectItem key={restriction.restriction_id} value={restriction.restriction_id.toString()}>
                           {restriction.restriction_name}
