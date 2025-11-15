@@ -70,30 +70,51 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, menuItemsAPI, packagesAPI, inventoryAPI, inventoryAllocationAPI } from '@/api';
 import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
-
-// Helper function to safely parse and format dates
-const safeFormatDate = (dateValue: any): string => {
-  if (!dateValue) return 'N/A';
-  try {
-    const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
-    if (isNaN(date.getTime())) {
-      // If invalid date, try to parse as YYYY-MM-DD
-      if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
-        return dateValue.split('T')[0];
-      }
-      return 'N/A';
-    }
-    return date.toLocaleDateString();
-  } catch (e) {
-    // If date parsing fails, return the original value or N/A
-    return typeof dateValue === 'string' ? dateValue.split('T')[0] : 'N/A';
-  }
-};
+import { useDateFormat } from '@/context/DateFormatContext';
+import { useTimeFormat } from '@/context/TimeFormatContext';
 
 const WeddingDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { formatDate } = useDateFormat();
+  const { formatTime } = useTimeFormat();
+  
+  // Helper function to safely parse and format dates
+  const safeFormatDate = (dateValue: any): string => {
+    if (!dateValue) return 'N/A';
+    try {
+      const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+      if (isNaN(date.getTime())) {
+        // If invalid date, try to parse as YYYY-MM-DD
+        if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+          return dateValue.split('T')[0];
+        }
+        return 'N/A';
+      }
+      return formatDate(date);
+    } catch (e) {
+      // If date parsing fails, return the original value or N/A
+      return typeof dateValue === 'string' ? dateValue.split('T')[0] : 'N/A';
+    }
+  };
+  
+  // Helper function to safely format times
+  const safeFormatTime = (timeValue: any): string => {
+    if (!timeValue) return 'N/A';
+    try {
+      if (typeof timeValue === 'string' && timeValue.match(/^\d{2}:\d{2}/)) {
+        const [hours, minutes] = timeValue.split(':');
+        const date = new Date();
+        date.setHours(parseInt(hours), parseInt(minutes));
+        return formatTime(date);
+      }
+      return timeValue;
+    } catch (e) {
+      return timeValue;
+    }
+  };
+  
   const [wedding, setWedding] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -2376,7 +2397,7 @@ const WeddingDetail = () => {
               <div className="text-2xl font-bold">
                 {safeFormatDate(wedding?.weddingDate || wedding?.wedding_date)}
               </div>
-              <p className="text-xs text-muted-foreground">{wedding?.weddingTime || wedding?.wedding_time || 'N/A'}</p>
+              <p className="text-xs text-muted-foreground">{safeFormatTime(wedding?.weddingTime || wedding?.wedding_time)}</p>
             </CardContent>
           </Card>
 

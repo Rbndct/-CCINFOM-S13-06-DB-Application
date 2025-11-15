@@ -103,6 +103,8 @@ type Wedding = {
 
 const CoupleDetail = () => {
   const { id } = useParams<{ id: string }>();
+  const { formatDate } = useDateFormat();
+  const { formatTime } = useTimeFormat();
   const navigate = useNavigate();
   const { toast } = useToast();
   const { formatCurrency } = useCurrencyFormat();
@@ -710,7 +712,7 @@ const CoupleDetail = () => {
                     <CardHeader>
                       <div className="flex items-center justify-between">
                         <CardTitle className="text-lg">
-                          {new Date(wedding.weddingDate).toLocaleDateString()}
+                          {formatDate(new Date(wedding.weddingDate))}
                         </CardTitle>
                         <Badge variant={wedding.paymentStatus === 'paid' ? 'default' : 'secondary'}>
                           {wedding.paymentStatus === 'pending' ? 'Pending' : wedding.paymentStatus.charAt(0).toUpperCase() + wedding.paymentStatus.slice(1)}
@@ -720,7 +722,21 @@ const CoupleDetail = () => {
                     <CardContent className="space-y-2">
                       <div className="flex items-center gap-2 text-sm">
                         <Clock className="w-4 h-4 text-muted-foreground" />
-                        <span>{wedding.weddingTime}</span>
+                        <span>{(() => {
+                          const time = wedding.weddingTime;
+                          if (!time) return 'N/A';
+                          try {
+                            if (typeof time === 'string' && time.match(/^\d{2}:\d{2}/)) {
+                              const [hours, minutes] = time.split(':');
+                              const date = new Date();
+                              date.setHours(parseInt(hours), parseInt(minutes));
+                              return formatTime(date);
+                            }
+                            return time;
+                          } catch {
+                            return time;
+                          }
+                        })()}</span>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <MapPin className="w-4 h-4 text-muted-foreground" />

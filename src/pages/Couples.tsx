@@ -49,9 +49,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/hooks/use-toast';
 import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
+import { useDateFormat } from '@/context/DateFormatContext';
 
 const Couples = () => {
   const navigate = useNavigate();
+  const { formatDate } = useDateFormat();
   const [couples, setCouples] = useState([]);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -533,7 +535,7 @@ const Couples = () => {
                         <div className="text-sm">
                           {!couple.last_wedding || couple.last_wedding === '1970-01-01' || new Date(couple.last_wedding).getTime() === new Date('1970-01-01').getTime()
                             ? 'No Wedding'
-                            : new Date(couple.last_wedding).toLocaleDateString()}
+                            : formatDate(new Date(couple.last_wedding))}
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>

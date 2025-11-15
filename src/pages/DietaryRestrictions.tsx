@@ -64,6 +64,7 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { dietaryRestrictionsAPI } from '@/api';
+import { useDateFormat } from '@/context/DateFormatContext';
 import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
 
 type DietaryRestriction = {
@@ -97,6 +98,7 @@ type DietaryRestriction = {
 };
 
 const DietaryRestrictions = () => {
+  const { formatDate } = useDateFormat();
   const { toast } = useToast();
   const [restrictions, setRestrictions] = useState<DietaryRestriction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -954,7 +956,7 @@ const DietaryRestrictions = () => {
                         <div key={guest.guest_id} className="flex items-center justify-between text-sm">
                           <span className="font-medium">{guest.guest_name}</span>
                           <span className="text-muted-foreground">
-                            {guest.partner1_name} & {guest.partner2_name} - {new Date(guest.wedding_date).toLocaleDateString()}
+                            {guest.partner1_name} & {guest.partner2_name} - {formatDate(new Date(guest.wedding_date))}
                           </span>
                         </div>
                       ))}

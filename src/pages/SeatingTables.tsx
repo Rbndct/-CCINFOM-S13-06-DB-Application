@@ -31,8 +31,10 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/layout/DashboardLayout';
+import { useDateFormat } from '@/context/DateFormatContext';
 
 const SeatingTables = () => {
+  const { formatDate } = useDateFormat();
   const [tables, setTables] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterWedding, setFilterWedding] = useState('all');
@@ -255,7 +257,7 @@ const SeatingTables = () => {
                         <div className="font-medium">{table.wedding_couple}</div>
                         <div className="text-sm text-muted-foreground flex items-center gap-1">
                           <Calendar className="h-3 w-3" />
-                          {new Date(table.wedding_date).toLocaleDateString()}
+                          {formatDate(new Date(table.wedding_date))}
                         </div>
                       </div>
                     </TableCell>
