@@ -33,17 +33,34 @@ const Home = () => {
   const checkAPIConnection = async () => {
     setApiStatus(prev => ({ ...prev, loading: true }));
     try {
-      const response = await testAPI.checkConnection();
+      const response = await testAPI.checkConnection() as { message?: string };
       let mysqlStatus = false;
       try {
-        const healthResponse = await testAPI.healthCheck();
-        mysqlStatus = healthResponse?.status === 'ok' && healthResponse?.database?.connected === true;
+      const healthResponse = (await testAPI.healthCheck()) as unknown as {
+        status?: string;
+        database?: {
+          connected?: boolean;
+        };
+      };
+        console.log('Health check response:', healthResponse);
+        // Check if response has the expected structure
+        if (healthResponse && typeof healthResponse === 'object') {
+          mysqlStatus = healthResponse.status === 'ok' && 
+                       healthResponse.database !== undefined && 
+                       healthResponse.database.connected === true;
+        }
+        console.log('MySQL status:', mysqlStatus);
       } catch (healthError: any) {
         console.error('Health check failed:', healthError);
+        console.error('Health check error details:', {
+          message: healthError?.message,
+          response: healthError?.response?.data,
+          status: healthError?.response?.status
+        });
       }
       setApiStatus({
         connected: true,
-        message: response.message || 'Backend connected!',
+        message: response?.message || 'Backend connected!',
         loading: false,
         mysqlConnected: mysqlStatus,
       });
@@ -103,14 +120,14 @@ const Home = () => {
       y: 0,
       transition: {
         duration: 0.5,
-        ease: 'easeOut',
+        ease: [0.4, 0, 0.2, 1] as const,
       },
     },
     hover: {
       y: -8,
       transition: {
         duration: 0.3,
-        ease: 'easeOut',
+        ease: [0.4, 0, 0.2, 1] as const,
       },
     },
   };
