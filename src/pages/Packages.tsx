@@ -50,7 +50,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { packagesAPI, menuItemsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -441,19 +441,51 @@ const Packages = () => {
               </TabsList>
 
               <TabsContent value="templates" className="space-y-4">
-                <div className="flex items-center space-x-2 mb-4">
+                {/* Filter and Sort Section */}
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search templates..."
+                      placeholder="Search packages..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-8"
                     />
                   </div>
-                  <Button variant="outline">
-                    <Filter className="w-4 h-4 mr-2" />
-                    Filter
+                  <Select value={filterType} onValueChange={setFilterType}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Filter by type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="Full Service">Full Service</SelectItem>
+                      <SelectItem value="Basic">Basic</SelectItem>
+                      <SelectItem value="Premium">Premium</SelectItem>
+                      <SelectItem value="Specialty">Specialty</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="type">Type</SelectItem>
+                      <SelectItem value="price">Price</SelectItem>
+                      <SelectItem value="usage">Usage</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                    title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
+                  >
+                    <ArrowUpDown className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" onClick={handleResetFilters}>
+                    <X className="w-4 h-4 mr-2" />
+                    Reset
                   </Button>
                 </div>
 
@@ -477,14 +509,14 @@ const Packages = () => {
                           <p className="text-sm text-muted-foreground mt-2">Loading packages...</p>
                         </TableCell>
                       </TableRow>
-                    ) : filteredPackages.length === 0 ? (
+                    ) : filteredAndSortedPackages.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8">
                           <p className="text-sm text-muted-foreground">No packages found</p>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredPackages.map((pkg) => (
+                      filteredAndSortedPackages.map((pkg) => (
                         <TableRow key={pkg.id || pkg.package_id} className={pkg.is_template ? 'bg-muted/30' : ''}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
@@ -564,7 +596,8 @@ const Packages = () => {
               </TabsContent>
 
               <TabsContent value="wedding-specific" className="space-y-4">
-                <div className="flex items-center space-x-2 mb-4">
+                {/* Filter and Sort Section */}
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -574,9 +607,40 @@ const Packages = () => {
                       className="pl-8"
                     />
                   </div>
-                  <Button variant="outline">
-                    <Filter className="w-4 h-4 mr-2" />
-                    Filter
+                  <Select value={filterType} onValueChange={setFilterType}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Filter by type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="Full Service">Full Service</SelectItem>
+                      <SelectItem value="Basic">Basic</SelectItem>
+                      <SelectItem value="Premium">Premium</SelectItem>
+                      <SelectItem value="Specialty">Specialty</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                    <SelectTrigger className="w-full sm:w-[180px]">
+                      <SelectValue placeholder="Sort by" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="name">Name</SelectItem>
+                      <SelectItem value="type">Type</SelectItem>
+                      <SelectItem value="price">Price</SelectItem>
+                      <SelectItem value="usage">Usage</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button 
+                    variant="outline" 
+                    size="icon"
+                    onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                    title={sortOrder === 'asc' ? 'Sort Descending' : 'Sort Ascending'}
+                  >
+                    <ArrowUpDown className="h-4 w-4" />
+                  </Button>
+                  <Button variant="outline" onClick={handleResetFilters}>
+                    <X className="w-4 h-4 mr-2" />
+                    Reset
                   </Button>
                 </div>
 
@@ -600,14 +664,14 @@ const Packages = () => {
                           <p className="text-sm text-muted-foreground mt-2">Loading packages...</p>
                         </TableCell>
                       </TableRow>
-                    ) : filteredPackages.length === 0 ? (
+                    ) : filteredAndSortedPackages.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8">
                           <p className="text-sm text-muted-foreground">No packages found</p>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredPackages.map((pkg) => (
+                      filteredAndSortedPackages.map((pkg) => (
                         <TableRow key={pkg.id || pkg.package_id}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">

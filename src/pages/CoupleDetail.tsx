@@ -37,9 +37,9 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
-import { usePrice } from '@/utils/currency';
+import { formatCurrency } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
 
 type Couple = {
@@ -105,7 +105,6 @@ const CoupleDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { format, convert } = usePrice();
   const [couple, setCouple] = useState<Couple | null>(null);
   const [weddings, setWeddings] = useState<Wedding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -699,7 +698,7 @@ const CoupleDetail = () => {
                         <span>{wedding.guestCount} guests</span>
                       </div>
                       <div className="text-sm font-semibold">
-                        {format(convert(wedding.totalCost || 0))}
+                        {formatCurrency(wedding.totalCost || 0)}
                       </div>
                       {wedding.ceremony_type && (
                         <div className="mt-2">

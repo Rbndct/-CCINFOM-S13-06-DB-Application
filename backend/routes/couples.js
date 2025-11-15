@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {promisePool} = require('../db');
+const {promisePool} = require('../config/database');
 
 // GET all couples with wedding count and latest preference
 router.get('/', async (req, res) => {

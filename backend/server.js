@@ -27,9 +27,9 @@ app.use(express.json());
 const guestsRoutes = require('./routes/guests');
 const weddingsRoutes = require('./routes/weddings');
 const couplesRoutes = require('./routes/couples');
-const dietaryRoutes = require('./routes/dietaryRestrictions');
+const dietaryRoutes = require('./routes/dietary-restrictions');
 const tablesRoutes = require('./routes/tables');
-const menuItemsRoutes = require('./routes/menu_items');
+const menuItemsRoutes = require('./routes/menu-items');
 const packagesRoutes = require('./routes/packages');
 const healthRoute = require('./routes/health');
 
@@ -85,7 +85,12 @@ app.use((err, req, res, next) => {
 
 // Function to save port to file
 function savePortToFile(port) {
-  const portFile = path.join(__dirname, 'port.txt');
+  const logsDir = path.join(__dirname, 'logs');
+  // Ensure logs directory exists
+  if (!fs.existsSync(logsDir)) {
+    fs.mkdirSync(logsDir, { recursive: true });
+  }
+  const portFile = path.join(logsDir, 'port.txt');
   try {
     fs.writeFileSync(portFile, port.toString(), 'utf8');
     console.log(`💾 Port saved to ${portFile}`);

@@ -9,7 +9,7 @@ async function getApiPort() {
     return parseInt(envPort, 10);
   }
 
-  // Try to read port from backend's port.txt file (if backend auto-assigned a port)
+  // Try to read port from backend's logs/port.txt file (if backend auto-assigned a port)
   try {
     const portResponse = await fetch('/api/port.txt');
     if (portResponse.ok) {
@@ -94,16 +94,27 @@ async function detectBackendPort() {
   return 3001;
 }
 
-// Get initial port
-let currentPort = getApiPort();
+// Get initial port - use default 3001 immediately, will be updated async
+let currentPort = 3001;
 
 // Create axios instance with base configuration
+// Ensure currentPort has a default value to avoid invalid URL
 const api = axios.create({
   baseURL: `http://localhost:${currentPort}`,
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
+});
+
+// Initialize port asynchronously
+getApiPort().then(port => {
+  if (port && port !== currentPort) {
+    currentPort = port;
+    api.defaults.baseURL = `http://localhost:${port}`;
+  }
+}).catch(() => {
+  // Keep default port 3001
 });
 
 // Function to update the API base URL

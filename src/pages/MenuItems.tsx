@@ -53,7 +53,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { menuItemsAPI, dietaryRestrictionsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
@@ -193,7 +193,7 @@ const MenuItems = () => {
       menu_price: (item.menu_price || 0).toString(),
       menu_type: item.menu_type || '',
       stock: (item.stock || 0).toString(),
-      restriction_id: (item.restriction_id || '').toString()
+      restriction_id: (item.restriction_id ? item.restriction_id.toString() : 'none')
     });
     setEditDialogOpen(true);
   };
@@ -237,7 +237,7 @@ const MenuItems = () => {
         menu_price: parseFloat(formData.menu_price),
         menu_type: formData.menu_type,
         stock: parseInt(formData.stock),
-        restriction_id: formData.restriction_id ? parseInt(formData.restriction_id) : null
+        restriction_id: formData.restriction_id && formData.restriction_id !== 'none' ? parseInt(formData.restriction_id) : null
       };
       
       if (selectedItem) {
@@ -1015,7 +1015,7 @@ const MenuItems = () => {
                       <SelectValue placeholder="Select restriction (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
+                      <SelectItem value="none">None</SelectItem>
                       {dietaryRestrictions.map((restriction: any) => (
                         <SelectItem key={restriction.restriction_id} value={restriction.restriction_id.toString()}>
                           {restriction.restriction_name}

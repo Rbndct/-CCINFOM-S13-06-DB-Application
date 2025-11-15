@@ -53,15 +53,14 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { weddingsAPI, couplesAPI, guestsAPI } from '@/api';
-import { usePrice } from '@/utils/currency';
+import { formatCurrency } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, formatRestrictionsList, getRestrictionCountText } from '@/utils/restrictionUtils';
 
 const Weddings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { convert, format } = usePrice();
   const [weddings, setWeddings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -592,9 +591,9 @@ const Weddings = () => {
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-semibold">{format(convert(wedding.totalCost || wedding.total_cost || 0))}</div>
+                        <div className="font-semibold">{formatCurrency(wedding.totalCost || wedding.total_cost || 0)}</div>
                         <div className="text-sm text-muted-foreground">
-                          Prod: {format(convert(wedding.productionCost || wedding.production_cost || 0))}
+                          Prod: {formatCurrency(wedding.productionCost || wedding.production_cost || 0)}
                         </div>
                       </div>
                     </TableCell>

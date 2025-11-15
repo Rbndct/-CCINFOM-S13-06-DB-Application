@@ -1,6 +1,6 @@
 import { BarChart3, TrendingUp, DollarSign, Users, Calendar } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 
 const Reports = () => {
   return (

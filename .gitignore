@@ -45,7 +45,9 @@ bun-debug.log*
 # ============================================================================
 # Backend runtime files
 # ============================================================================
-backend/port.txt
+backend/logs/
+backend/logs/port.txt
+backend/logs/*.log
 backend/:*
 backend/:*.*
 backend/port_*.txt

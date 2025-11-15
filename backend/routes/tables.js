@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {promisePool} = require('../db');
+const {promisePool} = require('../config/database');
 
 // Helper to get next guest table number for a wedding (format: t-001, t-002, etc.)
 async function getNextGuestTableNumber(weddingId) {

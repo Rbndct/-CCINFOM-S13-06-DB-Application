@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const {promisePool} = require('../db');
+const {promisePool} = require('../config/database');
 
 // GET all guests (optionally filter by wedding_id)
 router.get('/', async (req, res) => {
