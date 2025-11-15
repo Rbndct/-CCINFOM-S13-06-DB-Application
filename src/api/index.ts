@@ -24,60 +24,87 @@ async function getApiPort() {
   return 3001;
 }
 
+// Helper function to validate if a response is from the backend API (JSON, not HTML)
+function isValidBackendResponse(response: any): boolean {
+  if (!response || !response.data) {
+    return false;
+  }
+  
+  // Check if response is HTML (indicates frontend dev server)
+  const contentType = response.headers?.['content-type'] || '';
+  if (contentType.includes('text/html')) {
+    return false;
+  }
+  
+  // Check if data is an object (JSON response)
+  if (typeof response.data === 'object' && response.data !== null) {
+    // Backend endpoints return JSON objects with specific structure
+    // /test returns { message, timestamp, port }
+    // /port returns { port }
+    // /health returns { status, database }
+    return true;
+  }
+  
+  // If data is a string, check if it's HTML
+  if (typeof response.data === 'string') {
+    return !response.data.trim().startsWith('<!doctype html>') && 
+           !response.data.trim().startsWith('<!DOCTYPE html>');
+  }
+  
+  return false;
+}
+
 // Function to detect the backend port by trying to connect
 // This handles auto-assigned ports from the backend (when PORT=0 or port is in
 // use)
 async function detectBackendPort() {
-  const commonPorts = [3001, 3000, 3002, 3067, 8080, 5000];
+  // Prioritize port 3001 (default backend port), exclude 8080 (common Vite dev server port)
+  const commonPorts = [3001, 3000, 3002, 3067, 5000];
   const storedPort = localStorage.getItem('api_port');
 
-  // Try stored port first if available
+  // Try stored port first if available (but validate it's not 8080)
   if (storedPort) {
     const port = parseInt(storedPort, 10);
-    try {
-      // Try /port endpoint first (faster, returns just the port)
-      const portResponse =
-          await axios.get(`http://localhost:${port}/port`, {timeout: 2000});
-      if (portResponse.data && portResponse.data.port) {
-        const detectedPort = portResponse.data.port;
-        localStorage.setItem('api_port', detectedPort.toString());
-        updateApiPort(detectedPort);
-        return detectedPort;
+    // Skip stored port if it's 8080 (likely the frontend dev server)
+    if (port !== 8080) {
+      try {
+        // Try /test endpoint to validate it's the backend
+        const response = await axios.get(`http://localhost:${port}/test`, {
+          timeout: 2000,
+          validateStatus: (status) => status < 500, // Accept 2xx, 3xx, 4xx
+        });
+        
+        if (isValidBackendResponse(response) && response.data && typeof response.data === 'object') {
+          const detectedPort = response.data.port || port;
+          localStorage.setItem('api_port', detectedPort.toString());
+          updateApiPort(detectedPort);
+          return detectedPort;
+        }
+      } catch (e) {
+        // Stored port doesn't work, try others
+        console.warn(`Stored port ${port} is not valid, trying other ports...`);
       }
-      // Fallback to /test endpoint
-      const response =
-          await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
-      if (response.data && response.data.port) {
-        const detectedPort = response.data.port;
-        localStorage.setItem('api_port', detectedPort.toString());
-        updateApiPort(detectedPort);
-        return detectedPort;
-      }
-      return port;
-    } catch (e) {
-      // Stored port doesn't work, try others
+    } else {
+      // Clear invalid stored port (8080)
+      localStorage.removeItem('api_port');
     }
   }
 
   // Try common ports (backend may have auto-assigned a different port)
   for (const port of commonPorts) {
     try {
-      // Try /port endpoint first (faster)
-      const portResponse =
-          await axios.get(`http://localhost:${port}/port`, {timeout: 2000});
-      if (portResponse.data && portResponse.data.port) {
-        const detectedPort = portResponse.data.port;
-        localStorage.setItem('api_port', detectedPort.toString());
-        updateApiPort(detectedPort);
-        return detectedPort;
-      }
-      // Fallback to /test endpoint
-      const response =
-          await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
-      if (response.data) {
+      // Try /test endpoint to validate it's the backend
+      const response = await axios.get(`http://localhost:${port}/test`, {
+        timeout: 2000,
+        validateStatus: (status) => status < 500, // Accept 2xx, 3xx, 4xx
+      });
+      
+      // Validate response is JSON (backend) and not HTML (frontend dev server)
+      if (isValidBackendResponse(response) && response.data && typeof response.data === 'object') {
         const detectedPort = response.data.port || port;
         localStorage.setItem('api_port', detectedPort.toString());
         updateApiPort(detectedPort);
+        console.log(`✅ Detected backend API on port ${detectedPort}`);
         return detectedPort;
       }
     } catch (e) {
@@ -86,6 +113,7 @@ async function detectBackendPort() {
   }
 
   // Return default if nothing works
+  console.warn('⚠️ Could not detect backend port, using default 3001');
   return 3001;
 }
 
@@ -101,12 +129,31 @@ const api = axios.create({
   },
 });
 
+// Clear invalid stored ports (like 8080 which is the frontend dev server)
+function clearInvalidStoredPort() {
+  const storedPort = localStorage.getItem('api_port');
+  if (storedPort) {
+    const port = parseInt(storedPort, 10);
+    // Clear port 8080 (common Vite dev server port)
+    if (port === 8080) {
+      localStorage.removeItem('api_port');
+      console.log('🧹 Cleared invalid stored port 8080 (frontend dev server)');
+    }
+  }
+}
+
 // Initialize port asynchronously
 (async () => {
   try {
+    // Clear any invalid stored ports first
+    clearInvalidStoredPort();
+    
     const port = await getApiPort();
-    if (port && port !== currentPort) {
+    // Don't use port 8080 even if it's in localStorage or env
+    if (port && port !== 8080 && port !== currentPort) {
       updateApiPort(port);
+    } else if (port === 8080) {
+      console.warn('⚠️ Port 8080 detected (frontend dev server), using default 3001 for backend');
     }
   } catch (e) {
     console.warn('Could not get initial API port, using default:', e);
@@ -136,6 +183,24 @@ detectBackendPort()
 // Response interceptor to update port if backend returns it
 api.interceptors.response.use(
     (response) => {
+      // Validate response is from backend (not HTML from frontend dev server)
+      if (!isValidBackendResponse(response)) {
+        console.error('❌ Received HTML response instead of JSON. Wrong port detected!');
+        // Try to detect correct backend port
+        detectBackendPort()
+            .then(port => {
+              if (port !== currentPort) {
+                updateApiPort(port);
+                console.log('🔄 Retrying with correct backend port...');
+              }
+            })
+            .catch(() => {
+              console.error('⚠️ Could not detect correct backend port');
+            });
+        // Reject with a clear error
+        return Promise.reject(new Error('Invalid response: received HTML instead of JSON. Backend may be on wrong port.'));
+      }
+      
       // If the response includes a port, update our stored port
       if (response.data && response.data.port &&
           response.data.port !== currentPort) {
@@ -146,20 +211,41 @@ api.interceptors.response.use(
     (error) => {
       // Handle errors globally
       if (error.response) {
+        // Check if error response is HTML (wrong port)
+        const contentType = error.response.headers?.['content-type'] || '';
+        if (contentType.includes('text/html')) {
+          console.error('❌ Backend API error: Received HTML response. Wrong port detected!');
+          // Try to detect correct backend port
+          detectBackendPort()
+              .then(port => {
+                if (port !== currentPort) {
+                  updateApiPort(port);
+                  console.log('🔄 Retrying with correct backend port...');
+                }
+              })
+              .catch(() => {
+                console.error('⚠️ Could not detect correct backend port');
+              });
+          return Promise.reject(new Error('Backend API not found. Received HTML instead of JSON.'));
+        }
         console.error('API Error:', error.response.data);
       } else if (error.request) {
         // Network error - might be wrong port, try to detect
-        console.error('Network Error:', error.message);
-        detectBackendPort()
-            .then(port => {
-              if (port !== currentPort) {
-                updateApiPort(port);
-              }
-            })
-            .catch(
-                () => {
-                    // Could not detect, keep current port
-                });
+        console.warn('⚠️ Network Error:', error.message);
+        // Only try to detect port if we're not already on the default
+        if (currentPort !== 3001) {
+          detectBackendPort()
+              .then(port => {
+                if (port !== currentPort) {
+                  updateApiPort(port);
+                  console.log('🔄 Detected different backend port, retrying...');
+                }
+              })
+              .catch(() => {
+                // Could not detect, keep current port
+                console.warn('⚠️ Could not detect backend port, keeping current port');
+              });
+        }
       } else {
         console.error('Error:', error.message);
       }
