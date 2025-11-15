@@ -1,7 +1,8 @@
 import axios from 'axios';
 
 // Function to get the API port
-// Priority: 1. VITE_API_PORT env var, 2. port.txt file (backend auto-assigned), 3. localStorage, 4. default 3001
+// Priority: 1. VITE_API_PORT env var, 2. port.txt file (backend
+// auto-assigned), 3. localStorage, 4. default 3001
 async function getApiPort() {
   // Check environment variable (Vite uses import.meta.env)
   const envPort = import.meta.env.VITE_API_PORT;
@@ -9,20 +10,9 @@ async function getApiPort() {
     return parseInt(envPort, 10);
   }
 
-  // Try to read port from backend's port.txt file (if backend auto-assigned a port)
-  try {
-    const portResponse = await fetch('/api/port.txt');
-    if (portResponse.ok) {
-      const portText = await portResponse.text();
-      const port = parseInt(portText.trim(), 10);
-      if (!isNaN(port) && port > 0) {
-        localStorage.setItem('api_port', port.toString());
-        return port;
-      }
-    }
-  } catch (e) {
-    // Ignore errors reading port file
-  }
+  // Try to read port from backend's logs/port.txt file (if backend
+  // auto-assigned a port) Note: This requires backend to serve the file, which
+  // may not be available We'll rely on detectBackendPort() instead
 
   // Check localStorage for previously detected port
   const storedPort = localStorage.getItem('api_port');
@@ -35,7 +25,8 @@ async function getApiPort() {
 }
 
 // Function to detect the backend port by trying to connect
-// This handles auto-assigned ports from the backend (when PORT=0 or port is in use)
+// This handles auto-assigned ports from the backend (when PORT=0 or port is in
+// use)
 async function detectBackendPort() {
   const commonPorts = [3001, 3000, 3002, 3067, 8080, 5000];
   const storedPort = localStorage.getItem('api_port');
@@ -45,7 +36,8 @@ async function detectBackendPort() {
     const port = parseInt(storedPort, 10);
     try {
       // Try /port endpoint first (faster, returns just the port)
-      const portResponse = await axios.get(`http://localhost:${port}/port`, {timeout: 2000});
+      const portResponse =
+          await axios.get(`http://localhost:${port}/port`, {timeout: 2000});
       if (portResponse.data && portResponse.data.port) {
         const detectedPort = portResponse.data.port;
         localStorage.setItem('api_port', detectedPort.toString());
@@ -53,7 +45,8 @@ async function detectBackendPort() {
         return detectedPort;
       }
       // Fallback to /test endpoint
-      const response = await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
+      const response =
+          await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
       if (response.data && response.data.port) {
         const detectedPort = response.data.port;
         localStorage.setItem('api_port', detectedPort.toString());
@@ -70,7 +63,8 @@ async function detectBackendPort() {
   for (const port of commonPorts) {
     try {
       // Try /port endpoint first (faster)
-      const portResponse = await axios.get(`http://localhost:${port}/port`, {timeout: 2000});
+      const portResponse =
+          await axios.get(`http://localhost:${port}/port`, {timeout: 2000});
       if (portResponse.data && portResponse.data.port) {
         const detectedPort = portResponse.data.port;
         localStorage.setItem('api_port', detectedPort.toString());
@@ -78,7 +72,8 @@ async function detectBackendPort() {
         return detectedPort;
       }
       // Fallback to /test endpoint
-      const response = await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
+      const response =
+          await axios.get(`http://localhost:${port}/test`, {timeout: 2000});
       if (response.data) {
         const detectedPort = response.data.port || port;
         localStorage.setItem('api_port', detectedPort.toString());
@@ -94,8 +89,8 @@ async function detectBackendPort() {
   return 3001;
 }
 
-// Get initial port
-let currentPort = getApiPort();
+// Get initial port (default to 3001, will be updated async)
+let currentPort = 3001;
 
 // Create axios instance with base configuration
 const api = axios.create({
@@ -105,6 +100,18 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
 });
+
+// Initialize port asynchronously
+(async () => {
+  try {
+    const port = await getApiPort();
+    if (port && port !== currentPort) {
+      updateApiPort(port);
+    }
+  } catch (e) {
+    console.warn('Could not get initial API port, using default:', e);
+  }
+})();
 
 // Function to update the API base URL
 export function updateApiPort(port) {
@@ -178,7 +185,8 @@ api.interceptors.request.use(
 export const guestsAPI = {
   getAll: (params) => api.get('/guests', {params}),
   getById: (id) => api.get(`/guests/${id}`),
-  getByWedding: (weddingId) => api.get('/guests', {params: {wedding_id: weddingId}}),
+  getByWedding: (weddingId) =>
+      api.get('/guests', {params: {wedding_id: weddingId}}),
   create: (data) => api.post('/guests', data),
   update: (id, data) => api.put(`/guests/${id}`, data),
   delete: (id) => api.delete(`/guests/${id}`),
@@ -222,8 +230,8 @@ export const tablesAPI = {
   getSeating: (weddingId) => api.get(`/tables/seating/${weddingId}`),
   createCoupleTable: (weddingId, data = {}) =>
       api.post(`/tables/seating/${weddingId}/couple`, data),
-  createGuestTable: (weddingId, capacity, table_category = 'guest') =>
-      api.post(`/tables/seating/${weddingId}/guest`, {capacity, table_category}),
+  createGuestTable: (weddingId, capacity, table_category = 'guest') => api.post(
+      `/tables/seating/${weddingId}/guest`, {capacity, table_category}),
   assignGuests: (weddingId, tableId, guestIds) => api.post(
       `/tables/seating/${weddingId}/guest/${tableId}/assign`,
       {guest_ids: guestIds}),
@@ -246,8 +254,18 @@ export const packagesAPI = {
   update: (id, data) => api.put(`/packages/${id}`, data),
   delete: (id) => api.delete(`/packages/${id}`),
   assignToTable: (data) => api.post('/packages/assign', data),
-  removeFromTable: (tableId, packageId) => api.delete(`/packages/assign/${tableId}/${packageId}`),
-  getTableAssignments: (weddingId) => api.get(`/packages/wedding/${weddingId}/assignments`),
+  removeFromTable: (tableId, packageId) =>
+      api.delete(`/packages/assign/${tableId}/${packageId}`),
+  getTableAssignments: (weddingId) =>
+      api.get(`/packages/wedding/${weddingId}/assignments`),
+};
+
+export const inventoryAPI = {
+  getAll: (params) => api.get('/inventory', {params}),
+  getById: (id) => api.get(`/inventory/${id}`),
+  create: (data) => api.post('/inventory', data),
+  update: (id, data) => api.put(`/inventory/${id}`, data),
+  delete: (id) => api.delete(`/inventory/${id}`),
 };
 
 export default api;

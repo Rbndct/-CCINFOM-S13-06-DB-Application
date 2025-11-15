@@ -26,7 +26,7 @@ cd <YOUR_PROJECT_NAME>
 ### 2. Database Setup
 
 1. Make sure MySQL is running
-2. Update database credentials in `backend/.env` (see `ENV_SETUP.md` for details)
+2. Update database credentials in `backend/.env` (see `docs/ENV_SETUP.md` for details)
 3. Run the database setup script:
 
 ```sh
@@ -125,7 +125,7 @@ npm run dev
 
 ## Environment Setup
 
-See `ENV_SETUP.md` for detailed environment variable configuration.
+See `docs/ENV_SETUP.md` for detailed environment variable configuration.
 
 ## Development Workflow
 
@@ -215,8 +215,9 @@ ls node_modules/.bin/concurrently
 
 ## Additional Documentation
 
-- `ENV_SETUP.md` - Environment variable configuration
-- `PROJECT_SETUP.md` - Detailed project setup instructions
+- `docs/ENV_SETUP.md` - Environment variable configuration
+- `docs/PROJECT_SETUP.md` - Detailed project setup instructions
+- `docs/REORGANIZATION_SUMMARY.md` - Codebase reorganization summary
 - `backend/README.md` - Backend-specific documentation
 
 ## Contributing

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
@@ -15,7 +15,9 @@ import {
   Loader2,
   Clock,
   Utensils,
-  AlertTriangle
+  AlertTriangle,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,15 +55,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { weddingsAPI, couplesAPI, guestsAPI } from '@/api';
-import { usePrice } from '@/utils/currency';
+import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, formatRestrictionsList, getRestrictionCountText } from '@/utils/restrictionUtils';
 
 const Weddings = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { convert, format } = usePrice();
+  const { formatCurrency } = useCurrencyFormat();
   const [weddings, setWeddings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
@@ -75,6 +77,8 @@ const Weddings = () => {
   const [couples, setCouples] = useState([]);
   const [loading, setLoading] = useState(false);
   const [totalGuests, setTotalGuests] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // Refs for date/time inputs
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -198,12 +202,25 @@ const Weddings = () => {
     }
   };
 
-  const filteredWeddings = weddings.filter(wedding => {
-    const matchesSearch = wedding.couple.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         wedding.venue.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterStatus === 'all' || wedding.paymentStatus === filterStatus;
-    return matchesSearch && matchesFilter;
-  });
+  const filteredWeddings = useMemo(() => {
+    return weddings.filter(wedding => {
+      const matchesSearch = wedding.couple.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           wedding.venue.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesFilter = filterStatus === 'all' || wedding.paymentStatus === filterStatus;
+      return matchesSearch && matchesFilter;
+    });
+  }, [weddings, searchTerm, filterStatus]);
+
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredWeddings.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedWeddings = filteredWeddings.slice(startIndex, endIndex);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterStatus]);
 
   // Validation function
   const validateForm = () => {
@@ -335,6 +352,20 @@ const Weddings = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{weddings.length}</div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {(() => {
+                  const currentYear = new Date().getFullYear();
+                  const thisYearWeddings = weddings.filter((w: any) => {
+                    const weddingDate = w.wedding_date || w.weddingDate;
+                    if (!weddingDate) return false;
+                    const date = new Date(weddingDate);
+                    return date.getFullYear() === currentYear;
+                  }).length;
+                  return thisYearWeddings > 0 
+                    ? `${thisYearWeddings} scheduled for ${currentYear}`
+                    : 'All weddings in system';
+                })()}
+              </p>
             </CardContent>
           </Card>
           
@@ -347,6 +378,11 @@ const Weddings = () => {
               <div className="text-2xl font-bold">
                 {totalGuests}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {totalGuests > 0 
+                  ? `Attending across ${weddings.length} ${weddings.length === 1 ? 'wedding' : 'weddings'}`
+                  : 'No guests registered yet'}
+              </p>
             </CardContent>
           </Card>
           
@@ -395,7 +431,7 @@ const Weddings = () => {
         {/* Filters and Search */}
         <Card>
           <CardHeader>
-            <CardTitle>Wedding List</CardTitle>
+            <CardTitle>Wedding Directory</CardTitle>
             <CardDescription>
               View and manage all wedding bookings
             </CardDescription>
@@ -491,7 +527,7 @@ const Weddings = () => {
                   <TableHead>Date & Time</TableHead>
                   <TableHead>Venue</TableHead>
                   <TableHead>Type & Restrictions</TableHead>
-                  <TableHead>Guest #</TableHead>
+                  <TableHead># of Guests</TableHead>
                   <TableHead>Total Cost</TableHead>
                   <TableHead>Payment Status</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
@@ -505,7 +541,7 @@ const Weddings = () => {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredWeddings.map((wedding) => (
+                  paginatedWeddings.map((wedding) => (
                   <TableRow 
                     key={wedding.id || wedding.wedding_id}
                     className="cursor-pointer hover:bg-muted/50"
@@ -592,9 +628,9 @@ const Weddings = () => {
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-semibold">{format(convert(wedding.totalCost || wedding.total_cost || 0))}</div>
+                        <div className="font-semibold">{formatCurrency(wedding.totalCost || wedding.total_cost || 0)}</div>
                         <div className="text-sm text-muted-foreground">
-                          Prod: {format(convert(wedding.productionCost || wedding.production_cost || 0))}
+                          Prod: {formatCurrency(wedding.productionCost || wedding.production_cost || 0)}
                         </div>
                       </div>
                     </TableCell>
@@ -637,6 +673,60 @@ const Weddings = () => {
                 )}
               </TableBody>
             </Table>
+            
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-4">
+                <div className="text-sm text-muted-foreground">
+                  Showing {startIndex + 1} to {Math.min(endIndex, filteredWeddings.length)} of {filteredWeddings.length} weddings
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                          className="w-8 h-8 p-0"
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { guestsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
-import Navigation from '@/components/Navigation';
+import Navigation from '@/components/navigation/Navigation';
 
 type Guest = {
   id: number;

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -13,7 +13,9 @@ import {
   Users,
   Lock,
   ArrowUpDown,
-  X
+  X,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,13 +52,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { packagesAPI, menuItemsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
-import { formatCurrency } from '@/utils/currency';
+import { useCurrencyFormat } from '@/utils/currency';
 
 const Packages = () => {
+  const { formatCurrency } = useCurrencyFormat();
   const [activeTab, setActiveTab] = useState('templates');
   const [packages, setPackages] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,6 +67,9 @@ const Packages = () => {
   const [sortBy, setSortBy] = useState<'name' | 'type' | 'price' | 'usage'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [showFilters, setShowFilters] = useState(false);
   const { toast } = useToast();
   
   // Dialog states
@@ -87,11 +93,10 @@ const Packages = () => {
   useEffect(() => {
     const fetchMenuItems = async () => {
       try {
-        const response = await menuItemsAPI.getAll();
-        if (response && response.success && response.data) {
-          setAvailableMenuItems(response.data || []);
-        } else if (response && response.data) {
-          setAvailableMenuItems(response.data || []);
+        const response = await menuItemsAPI.getAll({});
+        if (response && response.data) {
+          const data = response.data.success ? response.data.data : response.data;
+          setAvailableMenuItems(Array.isArray(data) ? data : []);
         }
       } catch (error) {
         console.error('Error fetching menu items:', error);
@@ -105,10 +110,14 @@ const Packages = () => {
     const fetchPackages = async () => {
       try {
         setLoading(true);
-        const response = await packagesAPI.getAll();
-        if (response && response.success && response.data) {
+        const response = await packagesAPI.getAll({});
+        if (response && response.data) {
+          // Handle both wrapped and direct response formats
+          const data = response.data.success ? response.data.data : response.data;
+          const packagesArray = Array.isArray(data) ? data : [];
+          
           // Transform data to match UI expectations
-          const packagesData = response.data.map((pkg: any) => ({
+          const packagesData = packagesArray.map((pkg: any) => ({
             id: pkg.package_id,
             package_id: pkg.package_id,
             package_name: pkg.package_name,
@@ -118,19 +127,6 @@ const Packages = () => {
             total_items: pkg.total_items || (pkg.menu_items ? pkg.menu_items.length : 0),
             usage_count: pkg.usage_count || 0,
             is_template: true // All packages are templates (shared across weddings)
-          }));
-          setPackages(packagesData);
-        } else if (response && response.data) {
-          const packagesData = response.data.map((pkg: any) => ({
-            id: pkg.package_id,
-            package_id: pkg.package_id,
-            package_name: pkg.package_name,
-            package_type: pkg.package_type,
-            package_price: parseFloat(pkg.package_price) || 0,
-            menu_items: pkg.menu_items || [],
-            total_items: pkg.total_items || (pkg.menu_items ? pkg.menu_items.length : 0),
-            usage_count: pkg.usage_count || 0,
-            is_template: true
           }));
           setPackages(packagesData);
         } else {
@@ -219,9 +215,11 @@ const Packages = () => {
       }
       
       // Refresh packages
-      const response = await packagesAPI.getAll();
-      if (response && response.success && response.data) {
-        const packagesData = response.data.map((pkg: any) => ({
+      const response = await packagesAPI.getAll({});
+      if (response && response.data) {
+        const data = response.data.success ? response.data.data : response.data;
+        const packagesArray = Array.isArray(data) ? data : [];
+        const packagesData = packagesArray.map((pkg: any) => ({
           id: pkg.package_id,
           package_id: pkg.package_id,
           package_name: pkg.package_name,
@@ -256,9 +254,11 @@ const Packages = () => {
       setDeleteDialogOpen(false);
       
       // Refresh packages
-      const response = await packagesAPI.getAll();
-      if (response && response.success && response.data) {
-        const packagesData = response.data.map((pkg: any) => ({
+      const response = await packagesAPI.getAll({});
+      if (response && response.data) {
+        const data = response.data.success ? response.data.data : response.data;
+        const packagesArray = Array.isArray(data) ? data : [];
+        const packagesData = packagesArray.map((pkg: any) => ({
           id: pkg.package_id,
           package_id: pkg.package_id,
           package_name: pkg.package_name,
@@ -288,6 +288,7 @@ const Packages = () => {
     setFilterType('all');
     setSortBy('name');
     setSortOrder('asc');
+    setCurrentPage(1);
   };
 
   const getTypeBadge = (type: string) => {
@@ -300,15 +301,21 @@ const Packages = () => {
     return <Badge className={colors[type] || 'bg-gray-100 text-gray-800'}>{type}</Badge>;
   };
 
-  // Filter and sort packages
-  const filteredAndSortedPackages = packages
-    .filter(pkg => {
-      const matchesSearch = pkg.package_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           pkg.package_type?.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterType === 'all' || pkg.package_type === filterType;
-      return matchesSearch && matchesFilter;
-    })
-    .sort((a, b) => {
+  const templatePackages = packages.filter(pkg => pkg.is_template);
+  const weddingPackages = packages.filter(pkg => !pkg.is_template);
+
+  const currentPackages = activeTab === 'templates' ? templatePackages : weddingPackages;
+
+  // Filter and sort packages (only for current tab)
+  const filteredAndSortedPackages = useMemo(() => {
+    return currentPackages
+      .filter(pkg => {
+        const matchesSearch = pkg.package_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                             pkg.package_type?.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesFilter = filterType === 'all' || pkg.package_type === filterType;
+        return matchesSearch && matchesFilter;
+      })
+      .sort((a, b) => {
       let aVal: any, bVal: any;
       switch (sortBy) {
         case 'name':
@@ -339,11 +346,18 @@ const Packages = () => {
         return sortOrder === 'asc' ? aVal - bVal : bVal - aVal;
       }
     });
+  }, [currentPackages, searchTerm, filterType, sortBy, sortOrder]);
 
-  const templatePackages = packages.filter(pkg => pkg.is_template);
-  const weddingPackages = packages.filter(pkg => !pkg.is_template);
+  // Pagination calculations
+  const totalPages = Math.ceil(filteredAndSortedPackages.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedPackages = filteredAndSortedPackages.slice(startIndex, endIndex);
 
-  const currentPackages = activeTab === 'templates' ? templatePackages : weddingPackages;
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType, sortBy, sortOrder, activeTab]);
   
   // Updated statistics - more relevant to packages
   const totalPackages = currentPackages.length;
@@ -359,7 +373,7 @@ const Packages = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Packages</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Packages Overview</h1>
             <p className="text-muted-foreground">
               Manage wedding packages and pricing
             </p>
@@ -420,7 +434,7 @@ const Packages = () => {
         {/* Packages List with Tabs */}
         <Card>
           <CardHeader>
-            <CardTitle>Wedding Packages</CardTitle>
+            <CardTitle>Packages Directory</CardTitle>
             <CardDescription>
               {activeTab === 'templates' 
                 ? 'Template library - Default packages available to all weddings'
@@ -451,11 +465,54 @@ const Packages = () => {
                       className="pl-8"
                     />
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
                     <Filter className="w-4 h-4 mr-2" />
-                    Filter
+                    Filters
+                  </Button>
+                  <Button variant="outline" onClick={handleResetFilters}>
+                    Reset Filters
                   </Button>
                 </div>
+                
+                {showFilters && (
+                  <div className="grid md:grid-cols-4 gap-3 mb-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Type</label>
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="Full Service">Full Service</SelectItem>
+                          <SelectItem value="Basic">Basic</SelectItem>
+                          <SelectItem value="Premium">Premium</SelectItem>
+                          <SelectItem value="Specialty">Specialty</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Sort By</label>
+                      <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="type">Type</SelectItem>
+                          <SelectItem value="price">Price</SelectItem>
+                          <SelectItem value="usage">Usage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Order</label>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      >
+                        <ArrowUpDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <Table>
                   <TableHeader>
@@ -477,24 +534,24 @@ const Packages = () => {
                           <p className="text-sm text-muted-foreground mt-2">Loading packages...</p>
                         </TableCell>
                       </TableRow>
-                    ) : filteredPackages.length === 0 ? (
+                    ) : filteredAndSortedPackages.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8">
                           <p className="text-sm text-muted-foreground">No packages found</p>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredPackages.map((pkg) => (
+                      paginatedPackages.map((pkg) => (
                         <TableRow key={pkg.id || pkg.package_id} className={pkg.is_template ? 'bg-muted/30' : ''}>
                           <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                                 <Package className="h-4 w-4 text-primary" />
                               </div>
-                              <div className="flex items-center gap-2">
-                                {pkg.package_name}
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="truncate">{pkg.package_name}</span>
                                 {pkg.is_template && (
-                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 flex-shrink-0">
                                     <Lock className="w-3 h-3 mr-1" />
                                     Template
                                   </Badge>
@@ -507,7 +564,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">
-                              ${(pkg.package_price || 0).toLocaleString()}
+                              {formatCurrency(pkg.package_price || 0)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -530,7 +587,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium text-green-600">
-                              ${((pkg.package_price || 0) * (pkg.usage_count || 0)).toLocaleString()}
+                              {formatCurrency((pkg.package_price || 0) * (pkg.usage_count || 0))}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -561,6 +618,60 @@ const Packages = () => {
                     )}
                   </TableBody>
                 </Table>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredAndSortedPackages.length)} of {filteredAndSortedPackages.length} packages
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
 
               <TabsContent value="wedding-specific" className="space-y-4">
@@ -568,17 +679,60 @@ const Packages = () => {
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                     <Input
-                      placeholder="Search wedding packages..."
+                      placeholder="Search packages..."
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className="pl-8"
                     />
                   </div>
-                  <Button variant="outline">
+                  <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
                     <Filter className="w-4 h-4 mr-2" />
-                    Filter
+                    Filters
+                  </Button>
+                  <Button variant="outline" onClick={handleResetFilters}>
+                    Reset Filters
                   </Button>
                 </div>
+                
+                {showFilters && (
+                  <div className="grid md:grid-cols-4 gap-3 mb-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Type</label>
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          <SelectItem value="Full Service">Full Service</SelectItem>
+                          <SelectItem value="Basic">Basic</SelectItem>
+                          <SelectItem value="Premium">Premium</SelectItem>
+                          <SelectItem value="Specialty">Specialty</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Sort By</label>
+                      <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
+                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="type">Type</SelectItem>
+                          <SelectItem value="price">Price</SelectItem>
+                          <SelectItem value="usage">Usage</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Order</label>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      >
+                        <ArrowUpDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
 
                 <Table>
                   <TableHeader>
@@ -600,14 +754,14 @@ const Packages = () => {
                           <p className="text-sm text-muted-foreground mt-2">Loading packages...</p>
                         </TableCell>
                       </TableRow>
-                    ) : filteredPackages.length === 0 ? (
+                    ) : filteredAndSortedPackages.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={7} className="text-center py-8">
                           <p className="text-sm text-muted-foreground">No packages found</p>
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredPackages.map((pkg) => (
+                      paginatedPackages.map((pkg) => (
                         <TableRow key={pkg.id || pkg.package_id}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
@@ -622,7 +776,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">
-                              ${(pkg.package_price || 0).toLocaleString()}
+                              {formatCurrency(pkg.package_price || 0)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -670,6 +824,60 @@ const Packages = () => {
                     )}
                   </TableBody>
                 </Table>
+                
+                {/* Pagination */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between mt-4">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {startIndex + 1} to {Math.min(endIndex, filteredAndSortedPackages.length)} of {filteredAndSortedPackages.length} packages
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="h-4 w-4 mr-1" />
+                        Previous
+                      </Button>
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum;
+                          if (totalPages <= 5) {
+                            pageNum = i + 1;
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1;
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i;
+                          } else {
+                            pageNum = currentPage - 2 + i;
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          );
+                        })}
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                        disabled={currentPage === totalPages}
+                      >
+                        Next
+                        <ChevronRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
               </TabsContent>
             </Tabs>
           </CardContent>

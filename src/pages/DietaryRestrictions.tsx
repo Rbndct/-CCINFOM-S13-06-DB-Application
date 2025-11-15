@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -14,7 +14,9 @@ import {
   X,
   Loader2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -59,7 +61,7 @@ import {
 } from '@/components/ui/tooltip';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { dietaryRestrictionsAPI } from '@/api';
 import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
 
@@ -96,6 +98,9 @@ const DietaryRestrictions = () => {
   const [sortBy, setSortBy] = useState<'name' | 'severity' | 'type' | 'guests' | 'menu'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [groupBy, setGroupBy] = useState<'none' | 'type' | 'severity'>('none');
+  const [showFilters, setShowFilters] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   
   // Dialog states
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -113,6 +118,11 @@ const DietaryRestrictions = () => {
   useEffect(() => {
     fetchRestrictions();
   }, []);
+
+  // Reset to page 1 when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, filterType, filterSeverity, sortBy, sortOrder, groupBy]);
 
   const fetchRestrictions = async () => {
     try {
@@ -344,7 +354,7 @@ const DietaryRestrictions = () => {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Dietary Restrictions</h1>
+              <h1 className="text-3xl font-bold tracking-tight">Dietary Restrictions Overview</h1>
               <p className="text-muted-foreground">
                 Manage dietary restrictions and special requirements with visual indicators
               </p>
@@ -403,90 +413,13 @@ const DietaryRestrictions = () => {
             </Card>
           </div>
 
-          {/* Filters and Controls */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Filters & Controls</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap items-center gap-4">
-                <div className="relative flex-1 min-w-[200px]">
-                  <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Search restrictions..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-8"
-                  />
-                </div>
-                
-                <Select value={filterType} onValueChange={setFilterType}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Filter by type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    {uniqueTypes.map(type => (
-                      <SelectItem key={type} value={type}>{type}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-
-                <Select value={filterSeverity} onValueChange={setFilterSeverity}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Filter by severity" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Severities</SelectItem>
-                    <SelectItem value="Critical">Critical</SelectItem>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Moderate">Moderate</SelectItem>
-                    <SelectItem value="Low">Low</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="name">Name</SelectItem>
-                    <SelectItem value="severity">Severity</SelectItem>
-                    <SelectItem value="type">Type</SelectItem>
-                    <SelectItem value="guests">Affected Guests</SelectItem>
-                    <SelectItem value="menu">Menu Items</SelectItem>
-                  </SelectContent>
-                </Select>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                >
-                  {sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                </Button>
-
-                <Select value={groupBy} onValueChange={(v: any) => setGroupBy(v)}>
-                  <SelectTrigger className="w-[150px]">
-                    <SelectValue placeholder="Group by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">No Grouping</SelectItem>
-                    <SelectItem value="type">Group by Type</SelectItem>
-                    <SelectItem value="severity">Group by Severity</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardContent>
-          </Card>
-
           {/* Restrictions List */}
           <div className="space-y-6">
             {Object.entries(groupedRestrictions).map(([groupName, groupRestrictions]) => (
               <Card key={groupName}>
                 <CardHeader>
                   <CardTitle>
-                    {groupBy === 'none' ? 'All Restrictions' : `${groupName} (${groupRestrictions.length})`}
+                    {groupBy === 'none' ? 'Restrictions Directory' : `${groupName} (${groupRestrictions.length})`}
                   </CardTitle>
                   <CardDescription>
                     {groupBy === 'none' 
@@ -496,26 +429,132 @@ const DietaryRestrictions = () => {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  {groupRestrictions.length === 0 ? (
-                    <div className="text-center py-8 text-muted-foreground">
-                      No restrictions found matching your filters
+                  {/* Filters and Controls - Integrated */}
+                  <div className="flex items-center space-x-2 mb-4">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Search restrictions..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-8"
+                      />
                     </div>
-                  ) : (
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Restriction Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Severity Level</TableHead>
-                          <TableHead>Affected Guests</TableHead>
-                          <TableHead>Menu Items</TableHead>
-                          <TableHead>Couple Preferences</TableHead>
-                          <TableHead>Priority</TableHead>
-                          <TableHead className="w-[50px]"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {groupRestrictions.map((restriction) => (
+                    <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
+                      <Filter className="w-4 h-4 mr-2" />
+                      Filters
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => {
+                        setSearchTerm('');
+                        setFilterType('all');
+                        setFilterSeverity('all');
+                        setSortBy('name');
+                        setSortOrder('asc');
+                        setGroupBy('none');
+                        setCurrentPage(1);
+                      }}
+                    >
+                      Reset Filters
+                    </Button>
+                  </div>
+
+                  {/* Expanded Filters */}
+                  {showFilters && (
+                  <div className="grid md:grid-cols-5 gap-3 mb-4">
+                    <div>
+                      <label className="text-sm text-muted-foreground">Type</label>
+                      <Select value={filterType} onValueChange={setFilterType}>
+                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Types</SelectItem>
+                          {uniqueTypes.map(type => (
+                            <SelectItem key={type} value={type}>{type}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Severity</label>
+                      <Select value={filterSeverity} onValueChange={setFilterSeverity}>
+                        <SelectTrigger><SelectValue placeholder="All Severities" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">All Severities</SelectItem>
+                          <SelectItem value="Critical">Critical</SelectItem>
+                          <SelectItem value="High">High</SelectItem>
+                          <SelectItem value="Moderate">Moderate</SelectItem>
+                          <SelectItem value="Low">Low</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Sort By</label>
+                      <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="name">Name</SelectItem>
+                          <SelectItem value="severity">Severity</SelectItem>
+                          <SelectItem value="type">Type</SelectItem>
+                          <SelectItem value="guests">Affected Guests</SelectItem>
+                          <SelectItem value="menu">Menu Items</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Order</label>
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
+                      >
+                        {sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    <div>
+                      <label className="text-sm text-muted-foreground">Group By</label>
+                      <Select value={groupBy} onValueChange={(v: any) => setGroupBy(v)}>
+                        <SelectTrigger><SelectValue placeholder="No Grouping" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">No Grouping</SelectItem>
+                          <SelectItem value="type">Group by Type</SelectItem>
+                          <SelectItem value="severity">Group by Severity</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  )}
+                  
+                  {/* Pagination calculations */}
+                  {(() => {
+                    const totalPages = Math.ceil(groupRestrictions.length / itemsPerPage);
+                    const startIndex = (currentPage - 1) * itemsPerPage;
+                    const endIndex = startIndex + itemsPerPage;
+                    const paginatedRestrictions = groupRestrictions.slice(startIndex, endIndex);
+                    
+                    return (
+                      <>
+                        {groupRestrictions.length === 0 ? (
+                          <div className="text-center py-8 text-muted-foreground">
+                            No restrictions found matching your filters
+                          </div>
+                        ) : (
+                          <>
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Restriction Name</TableHead>
+                                  <TableHead>Type</TableHead>
+                                  <TableHead>Severity Level</TableHead>
+                                  <TableHead>Affected Guests</TableHead>
+                                  <TableHead>Menu Items</TableHead>
+                                  <TableHead>Couple Preferences</TableHead>
+                                  <TableHead>Priority</TableHead>
+                                  <TableHead className="w-[50px]"></TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {paginatedRestrictions.map((restriction) => (
                           <TableRow key={restriction.restriction_id}>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
@@ -604,9 +643,67 @@ const DietaryRestrictions = () => {
                             </TableCell>
                           </TableRow>
                         ))}
-                      </TableBody>
-                    </Table>
-                  )}
+                              </TableBody>
+                            </Table>
+                            
+                            {/* Pagination */}
+                            {totalPages > 1 && (
+                              <div className="flex items-center justify-between mt-4">
+                                <div className="text-sm text-muted-foreground">
+                                  Showing {startIndex + 1} to {Math.min(endIndex, groupRestrictions.length)} of {groupRestrictions.length} restrictions
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                                    disabled={currentPage === 1}
+                                  >
+                                    <ChevronLeft className="h-4 w-4 mr-1" />
+                                    Previous
+                                  </Button>
+                                  <div className="flex items-center gap-1">
+                                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                                      let pageNum;
+                                      if (totalPages <= 5) {
+                                        pageNum = i + 1;
+                                      } else if (currentPage <= 3) {
+                                        pageNum = i + 1;
+                                      } else if (currentPage >= totalPages - 2) {
+                                        pageNum = totalPages - 4 + i;
+                                      } else {
+                                        pageNum = currentPage - 2 + i;
+                                      }
+                                      return (
+                                        <Button
+                                          key={pageNum}
+                                          variant={currentPage === pageNum ? "default" : "outline"}
+                                          size="sm"
+                                          onClick={() => setCurrentPage(pageNum)}
+                                          className="w-8 h-8 p-0"
+                                        >
+                                          {pageNum}
+                                        </Button>
+                                      );
+                                    })}
+                                  </div>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                                    disabled={currentPage === totalPages}
+                                  >
+                                    Next
+                                    <ChevronRight className="h-4 w-4 ml-1" />
+                                  </Button>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </>
+                    );
+                  })()}
                 </CardContent>
               </Card>
             ))}

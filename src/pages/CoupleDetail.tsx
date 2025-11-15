@@ -37,9 +37,9 @@ import {
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
-import { usePrice } from '@/utils/currency';
+import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
 
 type Couple = {
@@ -105,7 +105,7 @@ const CoupleDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { toast } = useToast();
-  const { format, convert } = usePrice();
+  const { formatCurrency } = useCurrencyFormat();
   const [couple, setCouple] = useState<Couple | null>(null);
   const [weddings, setWeddings] = useState<Wedding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -608,20 +608,25 @@ const CoupleDetail = () => {
                           )}
                         </div>
                         {restrictions.length > 0 ? (
-                          <div className="flex flex-wrap gap-2 mt-2">
-                            {restrictions.map((restriction) => (
-                              <Badge 
-                                key={restriction.restriction_id} 
-                                className={`${getTypeColor(restriction.restriction_type || '')} border flex items-center gap-1`}
-                              >
-                                {getTypeIcon(restriction.restriction_type || '')}
-                                <span>{restriction.restriction_name}</span>
-                                <span className="text-xs font-mono">(ID: {restriction.restriction_id})</span>
-                                {restriction.severity_level && (
-                                  <span className="text-xs ml-1">- {restriction.severity_level}</span>
-                                )}
-                              </Badge>
-                            ))}
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {restrictions.map((restriction) => {
+                              const restrictionName = restriction.restriction_name || '';
+                              const restrictionType = restriction.restriction_type || '';
+                              const restrictionId = restriction.restriction_id;
+                              return (
+                                <Badge 
+                                  key={restrictionId} 
+                                  variant="outline"
+                                  className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                >
+                                  {getTypeIcon(restrictionType)}
+                                  {restrictionName}
+                                  {restriction.severity_level && (
+                                    <span className="text-xs ml-1">- {restriction.severity_level}</span>
+                                  )}
+                                </Badge>
+                              );
+                            })}
                           </div>
                         ) : (
                           <span className="text-sm text-muted-foreground">No dietary restrictions</span>
@@ -699,7 +704,7 @@ const CoupleDetail = () => {
                         <span>{wedding.guestCount} guests</span>
                       </div>
                       <div className="text-sm font-semibold">
-                        {format(convert(wedding.totalCost || 0))}
+                        {formatCurrency(wedding.totalCost || 0)}
                       </div>
                       {wedding.ceremony_type && (
                         <div className="mt-2">

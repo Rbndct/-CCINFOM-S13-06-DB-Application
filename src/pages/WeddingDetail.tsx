@@ -64,7 +64,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
-import DashboardLayout from '@/components/DashboardLayout';
+import DashboardLayout from '@/components/layout/DashboardLayout';
 import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, menuItemsAPI, packagesAPI } from '@/api';
 import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
 
@@ -2258,7 +2258,7 @@ const WeddingDetail = () => {
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle>Guest List</CardTitle>
+                    <CardTitle>Guest Directory</CardTitle>
                     <CardDescription>All guests for this wedding ({filteredAndSortedGuests.length} {filteredAndSortedGuests.length === 1 ? 'guest' : 'guests'})</CardDescription>
                   </div>
                 </div>
@@ -2942,7 +2942,7 @@ const WeddingDetail = () => {
             {/* Tables List */}
             <Card>
               <CardHeader>
-                <CardTitle>All Tables</CardTitle>
+                <CardTitle>Wedding Table Directory</CardTitle>
                 <CardDescription>Overview of all tables for this wedding</CardDescription>
               </CardHeader>
               <CardContent>
@@ -4087,30 +4087,39 @@ const WeddingDetail = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit_guest_restrictions">Dietary Restrictions *</Label>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
-                  {dietaryRestrictions.map((restriction) => (
-                    <div key={restriction.restriction_id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`edit_restriction_${restriction.restriction_id}`}
-                        checked={editGuestRestrictionIds.includes(restriction.restriction_id)}
-                        onCheckedChange={(checked) => {
-                          if (checked) {
-                            setEditGuestRestrictionIds([...editGuestRestrictionIds, restriction.restriction_id]);
-                          } else {
-                            setEditGuestRestrictionIds(editGuestRestrictionIds.filter(id => id !== restriction.restriction_id));
-                          }
-                        }}
-                        disabled={editGuestLoading}
-                      />
-                      <label
-                        htmlFor={`edit_restriction_${restriction.restriction_id}`}
-                        className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex items-center gap-2"
-                      >
-                        {getTypeIcon(restriction.restriction_type || '')}
-                        {restriction.restriction_name}
-                      </label>
-                    </div>
-                  ))}
+                <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
+                  {dietaryRestrictions.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">Loading dietary restrictions...</p>
+                  ) : (
+                    dietaryRestrictions.map((restriction) => (
+                      <div key={restriction.restriction_id} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`edit_restriction_${restriction.restriction_id}`}
+                          checked={editGuestRestrictionIds.includes(restriction.restriction_id)}
+                          onCheckedChange={(checked) => {
+                            if (checked) {
+                              setEditGuestRestrictionIds([...editGuestRestrictionIds, restriction.restriction_id]);
+                            } else {
+                              setEditGuestRestrictionIds(editGuestRestrictionIds.filter(id => id !== restriction.restriction_id));
+                            }
+                          }}
+                          disabled={editGuestLoading}
+                        />
+                        <label
+                          htmlFor={`edit_restriction_${restriction.restriction_id}`}
+                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1 flex items-center gap-2"
+                        >
+                          <span className={`${getTypeColor(restriction.restriction_type || '')} flex items-center gap-1 px-2 py-1 rounded`}>
+                            {getTypeIcon(restriction.restriction_type || '')}
+                            {restriction.restriction_name}
+                          </span>
+                          {restriction.severity_level && (
+                            <span className="text-muted-foreground text-xs">- {restriction.severity_level}</span>
+                          )}
+                        </label>
+                      </div>
+                    ))
+                  )}
                 </div>
                 {editGuestRestrictionIds.length > 0 && (
                   <p className="text-xs text-muted-foreground">
