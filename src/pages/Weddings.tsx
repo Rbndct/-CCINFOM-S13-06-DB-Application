@@ -145,6 +145,12 @@ const Weddings = () => {
     fetchWeddings();
   }, []);
 
+  // Apply filters immediately when they change
+  useEffect(() => {
+    fetchWeddings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo, venueFilter, plannerFilter, hasRestrictions]);
+
   const fetchWeddings = async () => {
     setLoading(true);
     try {
@@ -460,12 +466,10 @@ const Weddings = () => {
                   setPlannerFilter('');
                   setHasRestrictions(undefined);
                   setSearchTerm('');
-                  fetchWeddings();
                 }}
               >
                 Reset Filters
               </Button>
-              <Button variant="secondary" onClick={fetchWeddings}>Apply</Button>
             </div>
 
             {showFilters && (
@@ -504,12 +508,12 @@ const Weddings = () => {
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Has Restrictions</label>
-                  <Select value={hasRestrictions ?? ''} onValueChange={(val) => setHasRestrictions(val || undefined)}>
+                  <Select value={hasRestrictions ?? 'any'} onValueChange={(val) => setHasRestrictions(val === 'any' ? undefined : val)}>
                     <SelectTrigger>
                       <SelectValue placeholder="Any" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">Any</SelectItem>
+                      <SelectItem value="any">Any</SelectItem>
                       <SelectItem value="Y">Yes</SelectItem>
                       <SelectItem value="N">No</SelectItem>
                     </SelectContent>
@@ -522,7 +526,6 @@ const Weddings = () => {
               <TableHeader>
                 <TableRow>
                   <TableHead>Wedding ID</TableHead>
-                  <TableHead>Couple ID</TableHead>
                   <TableHead>Couple</TableHead>
                   <TableHead>Date & Time</TableHead>
                   <TableHead>Venue</TableHead>
@@ -536,7 +539,7 @@ const Weddings = () => {
               <TableBody>
                 {filteredWeddings.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                       No weddings found
                     </TableCell>
                   </TableRow>
@@ -550,21 +553,23 @@ const Weddings = () => {
                     <TableCell className="font-mono text-sm text-muted-foreground">
                       #{wedding.id || wedding.wedding_id}
                     </TableCell>
-                    <TableCell className="font-mono text-sm text-muted-foreground">
-                      #{wedding.couple_id}
-                    </TableCell>
                     <TableCell className="font-medium">
                       <div>
-                        <div className="font-semibold">{wedding.couple || (wedding.partner1_name && wedding.partner2_name ? `${wedding.partner1_name} & ${wedding.partner2_name}` : 'N/A')}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="font-semibold">{wedding.couple || (wedding.partner1_name && wedding.partner2_name ? `${wedding.partner1_name} & ${wedding.partner2_name}` : 'N/A')}</div>
+                          <Badge variant="outline" className="text-xs font-mono">
+                            #{wedding.couple_id}
+                          </Badge>
+                        </div>
                         <div className="text-sm text-muted-foreground">
                           {wedding.plannerContact || wedding.planner_contact || 'N/A'}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <div>
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <Calendar className="h-4 w-4 text-muted-foreground" />
                           <div>
                             {(() => {
                               try {
@@ -577,6 +582,9 @@ const Weddings = () => {
                               }
                             })()}
                           </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-muted-foreground" />
                           <div className="text-sm text-muted-foreground">
                             {wedding.weddingTime || wedding.wedding_time || 'N/A'}
                           </div>
@@ -590,21 +598,24 @@ const Weddings = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {wedding.ceremony_type && (
-                          <Badge variant="outline" className="text-xs">
-                            {wedding.ceremony_type}
-                          </Badge>
+                          <div>
+                            <Badge variant="outline" className="text-xs">
+                              {wedding.ceremony_type}
+                            </Badge>
+                          </div>
                         )}
                         {(() => {
                           const restrictions = wedding.all_restrictions || wedding.restrictions || [];
                           return restrictions.length > 0 ? (
-                            <div className="flex flex-wrap gap-1 mt-1">
+                            <div className="flex flex-wrap gap-1">
                               {restrictions.slice(0, 2).map((r: any) => (
                                 <Badge 
                                   key={r.restriction_id} 
-                                  className={`${getTypeColor(r.restriction_type || '')} border text-xs`}
+                                  className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1`}
                                 >
+                                  {getTypeIcon(r.restriction_type || '')}
                                   {r.restriction_name}
                                 </Badge>
                               ))}
@@ -623,7 +634,12 @@ const Weddings = () => {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 text-muted-foreground" />
-                        {wedding.guestCount || wedding.guest_count || 0}
+                        {(() => {
+                          // Try to get guest count from the wedding data
+                          const guestCount = wedding.guestCount || wedding.guest_count;
+                          // If not available, we'll need to fetch it - but for now show what we have
+                          return guestCount || 0;
+                        })()}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -749,11 +765,14 @@ const Weddings = () => {
                     <SelectValue placeholder="Select a couple" />
                   </SelectTrigger>
                   <SelectContent>
-                    {couples.map((couple) => (
-                      <SelectItem key={couple.id} value={couple.id.toString()}>
-                        {couple.partner1_name} & {couple.partner2_name}
-                      </SelectItem>
-                    ))}
+                    {couples.map((couple) => {
+                      const coupleValue = couple.id ? couple.id.toString() : `couple-${couple.couple_id || 'unknown'}`;
+                      return (
+                        <SelectItem key={couple.id || couple.couple_id || coupleValue} value={coupleValue}>
+                          {couple.partner1_name} & {couple.partner2_name}
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
                 {errors.selectedCoupleId && (
@@ -781,7 +800,7 @@ const Weddings = () => {
                           ? formatRestrictionsList(restrictions, 2)
                           : 'No restrictions';
                         return (
-                          <SelectItem key={pref.preference_id} value={pref.preference_id.toString()}>
+                          <SelectItem key={pref.preference_id || `pref-${pref.ceremony_type}`} value={pref.preference_id ? pref.preference_id.toString() : `pref-${pref.ceremony_type || 'unknown'}`}>
                             {pref.ceremony_type} - {restrictionText} ({restrictionCount})
                           </SelectItem>
                         );

@@ -79,6 +79,12 @@ const Couples = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Apply filters immediately when they change
+  useEffect(() => {
+    fetchCouples();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ceremonyType, restrictionType, plannerEmail]);
+
   const fetchCouples = async () => {
     setLoading(true);
     try {
@@ -336,12 +342,10 @@ const Couples = () => {
                   setRestrictionType(undefined);
                   setPlannerEmail('');
                   setSearchTerm('');
-                  fetchCouples();
                 }}
               >
                 Reset Filters
               </Button>
-              <Button variant="secondary" onClick={fetchCouples}>Apply</Button>
             </div>
 
             {showFilters && (

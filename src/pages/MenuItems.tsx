@@ -1165,12 +1165,15 @@ const MenuItems = () => {
                       <SelectValue placeholder="Select restriction (optional)" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">None</SelectItem>
-                      {dietaryRestrictions.map((restriction: any) => (
-                        <SelectItem key={restriction.restriction_id} value={restriction.restriction_id.toString()}>
-                          {restriction.restriction_name}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="restriction-none">None</SelectItem>
+                      {dietaryRestrictions.map((restriction: any) => {
+                        const restrictionValue = restriction.restriction_id ? restriction.restriction_id.toString() : `restriction-${restriction.restriction_name || 'unknown'}`;
+                        return (
+                          <SelectItem key={restriction.restriction_id || restrictionValue} value={restrictionValue}>
+                            {restriction.restriction_name}
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
