@@ -15,7 +15,14 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Sofa,
+  Bed,
+  Lightbulb,
+  Tv,
+  Sparkles,
+  Package,
+  Wrench
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -227,10 +234,21 @@ const Inventory = () => {
       case 'Fair':
         return <Badge variant="outline" className="bg-yellow-100 text-yellow-800"><AlertTriangle className="w-3 h-3 mr-1" />Fair</Badge>;
       case 'Poor':
-        return <Badge variant="destructive" className="bg-red-100 text-red-800"><AlertTriangle className="w-3 h-3 mr-1" />Poor</Badge>;
+        return <Badge variant="destructive" className="bg-red-100 text-red-800"><Wrench className="w-3 h-3 mr-1" />Poor</Badge>;
       default:
         return <Badge variant="outline">{condition || 'Unknown'}</Badge>;
     }
+  };
+
+  const getCategoryIcon = (category: string) => {
+    const iconMap: Record<string, any> = {
+      'Furniture': Sofa,
+      'Linens': Bed,
+      'Lighting': Lightbulb,
+      'Audio/Visual': Tv,
+      'Decorations': Sparkles
+    };
+    return iconMap[category] || Package;
   };
 
   const getCategoryBadge = (category: string) => {
@@ -241,7 +259,13 @@ const Inventory = () => {
       'Audio/Visual': 'bg-purple-100 text-purple-800',
       'Decorations': 'bg-green-100 text-green-800'
     };
-    return <Badge className={colors[category] || 'bg-gray-100 text-gray-800'}>{category}</Badge>;
+    const Icon = getCategoryIcon(category);
+    return (
+      <Badge className={colors[category] || 'bg-gray-100 text-gray-800'}>
+        <Icon className="w-3 h-3 mr-1" />
+        {category}
+      </Badge>
+    );
   };
 
   const getStockStatus = (quantity: number) => {
@@ -473,24 +497,37 @@ const Inventory = () => {
                       <TableHead>Condition</TableHead>
                       <TableHead>Quantity Available</TableHead>
                       <TableHead>Rental Cost</TableHead>
-                      <TableHead>Status</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedItems.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           {inventoryItems.length === 0 ? 'No inventory items found' : 'No items match the filters'}
                         </TableCell>
                       </TableRow>
                     ) : (
                       paginatedItems.map((item) => (
                         <TableRow key={item.inventory_id}>
-                          <TableCell className="font-mono text-sm text-muted-foreground">
+                          <TableCell 
+                            className="font-mono text-sm text-muted-foreground cursor-pointer hover:bg-muted/50 transition-colors"
+                            onDoubleClick={() => {
+                              setSelectedItem(item);
+                              setViewDialogOpen(true);
+                            }}
+                            title="Double-click to view details"
+                          >
                             #{item.inventory_id}
                           </TableCell>
-                          <TableCell className="font-medium">
+                          <TableCell 
+                            className="font-medium cursor-pointer hover:bg-muted/50 transition-colors"
+                            onDoubleClick={() => {
+                              setSelectedItem(item);
+                              setViewDialogOpen(true);
+                            }}
+                            title="Double-click to view details"
+                          >
                             <div className="flex items-center gap-2">
                               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                                 <Warehouse className="h-4 w-4 text-primary" />
@@ -498,25 +535,50 @@ const Inventory = () => {
                               {item.item_name}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell 
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onDoubleClick={() => {
+                              setSelectedItem(item);
+                              setViewDialogOpen(true);
+                            }}
+                            title="Double-click to view details"
+                          >
                             {getCategoryBadge(item.category)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell 
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onDoubleClick={() => {
+                              setSelectedItem(item);
+                              setViewDialogOpen(true);
+                            }}
+                            title="Double-click to view details"
+                          >
                             {getConditionBadge(item.item_condition)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell 
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onDoubleClick={() => {
+                              setSelectedItem(item);
+                              setViewDialogOpen(true);
+                            }}
+                            title="Double-click to view details"
+                          >
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium">{item.quantity_available || 0}</span>
                               {getStockStatus(item.quantity_available || 0)}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell 
+                            className="cursor-pointer hover:bg-muted/50 transition-colors"
+                            onDoubleClick={() => {
+                              setSelectedItem(item);
+                              setViewDialogOpen(true);
+                            }}
+                            title="Double-click to view details"
+                          >
                             <div className="text-sm font-medium">
                               {formatCurrency(item.rental_cost || 0)}
                             </div>
-                          </TableCell>
-                          <TableCell>
-                            {getStockStatus(item.quantity_available || 0)}
                           </TableCell>
                           <TableCell>
                             <DropdownMenu>
@@ -526,6 +588,13 @@ const Inventory = () => {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => {
+                                  setSelectedItem(item);
+                                  setViewDialogOpen(true);
+                                }}>
+                                  <Eye className="mr-2 h-4 w-4" />
+                                  View
+                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleEditItem(item)}>
                                   <Edit className="mr-2 h-4 w-4" />
                                   Edit
