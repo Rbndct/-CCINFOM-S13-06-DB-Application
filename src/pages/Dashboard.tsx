@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Calendar, 
   Users, 
@@ -17,9 +17,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import DashboardLayout from '@/components/DashboardLayout';
+import { weddingsAPI, couplesAPI, guestsAPI, menuItemsAPI, packagesAPI } from '@/api';
+import { useToast } from '@/hooks/use-toast';
+import { Loader2 } from 'lucide-react';
 
 const Dashboard = () => {
-  const [stats] = useState({
+  const [stats, setStats] = useState({
     totalWeddings: 0,
     totalCouples: 0,
     totalGuests: 0,
@@ -32,8 +35,152 @@ const Dashboard = () => {
     monthlyRevenue: 0
   });
 
-  const [recentWeddings] = useState<any[]>([]);
-  const [upcomingEvents] = useState<any[]>([]);
+  const [recentWeddings, setRecentWeddings] = useState([]);
+  const [upcomingEvents, setUpcomingEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const { toast } = useToast();
+
+  // Fetch statistics from backend
+  useEffect(() => {
+    const fetchStatistics = async () => {
+      try {
+        setLoading(true);
+        
+        // Fetch all data in parallel
+        const [weddingsRes, couplesRes, guestsRes, menuItemsRes, packagesRes] = await Promise.all([
+          weddingsAPI.getAll().catch(() => ({ success: false, data: [] })),
+          couplesAPI.getAll().catch(() => ({ success: false, data: [] })),
+          guestsAPI.getAll().catch(() => ({ success: false, data: [] })),
+          menuItemsAPI.getAll().catch(() => ({ success: false, data: [] })),
+          packagesAPI.getAll().catch(() => ({ success: false, data: [] }))
+        ]);
+
+        // Extract data from responses
+        const weddings = (weddingsRes?.success && weddingsRes?.data) ? weddingsRes.data : (weddingsRes?.data || []);
+        const couples = (couplesRes?.success && couplesRes?.data) ? couplesRes.data : (couplesRes?.data || []);
+        const guests = (guestsRes?.success && guestsRes?.data) ? guestsRes.data : (guestsRes?.data || []);
+        const menuItems = (menuItemsRes?.success && menuItemsRes?.data) ? menuItemsRes.data : (menuItemsRes?.data || []);
+        const packages = (packagesRes?.success && packagesRes?.data) ? packagesRes.data : (packagesRes?.data || []);
+
+        // Calculate statistics
+        const totalWeddings = Array.isArray(weddings) ? weddings.length : 0;
+        const totalCouples = Array.isArray(couples) ? couples.length : 0;
+        const totalGuests = Array.isArray(guests) ? guests.length : 0;
+        const totalMenuItems = Array.isArray(menuItems) ? menuItems.length : 0;
+        const totalPackages = Array.isArray(packages) ? packages.length : 0;
+
+        // Calculate upcoming weddings (within next 30 days)
+        const now = new Date();
+        const thirtyDaysFromNow = new Date(now);
+        thirtyDaysFromNow.setDate(thirtyDaysFromNow.getDate() + 30);
+        
+        const upcomingWeddings = Array.isArray(weddings) ? weddings.filter((w: any) => {
+          const weddingDate = w.wedding_date || w.weddingDate;
+          if (!weddingDate) return false;
+          const date = new Date(weddingDate);
+          return date >= now && date <= thirtyDaysFromNow;
+        }).length : 0;
+
+        // Calculate pending RSVPs
+        const pendingRSVPs = Array.isArray(guests) ? guests.filter((g: any) => {
+          const status = (g.rsvp_status || '').toLowerCase();
+          return status === 'pending' || !status;
+        }).length : 0;
+
+        // Calculate total revenue (sum of all wedding total_cost)
+        const totalRevenue = Array.isArray(weddings) ? weddings.reduce((sum: number, w: any) => {
+          const cost = parseFloat(w.total_cost || w.totalCost || 0);
+          return sum + (isNaN(cost) ? 0 : cost);
+        }, 0) : 0;
+
+        // Calculate monthly revenue (this month's weddings)
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+        const monthlyRevenue = Array.isArray(weddings) ? weddings.reduce((sum: number, w: any) => {
+          const weddingDate = w.wedding_date || w.weddingDate;
+          if (!weddingDate) return sum;
+          const date = new Date(weddingDate);
+          if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
+            const cost = parseFloat(w.total_cost || w.totalCost || 0);
+            return sum + (isNaN(cost) ? 0 : cost);
+          }
+          return sum;
+        }, 0) : 0;
+
+        // Set statistics
+        setStats({
+          totalWeddings,
+          totalCouples,
+          totalGuests,
+          totalMenuItems,
+          totalPackages,
+          totalInventory: 0, // TODO: Implement inventory API
+          upcomingWeddings,
+          pendingRSVPs,
+          totalRevenue,
+          monthlyRevenue
+        });
+
+        // Set recent weddings (last 5, sorted by date)
+        const sortedWeddings = Array.isArray(weddings) ? [...weddings]
+          .sort((a: any, b: any) => {
+            const dateA = new Date(a.wedding_date || a.weddingDate || 0);
+            const dateB = new Date(b.wedding_date || b.weddingDate || 0);
+            return dateB.getTime() - dateA.getTime();
+          })
+          .slice(0, 5)
+          .map((w: any) => ({
+            id: w.wedding_id || w.id,
+            couple: w.couple_name || `${w.partner1 || ''} & ${w.partner2 || ''}`,
+            date: w.wedding_date || w.weddingDate,
+            venue: w.venue || 'N/A',
+            status: w.payment_status || w.paymentStatus || 'pending'
+          })) : [];
+
+        setRecentWeddings(sortedWeddings);
+
+        // Set upcoming events (next 30 days)
+        const upcoming = Array.isArray(weddings) ? weddings
+          .filter((w: any) => {
+            const weddingDate = w.wedding_date || w.weddingDate;
+            if (!weddingDate) return false;
+            const date = new Date(weddingDate);
+            return date >= now && date <= thirtyDaysFromNow;
+          })
+          .sort((a: any, b: any) => {
+            const dateA = new Date(a.wedding_date || a.weddingDate || 0);
+            const dateB = new Date(b.wedding_date || b.weddingDate || 0);
+            return dateA.getTime() - dateB.getTime();
+          })
+          .slice(0, 5)
+          .map((w: any) => {
+            const weddingDate = new Date(w.wedding_date || w.weddingDate);
+            const daysLeft = Math.ceil((weddingDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+            return {
+              id: w.wedding_id || w.id,
+              couple: w.couple_name || `${w.partner1 || ''} & ${w.partner2 || ''}`,
+              date: w.wedding_date || w.weddingDate,
+              venue: w.venue || 'N/A',
+              daysLeft
+            };
+          }) : [];
+
+        setUpcomingEvents(upcoming);
+
+      } catch (error: any) {
+        console.error('Error fetching statistics:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to fetch dashboard statistics',
+          variant: 'destructive'
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchStatistics();
+  }, [toast]);
 
   const statCards = [
     {
@@ -194,21 +341,29 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {recentWeddings.map((wedding) => (
-                  <div key={wedding.id} className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {wedding.couple}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(wedding.date).toLocaleDateString()} • {wedding.venue}
-                      </p>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : recentWeddings.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No recent weddings</p>
+              ) : (
+                <div className="space-y-4">
+                  {recentWeddings.map((wedding) => (
+                    <div key={wedding.id} className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium leading-none">
+                          {wedding.couple}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {wedding.date ? new Date(wedding.date).toLocaleDateString() : 'N/A'} • {wedding.venue}
+                        </p>
+                      </div>
+                      {getStatusBadge(wedding.status)}
                     </div>
-                    {getStatusBadge(wedding.status)}
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -221,23 +376,31 @@ const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {upcomingEvents.map((event) => (
-                  <div key={event.id} className="flex items-center justify-between">
-                    <div className="space-y-1">
-                      <p className="text-sm font-medium leading-none">
-                        {event.couple}
-                      </p>
-                      <p className="text-sm text-muted-foreground">
-                        {new Date(event.date).toLocaleDateString()} • {event.venue}
-                      </p>
+              {loading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : upcomingEvents.length === 0 ? (
+                <p className="text-sm text-muted-foreground text-center py-8">No upcoming events</p>
+              ) : (
+                <div className="space-y-4">
+                  {upcomingEvents.map((event) => (
+                    <div key={event.id} className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <p className="text-sm font-medium leading-none">
+                          {event.couple}
+                        </p>
+                        <p className="text-sm text-muted-foreground">
+                          {event.date ? new Date(event.date).toLocaleDateString() : 'N/A'} • {event.venue}
+                        </p>
+                      </div>
+                      <Badge variant="outline">
+                        {event.daysLeft} days
+                      </Badge>
                     </div>
-                    <Badge variant="outline">
-                      {event.daysLeft} days
-                    </Badge>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

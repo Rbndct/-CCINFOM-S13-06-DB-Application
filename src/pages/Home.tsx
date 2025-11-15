@@ -34,20 +34,27 @@ const Home = () => {
     try {
       const response = await testAPI.checkConnection();
       let mysqlStatus = false;
+      let mysqlMessage = '';
       try {
         const healthResponse = await testAPI.healthCheck();
-        mysqlStatus = healthResponse?.status === 'ok';
-      } catch {}
+        mysqlStatus = healthResponse?.status === 'ok' && healthResponse?.database?.connected === true;
+        if (healthResponse?.database) {
+          mysqlMessage = ` (${healthResponse.database.tableCount || 0} tables)`;
+        }
+      } catch (healthError: any) {
+        console.error('Health check failed:', healthError);
+        mysqlMessage = healthError?.response?.data?.message || healthError?.message || '';
+      }
       setApiStatus({
         connected: true,
-        message: response.message || 'Backend connected!',
+        message: (response.message || 'Backend connected!') + (mysqlStatus ? mysqlMessage : ''),
         loading: false,
         mysqlConnected: mysqlStatus,
       });
     } catch (error) {
       setApiStatus({
         connected: false,
-        message: 'Backend not running. Start your Express server on port 3001.',
+        message: 'Backend not running. Start your Express server.',
         loading: false,
         mysqlConnected: false,
       });
@@ -91,41 +98,82 @@ const Home = () => {
           </div>
         </div>
 
-        <div className="max-w-6xl mx-auto flex justify-end">
-          <div className="flex items-center gap-4 rounded-lg border bg-background/80 px-4 py-2 text-sm shadow-sm backdrop-blur">
-            <div className="flex items-center gap-2">
-              <StatusDot online={apiStatus.connected} />
-              <span className="font-medium">
-                Backend:{' '}
-                {apiStatus.loading ? 'Checking…' : apiStatus.connected ? 'Online' : 'Offline'}
-              </span>
-            </div>
-            <span className="hidden sm:inline text-muted-foreground">•</span>
-            <div className="flex items-center gap-2">
-              <StatusDot online={apiStatus.connected && apiStatus.mysqlConnected} />
-              <span className="font-medium">
-                MySQL:{' '}
-                {!apiStatus.connected
-                  ? 'Unknown'
-                  : apiStatus.mysqlConnected
-                    ? 'Connected'
-                    : 'Disconnected'}
-              </span>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={checkAPIConnection}
-              disabled={apiStatus.loading}
-              className="h-8 w-8"
-              aria-label="Refresh status"
-            >
-              <RefreshCw className={`w-4 h-4 ${apiStatus.loading ? 'animate-spin' : ''}`} />
-            </Button>
-          </div>
+        <div className="max-w-6xl mx-auto">
+          <Card className="border-2 shadow-sm">
+            <CardContent className="p-6">
+              <div className="grid md:grid-cols-2 gap-6 items-start">
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">System Status</h3>
+                    <Button variant="ghost" size="sm" onClick={checkAPIConnection} disabled={apiStatus.loading} className="gap-2">
+                      <RefreshCw className={`w-4 h-4 ${apiStatus.loading ? 'animate-spin' : ''}`} />
+                      Refresh
+                    </Button>
+                  </div>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <StatusDot online={apiStatus.connected} />
+                        <span className="font-medium">Backend Server</span>
+                      </div>
+                      <Badge 
+                        variant={apiStatus.connected ? 'default' : 'destructive'}
+                        className={apiStatus.connected ? 'bg-green-500 hover:bg-green-600' : ''}
+                      >
+                        {apiStatus.loading ? 'Checking...' : apiStatus.connected ? 'Online' : 'Offline'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <StatusDot online={apiStatus.connected && apiStatus.mysqlConnected} />
+                        <span className="font-medium">MySQL Database</span>
+                      </div>
+                      <Badge 
+                        variant={!apiStatus.connected ? 'secondary' : apiStatus.mysqlConnected ? 'default' : 'outline'}
+                        className={!apiStatus.connected ? '' : apiStatus.mysqlConnected ? 'bg-green-500 hover:bg-green-600' : 'border-yellow-500 text-yellow-600'}
+                      >
+                        {!apiStatus.connected ? 'Unknown' : apiStatus.mysqlConnected ? 'Connected' : 'Disconnected'}
+                      </Badge>
+                    </div>
+                  </div>
+                  {!apiStatus.connected && !apiStatus.loading && (
+                    <div className="mt-4 p-3 bg-muted rounded-lg text-sm">
+                      <p className="font-medium mb-2">To start the backend:</p>
+                      <code className="block bg-background p-2 rounded text-xs">cd backend && npm install && npm run dev</code>
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Quick Start Guide</h3>
+                  <div className="space-y-4">
+                    <div className="flex gap-3">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-sm font-semibold flex-shrink-0">1</span>
+                      <div className="flex-1">
+                        <h4 className="font-medium mb-1">Setup Database</h4>
+                        <ul className="text-sm text-muted-foreground space-y-1">
+                          <li>• Install MySQL locally</li>
+                          <li>• Create database: wedding_management_db</li>
+                          <li>• Run your provided SQL schema</li>
+                        </ul>
+                      </div>
+                    </div>
+                    <div className="flex gap-3">
+                      <span className="flex items-center justify-center w-7 h-7 rounded-full bg-primary text-primary-foreground text-sm font-semibold flex-shrink-0">2</span>
+                      <div className="flex-1">
+                        <h4 className="font-medium mb-1">Start Backend</h4>
+                        <ul className="text-sm text-muted-foreground space-y-1">
+                          <li>• Copy .env.example to .env</li>
+                          <li>• Update database credentials</li>
+                          <li>• Run: npm install && npm run dev</li>
+                        </ul>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
         </div>
-
-      
 
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-8">

@@ -13,7 +13,9 @@ import {
   Trash2,
   MoreHorizontal,
   Loader2,
-  Clock
+  Clock,
+  Utensils,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -52,8 +54,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/DashboardLayout';
-import { weddingsAPI, couplesAPI } from '@/api';
+import { weddingsAPI, couplesAPI, guestsAPI } from '@/api';
 import { usePrice } from '@/utils/currency';
+import { getTypeIcon, getTypeColor, getSeverityBadge, formatRestrictionsList, getRestrictionCountText } from '@/utils/restrictionUtils';
 
 const Weddings = () => {
   const navigate = useNavigate();
@@ -71,6 +74,7 @@ const Weddings = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [couples, setCouples] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [totalGuests, setTotalGuests] = useState(0);
   
   // Refs for date/time inputs
   const dateInputRef = useRef<HTMLInputElement>(null);
@@ -140,8 +144,35 @@ const Weddings = () => {
   const fetchWeddings = async () => {
     setLoading(true);
     try {
-      const response = await weddingsAPI.getAll();
-      setWeddings(response.data || []);
+      const response = await weddingsAPI.getAll({
+        date_from: dateFrom || undefined,
+        date_to: dateTo || undefined,
+        venue: venueFilter || undefined,
+        planner_contact: plannerFilter || undefined,
+        has_restrictions: hasRestrictions,
+      });
+      const weddingsData = response.data || [];
+      setWeddings(weddingsData);
+      
+      // Calculate total guests by fetching actual guest counts
+      let total = 0;
+      try {
+        const guestCountPromises = weddingsData.map(async (wedding: any) => {
+          try {
+            const guestsResponse = await guestsAPI.getAll({ wedding_id: wedding.wedding_id || wedding.id });
+            return (guestsResponse.data || []).length;
+          } catch (e) {
+            return 0;
+          }
+        });
+        const counts = await Promise.all(guestCountPromises);
+        total = counts.reduce((sum, count) => sum + count, 0);
+      } catch (e) {
+        console.error('Error calculating guest counts:', e);
+        // Fallback to guest_count field if available
+        total = weddingsData.reduce((sum: number, w: any) => sum + (w.guest_count || w.guestCount || 0), 0);
+      }
+      setTotalGuests(total);
     } catch (error: any) {
       console.error('Error fetching weddings:', error);
       toast({
@@ -314,32 +345,49 @@ const Weddings = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {weddings.reduce((sum, wedding) => sum + wedding.guestCount, 0)}
+                {totalGuests}
               </div>
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Total Meals Served</CardTitle>
+              <Utensils className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {format(convert(weddings.reduce((sum, wedding) => sum + (wedding.totalCost || 0), 0)))}
+                {weddings.reduce((sum, wedding) => sum + (wedding.guestCount || 0), 0)}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Across all weddings
+              </p>
             </CardContent>
           </Card>
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Payments</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Dietary Restrictions Handled</CardTitle>
+              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {weddings.filter(w => w.paymentStatus === 'pending').length}
+                {(() => {
+                  // Count unique restrictions across all weddings with preferences
+                  const restrictionSet = new Set<number>();
+                  weddings.forEach(w => {
+                    if (w.restrictions && Array.isArray(w.restrictions)) {
+                      w.restrictions.forEach((r: any) => {
+                        if (r && r.restriction_id) restrictionSet.add(r.restriction_id);
+                      });
+                    }
+                  });
+                  return restrictionSet.size;
+                })()}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Unique restrictions
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -367,6 +415,20 @@ const Weddings = () => {
                 <Filter className="w-4 h-4 mr-2" />
                 Filters
               </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setDateFrom('');
+                  setDateTo('');
+                  setVenueFilter('');
+                  setPlannerFilter('');
+                  setHasRestrictions(undefined);
+                  setSearchTerm('');
+                  fetchWeddings();
+                }}
+              >
+                Reset Filters
+              </Button>
               <Button variant="secondary" onClick={fetchWeddings}>Apply</Button>
             </div>
 
@@ -374,11 +436,27 @@ const Weddings = () => {
               <div className="grid md:grid-cols-5 gap-3 mb-4">
                 <div>
                   <label className="text-sm text-muted-foreground">From</label>
-                  <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+                  <div className="relative">
+                    <Input 
+                      type="date" 
+                      value={dateFrom} 
+                      onChange={(e) => setDateFrom(e.target.value)}
+                      placeholder="mm/dd/yyyy"
+                    />
+                    <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">To</label>
-                  <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+                  <div className="relative">
+                    <Input 
+                      type="date" 
+                      value={dateTo} 
+                      onChange={(e) => setDateTo(e.target.value)}
+                      placeholder="mm/dd/yyyy"
+                    />
+                    <Calendar className="absolute right-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  </div>
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Venue</label>
@@ -390,11 +468,16 @@ const Weddings = () => {
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Has Restrictions</label>
-                  <select className="w-full h-10 rounded-md border bg-transparent px-3 text-sm" value={hasRestrictions ?? ''} onChange={(e) => setHasRestrictions(e.target.value || undefined)}>
-                    <option value="">Any</option>
-                    <option value="Y">Yes</option>
-                    <option value="N">No</option>
-                  </select>
+                  <Select value={hasRestrictions ?? ''} onValueChange={(val) => setHasRestrictions(val || undefined)}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Any" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">Any</SelectItem>
+                      <SelectItem value="Y">Yes</SelectItem>
+                      <SelectItem value="N">No</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
             )}
@@ -402,27 +485,43 @@ const Weddings = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Wedding ID</TableHead>
+                  <TableHead>Couple ID</TableHead>
                   <TableHead>Couple</TableHead>
                   <TableHead>Date & Time</TableHead>
                   <TableHead>Venue</TableHead>
-                  <TableHead>Guests</TableHead>
+                  <TableHead>Type & Restrictions</TableHead>
+                  <TableHead>Guest #</TableHead>
                   <TableHead>Total Cost</TableHead>
                   <TableHead>Payment Status</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredWeddings.map((wedding) => (
+                {filteredWeddings.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
+                      No weddings found
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  filteredWeddings.map((wedding) => (
                   <TableRow 
-                    key={wedding.id}
+                    key={wedding.id || wedding.wedding_id}
                     className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/dashboard/weddings/${wedding.id}`)}
+                    onClick={() => navigate(`/dashboard/weddings/${wedding.id || wedding.wedding_id}`)}
                   >
+                    <TableCell className="font-mono text-sm text-muted-foreground">
+                      #{wedding.id || wedding.wedding_id}
+                    </TableCell>
+                    <TableCell className="font-mono text-sm text-muted-foreground">
+                      #{wedding.couple_id}
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div>
-                        <div className="font-semibold">{wedding.couple}</div>
+                        <div className="font-semibold">{wedding.couple || (wedding.partner1_name && wedding.partner2_name ? `${wedding.partner1_name} & ${wedding.partner2_name}` : 'N/A')}</div>
                         <div className="text-sm text-muted-foreground">
-                          {wedding.plannerContact}
+                          {wedding.plannerContact || wedding.planner_contact || 'N/A'}
                         </div>
                       </div>
                     </TableCell>
@@ -430,9 +529,20 @@ const Weddings = () => {
                       <div className="flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
                         <div>
-                          <div>{new Date(wedding.weddingDate).toLocaleDateString()}</div>
+                          <div>
+                            {(() => {
+                              try {
+                                const date = wedding.weddingDate || wedding.wedding_date;
+                                if (!date) return 'N/A';
+                                const d = new Date(date);
+                                return isNaN(d.getTime()) ? (typeof date === 'string' ? date.split('T')[0] : 'N/A') : d.toLocaleDateString();
+                              } catch {
+                                return 'N/A';
+                              }
+                            })()}
+                          </div>
                           <div className="text-sm text-muted-foreground">
-                            {wedding.weddingTime}
+                            {wedding.weddingTime || wedding.wedding_time || 'N/A'}
                           </div>
                         </div>
                       </div>
@@ -444,21 +554,52 @@ const Weddings = () => {
                       </div>
                     </TableCell>
                     <TableCell>
+                      <div className="space-y-1">
+                        {wedding.ceremony_type && (
+                          <Badge variant="outline" className="text-xs">
+                            {wedding.ceremony_type}
+                          </Badge>
+                        )}
+                        {(() => {
+                          const restrictions = wedding.all_restrictions || wedding.restrictions || [];
+                          return restrictions.length > 0 ? (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {restrictions.slice(0, 2).map((r: any) => (
+                                <Badge 
+                                  key={r.restriction_id} 
+                                  className={`${getTypeColor(r.restriction_type || '')} border text-xs`}
+                                >
+                                  {r.restriction_name}
+                                </Badge>
+                              ))}
+                              {restrictions.length > 2 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{restrictions.length - 2} more
+                                </Badge>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">No restrictions</span>
+                          );
+                        })()}
+                      </div>
+                    </TableCell>
+                    <TableCell>
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 text-muted-foreground" />
-                        {wedding.guestCount}
+                        {wedding.guestCount || wedding.guest_count || 0}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-semibold">{format(convert(wedding.totalCost || 0))}</div>
+                        <div className="font-semibold">{format(convert(wedding.totalCost || wedding.total_cost || 0))}</div>
                         <div className="text-sm text-muted-foreground">
-                          Prod: {format(convert(wedding.productionCost || 0))}
+                          Prod: {format(convert(wedding.productionCost || wedding.production_cost || 0))}
                         </div>
                       </div>
                     </TableCell>
                     <TableCell>
-                      {getPaymentStatusBadge(wedding.paymentStatus)}
+                      {getPaymentStatusBadge(wedding.paymentStatus || wedding.payment_status || 'pending')}
                     </TableCell>
                     <TableCell onClick={(e) => e.stopPropagation()}>
                       <DropdownMenu>
@@ -468,13 +609,9 @@ const Weddings = () => {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/dashboard/weddings/${wedding.id}`)}>
+                          <DropdownMenuItem onClick={() => navigate(`/dashboard/weddings/${wedding.id || wedding.wedding_id}`)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
                           </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-red-600"
@@ -496,7 +633,8 @@ const Weddings = () => {
                       </DropdownMenu>
                     </TableCell>
                   </TableRow>
-                ))}
+                  ))
+                )}
               </TableBody>
             </Table>
           </CardContent>
@@ -546,23 +684,65 @@ const Weddings = () => {
                       <SelectValue placeholder={couplePreferences.length === 0 ? 'No preferences available - add preferences in couple detail' : 'Select a preference'} />
                     </SelectTrigger>
                     <SelectContent>
-                      {couplePreferences.map((pref) => (
-                        <SelectItem key={pref.preference_id} value={pref.preference_id.toString()}>
-                          {pref.ceremony_type} - {pref.restriction_name || 'No restriction'}
-                        </SelectItem>
-                      ))}
+                      {couplePreferences.map((pref) => {
+                        const restrictions = pref.dietaryRestrictions || [];
+                        const restrictionCount = restrictions.length;
+                        const restrictionText = restrictionCount > 0 
+                          ? formatRestrictionsList(restrictions, 2)
+                          : 'No restrictions';
+                        return (
+                          <SelectItem key={pref.preference_id} value={pref.preference_id.toString()}>
+                            {pref.ceremony_type} - {restrictionText} ({restrictionCount})
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                   {selectedPreferenceId && couplePreferences.length > 0 && (() => {
                     const selectedPref = couplePreferences.find(p => p.preference_id.toString() === selectedPreferenceId);
-                    return selectedPref ? (
-                      <div className="p-2 bg-muted rounded text-sm">
-                        <p><strong>Ceremony:</strong> {selectedPref.ceremony_type}</p>
-                        {selectedPref.restriction_name && (
-                          <p><strong>Restriction:</strong> {selectedPref.restriction_name} ({selectedPref.restriction_type})</p>
-                        )}
+                    if (!selectedPref) return null;
+                    
+                    const restrictions = selectedPref.dietaryRestrictions || [];
+                    const restrictionCount = restrictions.length;
+                    
+                    return (
+                      <div className="p-4 bg-muted rounded-lg border space-y-3">
+                        <div>
+                          <p className="text-sm font-semibold mb-1">Wedding Type:</p>
+                          <Badge variant="outline" className="font-semibold">
+                            {selectedPref.ceremony_type}
+                          </Badge>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold mb-2">
+                            Dietary Restrictions ({restrictionCount}):
+                          </p>
+                          {restrictionCount > 0 ? (
+                            <div className="space-y-2">
+                              <div className="flex flex-wrap gap-2">
+                                {restrictions.map((restriction: any) => (
+                                  <Badge 
+                                    key={restriction.restriction_id} 
+                                    className={`${getTypeColor(restriction.restriction_type || '')} border flex items-center gap-1`}
+                                  >
+                                    {getTypeIcon(restriction.restriction_type || '')}
+                                    <span>{restriction.restriction_name}</span>
+                                    {restriction.severity_level && (
+                                      <span className="text-xs">({restriction.severity_level})</span>
+                                    )}
+                                  </Badge>
+                                ))}
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {formatRestrictionsList(restrictions)}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-sm text-muted-foreground">No dietary restrictions</p>
+                          )}
+                        </div>
                       </div>
-                    ) : null;
+                    );
                   })()}
                 </div>
               )}

@@ -53,7 +53,7 @@ const Couples = () => {
   const [showFilters, setShowFilters] = useState(false);
   const [ceremonyType, setCeremonyType] = useState<string | undefined>();
   const [restrictionType, setRestrictionType] = useState<string | undefined>();
-  const [plannerContact, setPlannerContact] = useState<string>('');
+  const [plannerEmail, setPlannerEmail] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
@@ -64,7 +64,7 @@ const Couples = () => {
     partner2_phone: '',
     partner1_email: '',
     partner2_email: '',
-    planner_contact: ''
+    planner_contact: '' // Backend uses planner_contact field
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const { toast } = useToast();
@@ -80,7 +80,7 @@ const Couples = () => {
       const response = await couplesAPI.getAll({
         ceremony_type: ceremonyType,
         restriction_type: restrictionType,
-        planner_contact: plannerContact || undefined,
+        planner_contact: plannerEmail || undefined,
       });
       // Transform couple_id to id for frontend compatibility
       const transformedCouples = (response.data || []).map(couple => ({
@@ -116,7 +116,7 @@ const Couples = () => {
     if (!formData.partner2_phone.trim()) errors.partner2_phone = 'Partner 2 phone is required';
     if (!formData.partner1_email.trim()) errors.partner1_email = 'Partner 1 email is required';
     if (!formData.partner2_email.trim()) errors.partner2_email = 'Partner 2 email is required';
-    if (!formData.planner_contact.trim()) errors.planner_contact = 'Planner contact is required';
+    if (!formData.planner_contact.trim()) errors.planner_contact = 'Planner email is required';
     setFormErrors(errors);
     return Object.keys(errors).length === 0;
   };
@@ -180,7 +180,7 @@ const Couples = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Couples</CardTitle>
@@ -193,13 +193,65 @@ const Couples = () => {
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Weddings</CardTitle>
+              <CardTitle className="text-sm font-medium">Couples with Preferences</CardTitle>
               <User className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {couples.reduce((sum, couple) => sum + couple.wedding_count, 0)}
+                {couples.filter(c => c.preference_id).length}
               </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                {couples.length > 0 ? Math.round((couples.filter(c => c.preference_id).length / couples.length) * 100) : 0}% of total
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Multiple Preferences</CardTitle>
+              <Heart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {(() => {
+                  // Count couples with multiple preferences (would need backend support)
+                  // For now, count couples with multiple restrictions
+                  return couples.filter(c => {
+                    const restrictions = c.all_restrictions || [];
+                    return restrictions.length > 1;
+                  }).length;
+                })()}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                Couples with multiple restrictions
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Most Common Restriction</CardTitle>
+              <Heart className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">
+                {(() => {
+                  const restrictionCounts: Record<string, number> = {};
+                  couples.forEach(c => {
+                    const restrictions = c.all_restrictions || [];
+                    restrictions.forEach((r: any) => {
+                      if (r && r.restriction_type) {
+                        restrictionCounts[r.restriction_type] = (restrictionCounts[r.restriction_type] || 0) + 1;
+                      }
+                    });
+                  });
+                  const mostCommon = Object.entries(restrictionCounts).sort((a, b) => b[1] - a[1])[0];
+                  return mostCommon ? mostCommon[0] : 'N/A';
+                })()}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">
+                By type
+              </p>
             </CardContent>
           </Card>
         </div>
@@ -226,6 +278,18 @@ const Couples = () => {
               <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
                 <Filter className="w-4 h-4 mr-2" />
                 Filters
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setCeremonyType(undefined);
+                  setRestrictionType(undefined);
+                  setPlannerEmail('');
+                  setSearchTerm('');
+                  fetchCouples();
+                }}
+              >
+                Reset Filters
               </Button>
               <Button variant="secondary" onClick={fetchCouples}>Apply</Button>
             </div>
@@ -256,109 +320,134 @@ const Couples = () => {
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm text-muted-foreground">Planner Contact</label>
-                  <Input value={plannerContact} onChange={(e) => setPlannerContact(e.target.value)} placeholder="Name or contact" />
+                  <label className="text-sm text-muted-foreground">Planner Email</label>
+                  <Input value={plannerEmail} onChange={(e) => setPlannerEmail(e.target.value)} placeholder="Email address" />
                 </div>
               </div>
             )}
 
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Couple</TableHead>
-                  <TableHead>Contact Information</TableHead>
-                  <TableHead>Planner Contact</TableHead>
-                  <TableHead>Weddings</TableHead>
-                  <TableHead className="w-[50px]"></TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {filteredCouples.map((couple) => (
-                  <TableRow key={couple.id}>
-                    <TableCell className="font-medium">
-                      <div
-                        className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
-                        onClick={() => navigate(`/dashboard/couples/${couple.id}`)}
-                      >
-                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                          <Heart className="h-4 w-4 text-primary" />
-                        </div>
-                        <div>
-                          <div className="font-semibold">{couple.partner1_name}</div>
-                          <div className="text-sm text-muted-foreground">&</div>
-                          <div className="font-semibold">{couple.partner2_name}</div>
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="h-3 w-3 text-muted-foreground" />
-                          {couple.partner1_phone}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Phone className="h-3 w-3 text-muted-foreground" />
-                          {couple.partner2_phone}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Mail className="h-3 w-3 text-muted-foreground" />
-                          {couple.partner1_email}
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <Mail className="h-3 w-3 text-muted-foreground" />
-                          {couple.partner2_email}
-                        </div>
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm">
-                        {couple.planner_contact}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {couple.wedding_count} wedding{couple.wedding_count !== 1 ? 's' : ''}
-                      </Badge>
-                    </TableCell>
-                    <TableCell>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => navigate(`/dashboard/couples/${couple.id}`)}>
-                            <Eye className="mr-2 h-4 w-4" />
-                            View Details
-                          </DropdownMenuItem>
-                          <DropdownMenuItem>
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            className="text-red-600"
-                            onClick={async () => {
-                              if (!confirm('Delete this couple?')) return;
-                              try {
-                                await couplesAPI.delete(couple.id);
-                                await fetchCouples();
-                                toast({ title: 'Couple deleted' });
-                              } catch (e: any) {
-                                toast({ title: 'Error', description: e.response?.data?.error || 'Failed to delete couple', variant: 'destructive' });
-                              }
-                            }}
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+            {filteredCouples.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p className="text-lg">No couples found.</p>
+                {searchTerm || ceremonyType || restrictionType || plannerEmail ? (
+                  <p className="text-sm mt-2">Try adjusting your filters or search terms.</p>
+                ) : null}
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Couple ID</TableHead>
+                    <TableHead>Couple</TableHead>
+                    <TableHead>Contact Information</TableHead>
+                    <TableHead>Planner Email</TableHead>
+                    <TableHead>Weddings</TableHead>
+                    <TableHead>Last Wedding</TableHead>
+                    <TableHead className="w-[50px]"></TableHead>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {filteredCouples.map((couple) => (
+                    <TableRow 
+                      key={couple.id}
+                      className="cursor-pointer hover:bg-muted/50"
+                      onDoubleClick={() => navigate(`/dashboard/couples/${couple.id}`)}
+                    >
+                      <TableCell className="font-mono text-sm text-muted-foreground">
+                        #{couple.couple_id || couple.id}
+                      </TableCell>
+                      <TableCell className="font-medium">
+                        <div
+                          className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+                          onClick={() => navigate(`/dashboard/couples/${couple.id}`)}
+                        >
+                          <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <Heart className="h-4 w-4 text-primary" />
+                          </div>
+                          <div>
+                            <div className="font-semibold">{couple.partner1_name}</div>
+                            <div className="text-sm text-muted-foreground">&</div>
+                            <div className="font-semibold">{couple.partner2_name}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2 text-sm">
+                            <Phone className="h-3 w-3 text-muted-foreground" />
+                            {couple.partner1_phone}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            <Phone className="h-3 w-3 text-muted-foreground" />
+                            {couple.partner2_phone}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            <Mail className="h-3 w-3 text-muted-foreground" />
+                            {couple.partner1_email}
+                          </div>
+                          <div className="flex items-center gap-2 text-sm">
+                            <Mail className="h-3 w-3 text-muted-foreground" />
+                            {couple.partner2_email}
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {couple.planner_contact || 'N/A'}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {couple.wedding_count === 0 
+                            ? 'No weddings' 
+                            : couple.wedding_count === 1 
+                            ? '1 wedding' 
+                            : `${couple.wedding_count} weddings`}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="text-sm">
+                          {!couple.last_wedding || couple.last_wedding === '1970-01-01' || new Date(couple.last_wedding).getTime() === new Date('1970-01-01').getTime()
+                            ? 'No Wedding'
+                            : new Date(couple.last_wedding).toLocaleDateString()}
+                        </div>
+                      </TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" className="h-8 w-8 p-0">
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => navigate(`/dashboard/couples/${couple.id}`)}>
+                              <Eye className="mr-2 h-4 w-4" />
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              className="text-red-600"
+                              onClick={async () => {
+                                if (!confirm('Delete this couple?')) return;
+                                try {
+                                  await couplesAPI.delete(couple.id);
+                                  await fetchCouples();
+                                  toast({ title: 'Couple deleted' });
+                                } catch (e: any) {
+                                  toast({ title: 'Error', description: e.response?.data?.error || 'Failed to delete couple', variant: 'destructive' });
+                                }
+                              }}
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -459,14 +548,15 @@ const Couples = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="planner_contact">Planner Contact *</Label>
+                <Label htmlFor="planner_contact">Planner Email *</Label>
                 <Input
                   id="planner_contact"
+                  type="email"
                   value={formData.planner_contact}
                   onChange={(e) => setFormData({ ...formData, planner_contact: e.target.value })}
                   className={formErrors.planner_contact ? 'border-red-500' : ''}
                   disabled={formLoading}
-                  placeholder="Planner name and contact info"
+                  placeholder="planner@example.com"
                 />
                 {formErrors.planner_contact && (
                   <p className="text-sm text-red-500">{formErrors.planner_contact}</p>
