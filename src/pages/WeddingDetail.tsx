@@ -74,6 +74,7 @@ import { getTypeIcon, getTypeColor, getNoneRestrictionId, ensureNoneRestriction,
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 import { useDateFormat } from '@/context/DateFormatContext';
 import { useTimeFormat } from '@/context/TimeFormatContext';
+import { useCurrencyFormat } from '@/utils/currency';
 
 const WeddingDetail = () => {
   const { id } = useParams();
@@ -81,6 +82,7 @@ const WeddingDetail = () => {
   const { toast } = useToast();
   const { formatDate } = useDateFormat();
   const { formatTime } = useTimeFormat();
+  const { formatCurrency } = useCurrencyFormat();
   
   // Helper function to safely parse and format dates
   const safeFormatDate = (dateValue: any): string => {
@@ -835,6 +837,11 @@ const WeddingDetail = () => {
     } catch (e: any) {
       toast({ title: 'Error', description: e.response?.data?.error || e?.error || 'Failed to create table', variant: 'destructive' });
     }
+  };
+
+  // Helper function to add table by category with default capacity
+  const addTableByCategory = async (category: string, defaultCapacity: number) => {
+    await addGuestTable(defaultCapacity, category);
   };
   
   // Helper function to get assigned table for a guest
@@ -2161,25 +2168,22 @@ const WeddingDetail = () => {
     setPackageFormLoading(true);
     
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Use actual API endpoint
+      const table = tables.find(t => (t.id || t.table_id)?.toString() === packageAssignTableId);
+      const pkg = availablePackages.find(p => (p.package_id || p.id)?.toString() === packageAssignPackageId);
       
-      const table = tables.find(t => (t.id ?? t.tableNumber)?.toString() === packageAssignTableId);
-      const pkg = availablePackages.find(p => (p.id ?? p.packageName)?.toString() === packageAssignPackageId);
-      
-      const newAssignment = {
-        id: Date.now(),
-        tableId: tableId,
-        tableNumber: table?.tableNumber || '',
-        packageId: packageId,
-        packageName: pkg?.packageName || '',
-        packageType: pkg?.packageType || '',
-        weddingId: parseInt(id || '1')
-      };
+      if (!table || !pkg) {
+        toast({
+          title: 'Error',
+          description: 'Table or package not found',
+          variant: 'destructive',
+        });
+        return;
+      }
       
       // Check if assignment already exists
       const existing = tablePackageAssignments.find(
-        a => a.tableId === newAssignment.tableId && a.packageId === newAssignment.packageId
+        a => (a.tableId || a.table_id) === tableId && (a.packageId || a.package_id) === packageId
       );
       
       if (existing) {
@@ -2191,7 +2195,32 @@ const WeddingDetail = () => {
         return;
       }
       
-      setTablePackageAssignments([...tablePackageAssignments, newAssignment]);
+      // Call API to assign package
+      await packagesAPI.assignToTable({
+        wedding_id: parseInt(id || '0'),
+        table_id: tableId,
+        package_id: packageId
+      });
+      
+      // Refresh assignments
+      const assignmentsResponse = await packagesAPI.getTableAssignments(id || '0');
+      if (assignmentsResponse && assignmentsResponse.data) {
+        setTablePackageAssignments(assignmentsResponse.data || []);
+      } else {
+        // Fallback: add to local state
+        const newAssignment = {
+          id: Date.now(),
+          tableId: tableId,
+          table_id: tableId,
+          tableNumber: table?.tableNumber || table?.table_number || '',
+          packageId: packageId,
+          package_id: packageId,
+          packageName: pkg?.package_name || pkg?.packageName || '',
+          packageType: pkg?.package_type || pkg?.packageType || '',
+          weddingId: parseInt(id || '1')
+        };
+        setTablePackageAssignments([...tablePackageAssignments, newAssignment]);
+      }
       
       // Reset form
       setPackageAssignTableId('');
@@ -2199,13 +2228,14 @@ const WeddingDetail = () => {
       
       toast({
         title: 'Package Assigned',
-        description: `${newAssignment.packageName} assigned to ${newAssignment.tableNumber}${!compatibility.compatible ? ' (with restrictions)' : ''}`,
+        description: `${pkg?.package_name || pkg?.packageName || 'Package'} assigned to ${table?.tableNumber || table?.table_number || 'table'}${!compatibility.compatible ? ' (with restrictions)' : ''}`,
         variant: !compatibility.compatible ? 'default' : 'default',
       });
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Error assigning package:', error);
       toast({
         title: 'Error',
-        description: 'Failed to assign package. Please try again.',
+        description: error.response?.data?.error || error.message || 'Failed to assign package. Please try again.',
         variant: 'destructive',
       });
     } finally {
@@ -2214,6 +2244,49 @@ const WeddingDetail = () => {
   };
   
   // Helper functions - defined before early returns
+  const getCategoryIcon = (category: string) => {
+    const iconMap: Record<string, any> = {
+      'Furniture': Package,
+      'Linens': Package,
+      'Lighting': Package,
+      'Audio/Visual': Package,
+      'Decorations': Package
+    };
+    return iconMap[category] || Warehouse;
+  };
+
+  const getCategoryBadge = (category: string) => {
+    const colors: Record<string, string> = {
+      'Furniture': 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700',
+      'Linens': 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700',
+      'Lighting': 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700',
+      'Audio/Visual': 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700',
+      'Decorations': 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700'
+    };
+    const Icon = getCategoryIcon(category);
+    return (
+      <Badge className={`${colors[category] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'} border flex items-center gap-1`}>
+        <Icon className="w-3 h-3 dark:text-gray-300" />
+        {category}
+      </Badge>
+    );
+  };
+
+  const getConditionBadge = (condition: string) => {
+    switch (condition) {
+      case 'Excellent':
+        return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border flex items-center gap-1"><CheckCircle className="w-3 h-3 dark:text-green-300" />Excellent</Badge>;
+      case 'Good':
+        return <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700 border flex items-center gap-1"><Clock className="w-3 h-3 dark:text-blue-300" />Good</Badge>;
+      case 'Fair':
+        return <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border flex items-center gap-1"><AlertTriangle className="w-3 h-3 dark:text-yellow-300" />Fair</Badge>;
+      case 'Poor':
+        return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border flex items-center gap-1"><AlertTriangle className="w-3 h-3 dark:text-red-300" />Poor</Badge>;
+      default:
+        return <Badge variant="outline">{condition || 'Unknown'}</Badge>;
+    }
+  };
+
   const getRsvpStatusBadge = (status: string | undefined | null) => {
     if (!status) return <Badge variant="secondary" className="flex items-center gap-1 w-fit"><Clock className="w-3 h-3" />Pending</Badge>;
     switch (status.toLowerCase()) {
@@ -2993,8 +3066,80 @@ const WeddingDetail = () => {
                   {/* Right side: Quick Add shortcuts */}
                   <div className="space-y-4">
                     <div>
-                      <Label className="text-sm font-medium mb-3 block">Quick Add Shortcuts</Label>
+                      <Label className="text-sm font-medium mb-3 block">Quick Add by Category</Label>
                       <div className="space-y-2">
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => addTableByCategory('VIP', 6)} 
+                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
+                          className="w-full justify-start h-auto py-3 px-4"
+                        >
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="font-medium">VIP Table</span>
+                            <span className="text-xs text-muted-foreground">Capacity: 6 seats</span>
+                          </div>
+                        </Button>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => addTableByCategory('family', 8)} 
+                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
+                          className="w-full justify-start h-auto py-3 px-4"
+                        >
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="font-medium">Family Table</span>
+                            <span className="text-xs text-muted-foreground">Capacity: 8 seats</span>
+                          </div>
+                        </Button>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => addTableByCategory('kids', 6)} 
+                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
+                          className="w-full justify-start h-auto py-3 px-4"
+                        >
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="font-medium">Kids Table</span>
+                            <span className="text-xs text-muted-foreground">Capacity: 6 seats</span>
+                          </div>
+                        </Button>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => addTableByCategory('elderly', 6)} 
+                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
+                          className="w-full justify-start h-auto py-3 px-4"
+                        >
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="font-medium">Elderly Table</span>
+                            <span className="text-xs text-muted-foreground">Capacity: 6 seats</span>
+                          </div>
+                        </Button>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => addTableByCategory('friends', 10)} 
+                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
+                          className="w-full justify-start h-auto py-3 px-4"
+                        >
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="font-medium">Friends Table</span>
+                            <span className="text-xs text-muted-foreground">Capacity: 10 seats</span>
+                          </div>
+                        </Button>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => addTableByCategory('entourage', 8)} 
+                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
+                          className="w-full justify-start h-auto py-3 px-4"
+                        >
+                          <div className="flex flex-col items-start gap-1">
+                            <span className="font-medium">Entourage Table</span>
+                            <span className="text-xs text-muted-foreground">Capacity: 8 seats</span>
+                          </div>
+                        </Button>
                         <Button 
                           type="button" 
                           variant="outline" 
@@ -3003,7 +3148,7 @@ const WeddingDetail = () => {
                           className="w-full justify-start h-auto py-3 px-4"
                         >
                           <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">Quick Add Guest Table</span>
+                            <span className="font-medium">General Guest Table</span>
                             <span className="text-xs text-muted-foreground">Capacity: 6 seats</span>
                           </div>
                         </Button>
@@ -3015,7 +3160,7 @@ const WeddingDetail = () => {
                           className="w-full justify-start h-auto py-3 px-4"
                         >
                           <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">Quick Add Guest Table</span>
+                            <span className="font-medium">Large Guest Table</span>
                             <span className="text-xs text-muted-foreground">Capacity: 10 seats</span>
                           </div>
                         </Button>
@@ -3125,7 +3270,7 @@ const WeddingDetail = () => {
                   
                   return (
                     <Card key={table.id || table.table_id || `table-${table.tableNumber || table.table_number || 'unknown'}`} className="flex flex-col">
-                      <CardHeader>
+                      <CardHeader className="relative">
                         <div className="flex items-center justify-between">
                           <div>
                             <CardTitle className="text-lg">{table.tableNumber || table.table_number || 'Unknown'}</CardTitle>
@@ -3133,39 +3278,40 @@ const WeddingDetail = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             {getTableCategoryBadge(tableCategory)}
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 text-xs"
-                              onClick={() => {
-                                setSelectedTableForView(table);
-                                setViewTableOpen(true);
-                              }}
-                            >
-                              <Eye className="h-3 w-3 mr-1" />
-                              View Details
-                            </Button>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleEditTable(table)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  className="text-red-600"
-                                  onClick={() => handleDeleteTable(table.id || table.table_id)}
-                                >
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
                           </div>
+                        </div>
+                        {/* Icon buttons in top-right corner */}
+                        <div className="absolute top-4 right-4 flex items-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => {
+                              setSelectedTableForView(table);
+                              setViewTableOpen(true);
+                            }}
+                            title="View Details"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={() => handleEditTable(table)}
+                            title="Edit Table"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                            onClick={() => handleDeleteTable(table.id || table.table_id)}
+                            title="Delete Table"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
                         </div>
                         <CardDescription>
                           Capacity: {table.capacity || 0} | Assigned: {assignedCount} | Available: {available}
@@ -3707,18 +3853,36 @@ const WeddingDetail = () => {
                             >
                               {/* Table with chairs */}
                               <div className="relative">
-                                {/* Calculate table size based on capacity (min 1 seat = 50px, max 15 seats = 120px) */}
+                                {/* Calculate table size based on capacity and text content */}
                                 {(() => {
-                                  const minSize = 50;
-                                  const maxSize = 120;
+                                  // Base size calculation
+                                  const minSize = 60;
+                                  const maxSize = 140;
                                   const sizeStep = (maxSize - minSize) / 14; // 14 steps from 1 to 15
-                                  const tableSize = Math.max(minSize, Math.min(maxSize, minSize + (capacity - 1) * sizeStep));
-                                  // Always show chairs for all capacity levels
-                                  const chairRadius = capacity === 1 ? tableSize * 0.25 : tableSize * 0.35; // Smaller radius for capacity 1
+                                  let baseTableSize = Math.max(minSize, Math.min(maxSize, minSize + (capacity - 1) * sizeStep));
+                                  
+                                  // Adjust size based on text content
+                                  const tableNumLength = displayTableNum.length;
+                                  const needsMoreSpace = tableNumLength > 6 || capacity > 10;
+                                  if (needsMoreSpace) {
+                                    baseTableSize = Math.max(baseTableSize, 80);
+                                  }
+                                  
+                                  const tableSize = baseTableSize;
+                                  
+                                  // Calculate chair radius - place chairs outside the table box
+                                  const chairRadius = (tableSize / 2) + 12; // 12px outside the table
+                                  const chairSize = capacity <= 4 ? 10 : capacity <= 8 ? 9 : 8;
+                                  
+                                  // Calculate font sizes based on table size
+                                  const fontSizeTableNum = tableSize < 70 ? '9px' : tableSize < 90 ? '10px' : '11px';
+                                  const fontSizeId = tableSize < 70 ? '6px' : tableSize < 90 ? '7px' : '8px';
+                                  const fontSizeCapacity = tableSize < 70 ? '8px' : tableSize < 90 ? '9px' : '10px';
+                                  const fontSizeFull = tableSize < 70 ? '6px' : '7px';
                                   
                                   return (
                                     <>
-                                      {/* Chairs arranged around table in a circle */}
+                                      {/* Chairs arranged around table in a circle - OUTSIDE the table box */}
                                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 1 }}>
                                         {Array.from({ length: capacity }, (_, i) => {
                                           const angle = capacity === 1 ? 0 : (i * 360) / capacity; // For capacity 1, place at top
@@ -3740,8 +3904,8 @@ const WeddingDetail = () => {
                                                   : 'bg-green-500 dark:bg-green-600 border-green-600 dark:border-green-700'
                                               }`}
                                               style={{
-                                                width: capacity === 1 ? '8px' : '10px',
-                                                height: capacity === 1 ? '8px' : '10px',
+                                                width: `${chairSize}px`,
+                                                height: `${chairSize}px`,
                                                 left: `calc(50% + ${chairX}px)`,
                                                 top: `calc(50% + ${chairY}px)`,
                                                 transform: 'translate(-50%, -50%)',
@@ -3763,18 +3927,38 @@ const WeddingDetail = () => {
                                           width: `${tableSize}px`,
                                           height: `${tableSize}px`,
                                           zIndex: 2,
-                                          minWidth: '50px',
-                                          minHeight: '50px'
+                                          minWidth: '60px',
+                                          minHeight: '60px'
                                         }}
                                         title={`${displayTableNum} - ${actualAssignedCount}/${capacity} guests`}
                                       >
-                                        <div className="font-semibold text-[10px] leading-tight relative z-10 text-gray-900 dark:text-gray-100 truncate max-w-full px-0.5">{displayTableNum}</div>
+                                        <div 
+                                          className="font-semibold leading-tight relative z-10 text-gray-900 dark:text-gray-100 truncate max-w-full px-0.5 text-center"
+                                          style={{ fontSize: fontSizeTableNum }}
+                                        >
+                                          {displayTableNum}
+                                        </div>
                                         {capacity > 1 && (
-                                          <div className="text-[7px] text-gray-600 dark:text-gray-400 mt-0.5 relative z-10">ID: {tableId}</div>
+                                          <div 
+                                            className="text-gray-600 dark:text-gray-400 mt-0.5 relative z-10"
+                                            style={{ fontSize: fontSizeId }}
+                                          >
+                                            ID: {tableId}
+                                          </div>
                                         )}
-                                        <div className="text-[9px] mt-0.5 font-medium relative z-10 text-gray-800 dark:text-gray-200">{actualAssignedCount}/{capacity}</div>
+                                        <div 
+                                          className="mt-0.5 font-medium relative z-10 text-gray-800 dark:text-gray-200"
+                                          style={{ fontSize: fontSizeCapacity }}
+                                        >
+                                          {actualAssignedCount}/{capacity}
+                                        </div>
                                         {(capacity - actualAssignedCount) === 0 && (
-                                          <div className="text-[7px] text-red-600 dark:text-red-400 mt-0.5 font-bold relative z-10">Full</div>
+                                          <div 
+                                            className="text-red-600 dark:text-red-400 mt-0.5 font-bold relative z-10"
+                                            style={{ fontSize: fontSizeFull }}
+                                          >
+                                            Full
+                                          </div>
                                         )}
                                       </div>
                                     </>
@@ -4164,19 +4348,67 @@ const WeddingDetail = () => {
                             const tableId = packageAssignTableId ? parseInt(packageAssignTableId) : null;
                             const compatibility = tableId && pkgId ? checkPackageCompatibility(pkgId, tableId) : { compatible: true, conflicts: [] };
                             
+                            // Get package restrictions
+                            const packageRestrictions: any[] = [];
+                            if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                              const restrictionSet = new Set<string>();
+                              pkg.menu_items.forEach((item: any) => {
+                                if (item.restriction_name && item.restriction_name !== 'None') {
+                                  if (!restrictionSet.has(item.restriction_name)) {
+                                    restrictionSet.add(item.restriction_name);
+                                    packageRestrictions.push({
+                                      restriction_name: item.restriction_name,
+                                      restriction_type: item.restriction_type || 'Dietary'
+                                    });
+                                  }
+                                }
+                              });
+                            }
+                            
+                            const pkgValue = pkgId ? pkgId.toString() : `pkg-${pkg.package_name || pkg.packageName || 'unknown'}`;
+                            
                             return (
                               <SelectItem 
                                 key={pkgId || `pkg-${pkg.package_name || pkg.packageName}`} 
-                                value={(pkgId ?? pkg.package_id ?? `pkg-${pkg.package_name || pkg.packageName || 'unknown'}`).toString()}
+                                value={pkgValue}
                               >
-                                <div className="flex items-center gap-2">
-                                  {!compatibility.compatible && (
-                                    <AlertTriangle className="h-3 w-3 text-amber-500" />
+                                <div className="flex flex-col gap-1 py-1">
+                                  <div className="flex items-center gap-2">
+                                    {!compatibility.compatible && (
+                                      <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                                    )}
+                                    <span className="font-medium">
+                                      {pkg.package_name || pkg.packageName || 'Unknown'}
+                                    </span>
+                                    <span className="text-xs text-muted-foreground">
+                                      ({pkg.package_type || pkg.packageType || 'Standard'})
+                                    </span>
+                                  </div>
+                                  {packageRestrictions.length > 0 && (
+                                    <div className="flex items-center gap-1 flex-wrap ml-5">
+                                      <span className="text-xs text-muted-foreground">Restrictions:</span>
+                                      {packageRestrictions.slice(0, 2).map((r: any, idx: number) => (
+                                        <Badge 
+                                          key={idx} 
+                                          variant="outline" 
+                                          className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
+                                        >
+                                          {getTypeIcon(r.restriction_type || 'Dietary')}
+                                          {r.restriction_name}
+                                        </Badge>
+                                      ))}
+                                      {packageRestrictions.length > 2 && (
+                                        <Badge variant="outline" className="text-xs">
+                                          +{packageRestrictions.length - 2} more
+                                        </Badge>
+                                      )}
+                                    </div>
                                   )}
-                                  <span>
-                                    {pkg.package_name || pkg.packageName || 'Unknown'} ({pkg.package_type || pkg.packageType || 'Standard'})
-                                    {!compatibility.compatible && ' ⚠️'}
-                                  </span>
+                                  {!compatibility.compatible && compatibility.conflicts.length > 0 && (
+                                    <div className="text-xs text-amber-600 dark:text-amber-400 ml-5">
+                                      ⚠️ {compatibility.conflicts.length} conflict{compatibility.conflicts.length !== 1 ? 's' : ''} with table
+                                    </div>
+                                  )}
                                 </div>
                               </SelectItem>
                             );
@@ -4185,6 +4417,41 @@ const WeddingDetail = () => {
                       </Select>
                     </div>
                   </div>
+                  
+                  {/* Show table restrictions */}
+                  {packageAssignTableId && (() => {
+                    const tableId = parseInt(packageAssignTableId);
+                    const tableRestrictions = getTableRestrictions(tableId);
+                    
+                    return (
+                      <div className="p-3 bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg">
+                        <div className="flex items-start gap-2">
+                          <AlertTriangle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                          <div className="flex-1">
+                            <p className="text-sm font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                              Table Restrictions ({tableRestrictions.length})
+                            </p>
+                            {tableRestrictions.length > 0 ? (
+                              <div className="flex flex-wrap gap-1">
+                                {tableRestrictions.map((r: any) => (
+                                  <Badge 
+                                    key={r.restriction_id || r.id} 
+                                    variant="outline" 
+                                    className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                  >
+                                    {getTypeIcon(r.restriction_type || '')}
+                                    {r.restriction_name || r.name}
+                                  </Badge>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-blue-800 dark:text-blue-200">No restrictions for this table</p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   
                   {/* Show compatibility warnings */}
                   {packageAssignTableId && packageAssignPackageId && (() => {
@@ -4584,20 +4851,30 @@ const WeddingDetail = () => {
                           <TableRow key={allocation.allocation_id}>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
-                                <Warehouse className="h-4 w-4 text-muted-foreground" />
+                                <div className="w-8 h-8 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
+                                  <Warehouse className="h-4 w-4 text-primary dark:text-primary" />
+                                </div>
                                 {allocation.item_name}
                               </div>
                             </TableCell>
                             <TableCell>
-                              <Badge variant="outline">{allocation.category}</Badge>
+                              {getCategoryBadge(allocation.category)}
                             </TableCell>
                             <TableCell>
-                              <Badge variant="secondary">{allocation.item_condition}</Badge>
+                              {getConditionBadge(allocation.item_condition)}
                             </TableCell>
                             <TableCell>{allocation.quantity_used}</TableCell>
-                            <TableCell>${(typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0).toFixed(2)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />
+                                {formatCurrency((typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0))}
+                              </div>
+                            </TableCell>
                             <TableCell className="font-semibold">
-                              ${((allocation.quantity_used || 0) * (typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0)).toFixed(2)}
+                              <div className="flex items-center gap-1">
+                                <DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />
+                                {formatCurrency(((allocation.quantity_used || 0) * (typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0)))}
+                              </div>
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
@@ -4630,10 +4907,11 @@ const WeddingDetail = () => {
                       <div className="flex justify-end">
                         <div className="text-right">
                           <p className="text-sm text-muted-foreground">Total Rental Cost</p>
-                          <p className="text-2xl font-bold">
-                            ${inventoryAllocations.reduce((sum, a) => 
-                              sum + ((a.quantity_used || 0) * (a.rental_cost || 0)), 0
-                            ).toFixed(2)}
+                          <p className="text-2xl font-bold flex items-center gap-1">
+                            <DollarSign className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
+                            {formatCurrency(inventoryAllocations.reduce((sum, a) => 
+                              sum + ((a.quantity_used || 0) * (typeof a.rental_cost === 'number' ? a.rental_cost : parseFloat(a.rental_cost || '0') || 0)), 0
+                            ))}
                           </p>
                         </div>
                       </div>
@@ -5325,7 +5603,7 @@ const WeddingDetail = () => {
                     <div className="p-3 bg-muted rounded-lg text-sm">
                       <p><strong>Available:</strong> {selectedItem.quantity_available}</p>
                       <p><strong>Condition:</strong> {selectedItem.item_condition}</p>
-                      <p><strong>Default Rental Cost:</strong> ${(typeof selectedItem.rental_cost === 'number' ? selectedItem.rental_cost : parseFloat(selectedItem.rental_cost || '0') || 0).toFixed(2)} per unit</p>
+                      <p><strong>Default Rental Cost:</strong> <span className="flex items-center gap-1 inline-flex"><DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />{formatCurrency((typeof selectedItem.rental_cost === 'number' ? selectedItem.rental_cost : parseFloat(selectedItem.rental_cost || '0') || 0))}</span> per unit</p>
                     </div>
                   ) : null;
                 })()}
@@ -5367,7 +5645,7 @@ const WeddingDetail = () => {
                     const total = qty * cost;
                     return (
                       <p className="text-sm text-muted-foreground">
-                        Total cost: <strong>${total.toFixed(2)}</strong> ({qty} × ${cost.toFixed(2)})
+                        Total cost: <strong className="flex items-center gap-1 inline-flex"><DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />{formatCurrency(total)}</strong> ({qty} × <span className="inline-flex items-center gap-1"><DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />{formatCurrency(cost)}</span>)
                       </p>
                     );
                   }
