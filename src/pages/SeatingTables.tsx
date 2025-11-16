@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   Plus, 
   Search, 
@@ -38,6 +38,10 @@ const SeatingTables = () => {
   const [tables, setTables] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterWedding, setFilterWedding] = useState('all');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
+  });
 
   // Mock data - replace with actual API calls
   useEffect(() => {
@@ -127,13 +131,22 @@ const SeatingTables = () => {
     }
   };
 
-  const filteredTables = tables.filter(table => {
-    const matchesSearch = table.table_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         table.wedding_couple.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         table.table_category.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFilter = filterWedding === 'all' || table.wedding_id.toString() === filterWedding;
-    return matchesSearch && matchesFilter;
-  });
+  const filteredTables = useMemo(() => {
+    const filtered = tables.filter(table => {
+      const matchesSearch = table.table_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           table.wedding_couple.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           table.table_category.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesFilter = filterWedding === 'all' || table.wedding_id.toString() === filterWedding;
+      return matchesSearch && matchesFilter;
+    });
+    
+    // Sort by table ID using default sort order
+    return filtered.sort((a, b) => {
+      const aId = a.id || a.table_id || 0;
+      const bId = b.id || b.table_id || 0;
+      return sortOrder === 'asc' ? aId - bId : bId - aId;
+    });
+  }, [tables, searchTerm, filterWedding, sortOrder]);
 
   const totalCapacity = tables.reduce((sum, table) => sum + table.capacity, 0);
   const totalAssigned = tables.reduce((sum, table) => sum + table.assigned_guests, 0);

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
@@ -47,7 +47,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, filterNoneFromDisplay } from '@/utils/restrictionUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 import { useDateFormat } from '@/context/DateFormatContext';
 
@@ -94,8 +94,8 @@ const Couples = () => {
     try {
       const response = await dietaryRestrictionsAPI.getAll();
       const allRestrictions = response.data || [];
-      // Filter out "None" from the display
-      const displayableRestrictions = allRestrictions.filter((r: any) => r.restriction_name !== 'None');
+      // Filter out "None" from the display using utility function
+      const displayableRestrictions = filterNoneFromDisplay(allRestrictions);
       setDietaryRestrictions(displayableRestrictions);
     } catch (error: any) {
       console.error('Error fetching dietary restrictions:', error);
@@ -128,13 +128,27 @@ const Couples = () => {
     }
   };
 
-  const filteredCouples = couples.filter(couple => {
-    const searchLower = searchTerm.toLowerCase();
-    return couple.partner1_name.toLowerCase().includes(searchLower) ||
-           couple.partner2_name.toLowerCase().includes(searchLower) ||
-           couple.partner1_email.toLowerCase().includes(searchLower) ||
-           couple.partner2_email.toLowerCase().includes(searchLower);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
   });
+
+  const filteredCouples = useMemo(() => {
+    const filtered = couples.filter(couple => {
+      const searchLower = searchTerm.toLowerCase();
+      return couple.partner1_name.toLowerCase().includes(searchLower) ||
+             couple.partner2_name.toLowerCase().includes(searchLower) ||
+             couple.partner1_email.toLowerCase().includes(searchLower) ||
+             couple.partner2_email.toLowerCase().includes(searchLower);
+    });
+    
+    // Sort by couple ID using default sort order
+    return filtered.sort((a, b) => {
+      const aId = a.couple_id || a.id || 0;
+      const bId = b.couple_id || b.id || 0;
+      return sortOrder === 'asc' ? aId - bId : bId - aId;
+    });
+  }, [couples, searchTerm, sortOrder]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredCouples.length / itemsPerPage);
@@ -488,7 +502,7 @@ const Couples = () => {
                                   );
                                 }
                                 return (
-                                  <div className="flex flex-wrap gap-1 items-start">
+                                  <div className="space-y-0.5">
                                     {restrictions.slice(0, 2).map((r: any, idx: number) => {
                                       const restrictionName = r.restriction_name || r.restriction_type || 'Unknown';
                                       const restrictionType = r.restriction_type || '';
@@ -496,7 +510,7 @@ const Couples = () => {
                                         <Badge 
                                           key={idx} 
                                           variant="outline"
-                                          className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                          className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1 w-fit`}
                                         >
                                           {getTypeIcon(restrictionType)}
                                           {restrictionName}
@@ -504,7 +518,7 @@ const Couples = () => {
                                       );
                                     })}
                                     {restrictions.length > 2 && (
-                                      <Badge variant="outline" className="text-xs font-medium">
+                                      <Badge variant="outline" className="text-xs font-medium w-fit">
                                         +{restrictions.length - 2} more
                                       </Badge>
                                     )}

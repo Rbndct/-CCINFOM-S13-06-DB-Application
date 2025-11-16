@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Settings as SettingsIcon, User, Bell, Shield, Database, DollarSign, Loader2, RefreshCw, Monitor, Moon, Sun, Calendar, Clock, Table as TableIcon, CheckCircle2, XCircle, Download, Upload, FileText } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
@@ -51,12 +52,7 @@ const Settings = () => {
   const { timeFormat, setTimeFormat, formatTime } = useTimeFormat();
   const { theme, setTheme, resolvedTheme } = useTheme();
   const { toast } = useToast();
-  const [profileOpen, setProfileOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false);
-  const [securityOpen, setSecurityOpen] = useState(false);
-  const [databaseOpen, setDatabaseOpen] = useState(false);
-  const [displayUIOpen, setDisplayUIOpen] = useState(false);
-  const [tableSettingsOpen, setTableSettingsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('general');
   
   // Database settings state
   const [dbStatus, setDbStatus] = useState<any>(null);
@@ -70,16 +66,16 @@ const Settings = () => {
   // Table settings state
   const [defaultSortOrder, setDefaultSortOrder] = useState<'asc' | 'desc'>(() => {
     const stored = localStorage.getItem('default_table_sort_order');
-    return (stored as 'asc' | 'desc') || 'asc';
+    return (stored as 'asc' | 'desc') || 'desc';
   });
 
   // Fetch database status
   useEffect(() => {
-    if (databaseOpen) {
+    if (activeTab === 'database') {
       fetchDatabaseStatus();
       fetchDatabaseConfig();
     }
-  }, [databaseOpen]);
+  }, [activeTab]);
 
   const fetchDatabaseStatus = async () => {
     setDbLoading(true);
@@ -226,9 +222,13 @@ const Settings = () => {
   const handleDefaultSortOrderChange = (order: 'asc' | 'desc') => {
     setDefaultSortOrder(order);
     localStorage.setItem('default_table_sort_order', order);
+    // Also ensure default sort by is set to 'id' if not already set
+    if (!localStorage.getItem('default_table_sort_by')) {
+      localStorage.setItem('default_table_sort_by', 'id');
+    }
     toast({
       title: 'Settings Saved',
-      description: `Default table sort order set to ${order === 'asc' ? 'Ascending' : 'Descending'}`,
+      description: `Default table sort order set to ${order === 'asc' ? 'Ascending' : 'Descending'}. All tables will sort by ID by default.`,
     });
   };
 
@@ -239,390 +239,217 @@ const Settings = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
           <p className="text-muted-foreground">
-            Manage your account settings and preferences
+            Manage your application settings and preferences
           </p>
         </div>
 
-        {/* Settings Cards */}
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Profile Settings
-                </CardTitle>
-              </div>
-              <CardDescription>Update your personal information</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" onClick={() => setProfileOpen(true)}>
-                Edit Profile
-              </Button>
-            </CardContent>
-          </Card>
+        {/* Settings Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="general">
+              <SettingsIcon className="h-4 w-4 mr-2" />
+              General Settings
+            </TabsTrigger>
+            <TabsTrigger value="database">
+              <Database className="h-4 w-4 mr-2" />
+              Database
+            </TabsTrigger>
+          </TabsList>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
+          {/* General Settings Tab */}
+          <TabsContent value="general" className="space-y-6">
+            {/* Display & UI Settings */}
+            <Card>
+              <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Monitor className="h-5 w-5" />
-                  Display & UI
+                  Display & UI Settings
                 </CardTitle>
-              </div>
-              <CardDescription>Date format, time format, and theme settings</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" onClick={() => setDisplayUIOpen(true)}>
-                Display Settings
-              </Button>
-            </CardContent>
-          </Card>
+                <CardDescription>Configure date format, time format, and theme preferences</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Date Format */}
+                <div className="space-y-2">
+                  <Label htmlFor="date-format" className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Date Format
+                  </Label>
+                  <Select value={dateFormat} onValueChange={(value: DateFormat) => setDateFormat(value)}>
+                    <SelectTrigger id="date-format">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="mm/dd/yyyy">MM/DD/YYYY (US Format)</SelectItem>
+                      <SelectItem value="dd/mm/yyyy">DD/MM/YYYY (European Format)</SelectItem>
+                      <SelectItem value="yyyy/mm/dd">YYYY/MM/DD (ISO Format)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Preview: {formatDate(new Date())}
+                  </p>
+                </div>
 
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
+                {/* Time Format */}
+                <div className="space-y-2">
+                  <Label htmlFor="time-format" className="flex items-center gap-2">
+                    <Clock className="h-4 w-4" />
+                    Time Format
+                  </Label>
+                  <Select value={timeFormat} onValueChange={(value: TimeFormat) => setTimeFormat(value)}>
+                    <SelectTrigger id="time-format">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="12hr">12 Hour (AM/PM)</SelectItem>
+                      <SelectItem value="24hr">24 Hour</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Preview: {formatTime(new Date())}
+                  </p>
+                </div>
+
+                {/* Theme */}
+                <div className="space-y-2">
+                  <Label htmlFor="theme" className="flex items-center gap-2">
+                    {resolvedTheme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+                    Theme
+                  </Label>
+                  <Select value={theme} onValueChange={(value: Theme) => setTheme(value)}>
+                    <SelectTrigger id="theme">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="light">Light</SelectItem>
+                      <SelectItem value="dark">Dark</SelectItem>
+                      <SelectItem value="system">System (Follow OS)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    Current theme: {resolvedTheme === 'dark' ? 'Dark' : 'Light'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            {/* Table Settings */}
+            <Card>
+              <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TableIcon className="h-5 w-5" />
                   Table Settings
                 </CardTitle>
-              </div>
-              <CardDescription>Default sort order and table preferences</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" onClick={() => setTableSettingsOpen(true)}>
-                Table Settings
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Notifications
-                </CardTitle>
-              </div>
-              <CardDescription>Configure notification preferences</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" onClick={() => setNotificationOpen(true)}>
-                Manage Notifications
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Security
-                </CardTitle>
-              </div>
-              <CardDescription>Password and security settings</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" onClick={() => setSecurityOpen(true)}>
-                Security Settings
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  Database
-                </CardTitle>
-              </div>
-              <CardDescription>Database configuration and backups</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button variant="outline" onClick={() => setDatabaseOpen(true)}>
-                Database Settings
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Currency Settings - Full Card */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <DollarSign className="h-5 w-5" />
-              Currency Settings
-            </CardTitle>
-            <CardDescription>Manage currency display preferences</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="currency-select">Display Currency</Label>
-              <Select value={currency} onValueChange={(value: SupportedCurrency) => setCurrency(value)}>
-                <SelectTrigger id="currency-select" className="w-full">
-                  <SelectValue placeholder="Select currency" />
-                </SelectTrigger>
-                <SelectContent>
-                  {(Object.keys(CURRENCY_NAMES) as SupportedCurrency[]).map((curr) => (
-                    <SelectItem key={curr} value={curr}>
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{curr}</span>
-                        <span className="text-muted-foreground">- {CURRENCY_NAMES[curr]}</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {loading && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Loading exchange rates...</span>
-              </div>
-            )}
-
-            {error && (
-              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                <p>Error loading exchange rates: {error}</p>
-              </div>
-            )}
-
-            {!loading && !error && rates && Object.keys(rates).length > 0 && (
-              <div className="space-y-2 rounded-md bg-muted/50 p-4">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Current Rate</span>
-                  <span className="text-sm text-muted-foreground">
-                    {currency === 'PHP' 
-                      ? 'Base currency (PHP)' 
-                      : rates[currency] 
-                        ? `1 PHP = ${rates[currency].toFixed(4)} ${currency}`
-                        : 'Rate unavailable'
-                    }
-                  </span>
+                <CardDescription>Configure default table sorting preferences</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="sort-order" className="flex items-center gap-2">
+                    <TableIcon className="h-4 w-4" />
+                    Default Sort Order (by ID)
+                  </Label>
+                  <Select 
+                    value={defaultSortOrder} 
+                    onValueChange={(value: 'asc' | 'desc') => handleDefaultSortOrderChange(value)}
+                  >
+                    <SelectTrigger id="sort-order">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="asc">Ascending (1, 2, 3...)</SelectItem>
+                      <SelectItem value="desc">Descending (..., 3, 2, 1)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    This will be the default sort order for all tables when sorted by ID.
+                  </p>
                 </div>
-                {currency !== 'PHP' && rates[currency] && (
-                  <div className="text-xs text-muted-foreground mt-1">
-                    All prices are converted from PHP (base currency) to {currency}
+              </CardContent>
+            </Card>
+
+            {/* Currency Settings */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" />
+                  Currency Settings
+                </CardTitle>
+                <CardDescription>Manage currency display preferences</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="currency-select">Display Currency</Label>
+                  <Select value={currency} onValueChange={(value: SupportedCurrency) => setCurrency(value)}>
+                    <SelectTrigger id="currency-select" className="w-full">
+                      <SelectValue placeholder="Select currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(CURRENCY_NAMES) as SupportedCurrency[]).map((curr) => (
+                        <SelectItem key={curr} value={curr}>
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{curr}</span>
+                            <span className="text-muted-foreground">- {CURRENCY_NAMES[curr]}</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {loading && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Loading exchange rates...</span>
                   </div>
                 )}
-              </div>
-            )}
 
-            <div className="text-xs text-muted-foreground">
-              <p>Note: All prices in the database are stored in PHP. The selected currency is used for display only.</p>
-            </div>
-          </CardContent>
-        </Card>
+                {error && (
+                  <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                    <p>Error loading exchange rates: {error}</p>
+                  </div>
+                )}
 
-        {/* Dialogs */}
-        <Dialog open={profileOpen} onOpenChange={setProfileOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Profile Settings</DialogTitle>
-              <DialogDescription>
-                Update your personal information and preferences.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input id="name" placeholder="Your name" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input id="email" type="email" placeholder="your.email@example.com" />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input id="phone" type="tel" placeholder="+1 (555) 000-0000" />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setProfileOpen(false)}>
-                Cancel
-              </Button>
-              <Button onClick={() => setProfileOpen(false)}>Save Changes</Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                {!loading && !error && rates && Object.keys(rates).length > 0 && (
+                  <div className="space-y-2 rounded-md bg-muted/50 p-4">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">Current Rate</span>
+                      <span className="text-sm text-muted-foreground">
+                        {currency === 'PHP' 
+                          ? 'Base currency (PHP)' 
+                          : rates[currency] 
+                            ? `1 PHP = ${rates[currency].toFixed(4)} ${currency}`
+                            : 'Rate unavailable'
+                        }
+                      </span>
+                    </div>
+                    {currency !== 'PHP' && rates[currency] && (
+                      <div className="text-xs text-muted-foreground mt-1">
+                        All prices are converted from PHP (base currency) to {currency}
+                      </div>
+                    )}
+                  </div>
+                )}
 
-        <Dialog open={notificationOpen} onOpenChange={setNotificationOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Notification Settings</DialogTitle>
-              <DialogDescription>
-                Configure how and when you receive notifications.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <p className="text-sm text-muted-foreground">
-                Notification preferences will be available in a future update.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setNotificationOpen(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                <div className="text-xs text-muted-foreground">
+                  <p>Note: All prices in the database are stored in PHP. The selected currency is used for display only.</p>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-        <Dialog open={securityOpen} onOpenChange={setSecurityOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Security Settings</DialogTitle>
-              <DialogDescription>
-                Manage your password and security preferences.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <p className="text-sm text-muted-foreground">
-                Security settings will be available in a future update.
-              </p>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setSecurityOpen(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+          {/* Database Settings Tab */}
+          <TabsContent value="database" className="space-y-6">
 
-        {/* Display & UI Settings Dialog */}
-        <Dialog open={displayUIOpen} onOpenChange={setDisplayUIOpen}>
-          <DialogContent className="max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>Display & UI Settings</DialogTitle>
-              <DialogDescription>
-                Configure date format, time format, and theme preferences.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              {/* Date Format */}
-              <div className="space-y-2">
-                <Label htmlFor="date-format" className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Date Format
-                </Label>
-                <Select value={dateFormat} onValueChange={(value: DateFormat) => setDateFormat(value)}>
-                  <SelectTrigger id="date-format">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="mm/dd/yyyy">MM/DD/YYYY (US Format)</SelectItem>
-                    <SelectItem value="dd/mm/yyyy">DD/MM/YYYY (European Format)</SelectItem>
-                    <SelectItem value="yyyy/mm/dd">YYYY/MM/DD (ISO Format)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Preview: {formatDate(new Date())}
-                </p>
-              </div>
-
-              {/* Time Format */}
-              <div className="space-y-2">
-                <Label htmlFor="time-format" className="flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Time Format
-                </Label>
-                <Select value={timeFormat} onValueChange={(value: TimeFormat) => setTimeFormat(value)}>
-                  <SelectTrigger id="time-format">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="12hr">12 Hour (AM/PM)</SelectItem>
-                    <SelectItem value="24hr">24 Hour</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Preview: {formatTime(new Date())}
-                </p>
-              </div>
-
-              {/* Dark Mode */}
-              <div className="space-y-2">
-                <Label htmlFor="theme" className="flex items-center gap-2">
-                  {resolvedTheme === 'dark' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
-                  Theme
-                </Label>
-                <Select value={theme} onValueChange={(value: Theme) => setTheme(value)}>
-                  <SelectTrigger id="theme">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="light">Light</SelectItem>
-                    <SelectItem value="dark">Dark</SelectItem>
-                    <SelectItem value="system">System (Follow OS)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  Current theme: {resolvedTheme === 'dark' ? 'Dark' : 'Light'}
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDisplayUIOpen(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Table Settings Dialog */}
-        <Dialog open={tableSettingsOpen} onOpenChange={setTableSettingsOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Table Settings</DialogTitle>
-              <DialogDescription>
-                Configure default table sorting preferences.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="sort-order" className="flex items-center gap-2">
-                  <TableIcon className="h-4 w-4" />
-                  Default Sort Order (by ID)
-                </Label>
-                <Select 
-                  value={defaultSortOrder} 
-                  onValueChange={(value: 'asc' | 'desc') => handleDefaultSortOrderChange(value)}
-                >
-                  <SelectTrigger id="sort-order">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="asc">Ascending (1, 2, 3...)</SelectItem>
-                    <SelectItem value="desc">Descending (..., 3, 2, 1)</SelectItem>
-                  </SelectContent>
-                </Select>
-                <p className="text-xs text-muted-foreground">
-                  This will be the default sort order for all tables when sorted by ID.
-                </p>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setTableSettingsOpen(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-
-        {/* Database Settings Dialog */}
-        <Dialog open={databaseOpen} onOpenChange={setDatabaseOpen}>
-          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>Database Settings</DialogTitle>
-              <DialogDescription>
-                Manage database configuration, connection, and backups.
-              </DialogDescription>
-            </DialogHeader>
-            <div className="space-y-6 py-4">
-              {/* Connection Status */}
-              <div className="space-y-3">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Database className="h-5 w-5" />
+                  Database Settings
+                </CardTitle>
+                <CardDescription>Manage database configuration, connection, and backups</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                {/* Connection Status */}
+                <div className="space-y-3">
                 <Label className="text-base font-semibold">Connection Status</Label>
                 {dbLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -669,10 +496,10 @@ const Settings = () => {
                     )}
                   </div>
                 ) : null}
-              </div>
+                </div>
 
-              {/* Database Configuration */}
-              <div className="space-y-3">
+                {/* Database Configuration */}
+                <div className="space-y-3">
                 <Label className="text-base font-semibold">Database Configuration</Label>
                 <div className="space-y-2 rounded-md border p-4">
                   <div className="flex items-center justify-between">
@@ -688,10 +515,10 @@ const Settings = () => {
                     <span className="text-sm font-medium">{dbConfig?.database || 'wedding_management_db'}</span>
                   </div>
                 </div>
-              </div>
+                </div>
 
-              {/* Test Connection */}
-              <div className="space-y-3">
+                {/* Test Connection */}
+                <div className="space-y-3">
                 <Label className="text-base font-semibold">Test Connection</Label>
                 <Button 
                   onClick={handleTestConnection} 
@@ -711,10 +538,10 @@ const Settings = () => {
                     </>
                   )}
                 </Button>
-              </div>
+                </div>
 
-              {/* Export Database */}
-              <div className="space-y-3">
+                {/* Export Database */}
+                <div className="space-y-3">
                 <Label className="text-base font-semibold flex items-center gap-2">
                   <Download className="h-4 w-4" />
                   Export Database
@@ -740,10 +567,10 @@ const Settings = () => {
                     </>
                   )}
                 </Button>
-              </div>
+                </div>
 
-              {/* Import Database */}
-              <div className="space-y-3">
+                {/* Import Database */}
+                <div className="space-y-3">
                 <Label className="text-base font-semibold flex items-center gap-2">
                   <Upload className="h-4 w-4" />
                   Import Database
@@ -777,15 +604,11 @@ const Settings = () => {
                     )}
                   </Button>
                 </div>
-              </div>
-            </div>
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setDatabaseOpen(false)}>
-                Close
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </DashboardLayout>
   );

@@ -17,7 +17,9 @@ import {
   Utensils,
   AlertTriangle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Hash,
+  Heart
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -77,6 +79,7 @@ const Weddings = () => {
   const [venueFilter, setVenueFilter] = useState('');
   const [plannerFilter, setPlannerFilter] = useState('');
   const [hasRestrictions, setHasRestrictions] = useState<string | undefined>();
+  const [filterWeddingType, setFilterWeddingType] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [couples, setCouples] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -155,7 +158,7 @@ const Weddings = () => {
   useEffect(() => {
     fetchWeddings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFrom, dateTo, venueFilter, plannerFilter, hasRestrictions]);
+  }, [dateFrom, dateTo, venueFilter, plannerFilter, hasRestrictions, filterWeddingType]);
 
   const fetchWeddings = async () => {
     setLoading(true);
@@ -168,27 +171,39 @@ const Weddings = () => {
         has_restrictions: hasRestrictions,
       });
       const weddingsData = response.data || [];
-      setWeddings(weddingsData);
       
-      // Calculate total guests by fetching actual guest counts
+      // Calculate total guests by fetching actual guest counts and update wedding data
       let total = 0;
       try {
-        const guestCountPromises = weddingsData.map(async (wedding: any) => {
+        const weddingsWithGuestCounts = await Promise.all(weddingsData.map(async (wedding: any) => {
           try {
             const guestsResponse = await guestsAPI.getAll({ wedding_id: wedding.wedding_id || wedding.id });
-            return (guestsResponse.data || []).length;
+            const guestCount = (guestsResponse.data || []).length;
+            total += guestCount;
+            return {
+              ...wedding,
+              guest_count: guestCount,
+              guestCount: guestCount
+            };
           } catch (e) {
-            return 0;
+            const fallbackCount = wedding.guest_count || wedding.guestCount || 0;
+            total += fallbackCount;
+            return {
+              ...wedding,
+              guest_count: fallbackCount,
+              guestCount: fallbackCount
+            };
           }
-        });
-        const counts = await Promise.all(guestCountPromises);
-        total = counts.reduce((sum, count) => sum + count, 0);
+        }));
+        setWeddings(weddingsWithGuestCounts);
+        setTotalGuests(total);
       } catch (e) {
         console.error('Error calculating guest counts:', e);
         // Fallback to guest_count field if available
         total = weddingsData.reduce((sum: number, w: any) => sum + (w.guest_count || w.guestCount || 0), 0);
+        setWeddings(weddingsData);
+        setTotalGuests(total);
       }
-      setTotalGuests(total);
     } catch (error: any) {
       console.error('Error fetching weddings:', error);
       toast({
@@ -214,14 +229,27 @@ const Weddings = () => {
     }
   };
 
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
+  });
+
   const filteredWeddings = useMemo(() => {
-    return weddings.filter(wedding => {
+    const filtered = weddings.filter(wedding => {
       const matchesSearch = wedding.couple.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            wedding.venue.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesFilter = filterStatus === 'all' || wedding.paymentStatus === filterStatus;
-      return matchesSearch && matchesFilter;
+      const matchesWeddingType = filterWeddingType === 'all' || wedding.ceremony_type === filterWeddingType;
+      return matchesSearch && matchesFilter && matchesWeddingType;
     });
-  }, [weddings, searchTerm, filterStatus]);
+    
+    // Sort by wedding ID using default sort order
+    return filtered.sort((a, b) => {
+      const aId = a.wedding_id || a.id || 0;
+      const bId = b.wedding_id || b.id || 0;
+      return sortOrder === 'asc' ? aId - bId : bId - aId;
+    });
+  }, [weddings, searchTerm, filterStatus, sortOrder, filterWeddingType]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredWeddings.length / itemsPerPage);
@@ -471,6 +499,7 @@ const Weddings = () => {
                   setVenueFilter('');
                   setPlannerFilter('');
                   setHasRestrictions(undefined);
+                  setFilterWeddingType('all');
                   setSearchTerm('');
                 }}
               >
@@ -535,6 +564,23 @@ const Weddings = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                <div>
+                  <label className="text-sm text-muted-foreground">Wedding Type</label>
+                  <Select value={filterWeddingType} onValueChange={setFilterWeddingType}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Types" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Types</SelectItem>
+                      <SelectItem value="Traditional">Traditional</SelectItem>
+                      <SelectItem value="Modern">Modern</SelectItem>
+                      <SelectItem value="Beach">Beach</SelectItem>
+                      <SelectItem value="Garden">Garden</SelectItem>
+                      <SelectItem value="Destination">Destination</SelectItem>
+                      <SelectItem value="Intimate">Intimate</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             )}
 
@@ -571,13 +617,14 @@ const Weddings = () => {
                     </TableCell>
                     <TableCell className="font-medium">
                       <div>
-                        <div className="flex items-center gap-2">
-                          <div className="font-semibold">{wedding.couple || (wedding.partner1_name && wedding.partner2_name ? `${wedding.partner1_name} & ${wedding.partner2_name}` : 'N/A')}</div>
-                          <Badge variant="outline" className="text-xs font-mono">
-                            #{wedding.couple_id}
+                        <div className="flex items-start gap-2">
+                          <Badge variant="outline" className="text-xs font-mono flex items-center gap-1 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 flex-shrink-0 mt-0.5">
+                            <Heart className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                            {wedding.couple_id}
                           </Badge>
+                          <div className="font-semibold min-w-0 flex-1">{wedding.couple || (wedding.partner1_name && wedding.partner2_name ? `${wedding.partner1_name} & ${wedding.partner2_name}` : 'N/A')}</div>
                         </div>
-                        <div className="text-sm text-muted-foreground">
+                        <div className="text-sm text-muted-foreground mt-1">
                           {wedding.plannerContact || wedding.planner_contact || 'N/A'}
                         </div>
                       </div>
@@ -629,35 +676,46 @@ const Weddings = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="space-y-1.5">
-                        {wedding.ceremony_type && (
-                          <div>
-                            <Badge variant="outline" className="text-xs">
-                              {wedding.ceremony_type}
-                            </Badge>
-                          </div>
-                        )}
+                      <div className="space-y-1">
                         {(() => {
+                          const hasType = wedding.ceremony_type;
                           const restrictions = wedding.all_restrictions || wedding.restrictions || [];
-                          return restrictions.length > 0 ? (
-                            <div className="flex flex-wrap gap-1">
-                              {restrictions.slice(0, 2).map((r: any) => (
-                                <Badge 
-                                  key={r.restriction_id} 
-                                  className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1`}
-                                >
-                                  {getTypeIcon(r.restriction_type || '')}
-                                  {r.restriction_name}
-                                </Badge>
-                              ))}
-                              {restrictions.length > 2 && (
-                                <Badge variant="outline" className="text-xs">
-                                  +{restrictions.length - 2} more
-                                </Badge>
+                          const hasRestrictions = restrictions.length > 0;
+                          
+                          if (!hasType && !hasRestrictions) {
+                            return (
+                              <span className="text-xs text-muted-foreground">No preference?</span>
+                            );
+                          }
+                          
+                          return (
+                            <>
+                              {hasType && (
+                                <div>
+                                  <Badge variant="outline" className="text-xs">
+                                    {wedding.ceremony_type}
+                                  </Badge>
+                                </div>
                               )}
-                            </div>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">No restrictions</span>
+                              {hasRestrictions && (
+                                <div className="space-y-0.5">
+                                  {restrictions.slice(0, 2).map((r: any) => (
+                                    <Badge 
+                                      key={r.restriction_id} 
+                                      className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1 w-fit`}
+                                    >
+                                      {getTypeIcon(r.restriction_type || '')}
+                                      {r.restriction_name}
+                                    </Badge>
+                                  ))}
+                                  {restrictions.length > 2 && (
+                                    <Badge variant="outline" className="text-xs w-fit">
+                                      +{restrictions.length - 2} more
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </>
                           );
                         })()}
                       </div>
@@ -665,12 +723,7 @@ const Weddings = () => {
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4 text-muted-foreground" />
-                        {(() => {
-                          // Try to get guest count from the wedding data
-                          const guestCount = wedding.guestCount || wedding.guest_count;
-                          // If not available, we'll need to fetch it - but for now show what we have
-                          return guestCount || 0;
-                        })()}
+                        <span className="font-medium">{wedding.guestCount ?? wedding.guest_count ?? 0}</span>
                       </div>
                     </TableCell>
                     <TableCell>

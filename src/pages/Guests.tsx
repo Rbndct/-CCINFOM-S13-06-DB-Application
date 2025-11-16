@@ -54,7 +54,7 @@ import {
 import { guestsAPI, dietaryRestrictionsAPI, weddingsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, filterNoneFromDisplay } from '@/utils/restrictionUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 
 type Guest = {
@@ -100,8 +100,14 @@ const Guests = () => {
   const [filterRsvp, setFilterRsvp] = useState<string>('all');
   const [filterRestriction, setFilterRestriction] = useState<string>('all');
   const [filterWedding, setFilterWedding] = useState<string>('all');
-  const [sortBy, setSortBy] = useState<'name' | 'rsvp' | 'wedding' | 'table'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'id' | 'name' | 'rsvp' | 'wedding' | 'table'>(() => {
+    const stored = localStorage.getItem('default_table_sort_by');
+    return (stored as 'id' | 'name' | 'rsvp' | 'wedding' | 'table') || 'id';
+  });
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
+  });
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -190,8 +196,8 @@ const Guests = () => {
     try {
       const response = await dietaryRestrictionsAPI.getAll();
       const allRestrictions = response.data || [];
-      // Filter out "None" from the display (it's a system restriction)
-      const displayableRestrictions = allRestrictions.filter((r: any) => r.restriction_name !== 'None');
+      // Filter out "None" from the display (it's a system restriction) using utility function
+      const displayableRestrictions = filterNoneFromDisplay(allRestrictions);
       setDietaryRestrictions(displayableRestrictions);
     } catch (err: any) {
       console.error('Error fetching dietary restrictions:', err);
@@ -247,6 +253,10 @@ const Guests = () => {
     return filtered.sort((a, b) => {
       let aVal: any, bVal: any;
       switch (sortBy) {
+        case 'id':
+          aVal = a.guest_id || a.id || 0;
+          bVal = b.guest_id || b.id || 0;
+          break;
         case 'name':
           aVal = (a.guest_name || a.name || `${a.firstName} ${a.lastName}`).toLowerCase();
           bVal = (b.guest_name || b.name || `${b.firstName} ${b.lastName}`).toLowerCase();
@@ -287,8 +297,8 @@ const Guests = () => {
     setFilterRsvp('all');
     setFilterRestriction('all');
     setFilterWedding('all');
-    setSortBy('name');
-    setSortOrder('asc');
+    setSortBy('id');
+    setSortOrder('desc');
     setCurrentPage(1);
   };
 
@@ -602,6 +612,7 @@ const Guests = () => {
                     <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
                       <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
                       <SelectContent>
+                        <SelectItem value="id">ID</SelectItem>
                         <SelectItem value="name">Name</SelectItem>
                         <SelectItem value="rsvp">RSVP Status</SelectItem>
                         <SelectItem value="wedding">Wedding</SelectItem>

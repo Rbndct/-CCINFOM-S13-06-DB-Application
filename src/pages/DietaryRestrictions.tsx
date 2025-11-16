@@ -65,7 +65,7 @@ import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { dietaryRestrictionsAPI } from '@/api';
 import { useDateFormat } from '@/context/DateFormatContext';
-import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, getSeverityBadge, filterNoneFromDisplay } from '@/utils/restrictionUtils';
 
 type DietaryRestriction = {
   restriction_id: number;
@@ -105,8 +105,14 @@ const DietaryRestrictions = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterSeverity, setFilterSeverity] = useState('all');
-  const [sortBy, setSortBy] = useState<'name' | 'severity' | 'type' | 'guests' | 'menu' | 'couples'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'id' | 'name' | 'severity' | 'type' | 'guests' | 'menu' | 'couples'>(() => {
+    const stored = localStorage.getItem('default_table_sort_by');
+    return (stored as 'id' | 'name' | 'severity' | 'type' | 'guests' | 'menu' | 'couples') || 'id';
+  });
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
+  });
   const [groupBy, setGroupBy] = useState<'none' | 'type' | 'severity'>('none');
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -139,8 +145,8 @@ const DietaryRestrictions = () => {
       setLoading(true);
       const response = await dietaryRestrictionsAPI.getAll();
       const allRestrictions = response.data || [];
-      // Filter out "None" from the display (it's a system restriction)
-      const displayableRestrictions = allRestrictions.filter((r: any) => r.restriction_name !== 'None');
+      // Filter out "None" from the display (it's a system restriction) using utility function
+      const displayableRestrictions = filterNoneFromDisplay(allRestrictions);
       setRestrictions(displayableRestrictions);
     } catch (error: any) {
       toast({
@@ -233,6 +239,18 @@ const DietaryRestrictions = () => {
   const handleDelete = async () => {
     if (!selectedRestriction) return;
 
+    // Prevent deleting "None" restriction
+    if (selectedRestriction.restriction_name === 'None') {
+      toast({
+        title: 'Cannot Delete',
+        description: 'The "None" restriction is a system restriction and cannot be deleted.',
+        variant: 'destructive',
+      });
+      setDeleteDialogOpen(false);
+      setSelectedRestriction(null);
+      return;
+    }
+
     try {
       setFormLoading(true);
       await dietaryRestrictionsAPI.delete(selectedRestriction.restriction_id);
@@ -255,6 +273,15 @@ const DietaryRestrictions = () => {
   };
 
   const openEditDialog = (restriction: DietaryRestriction) => {
+    // Prevent editing "None" restriction
+    if (restriction.restriction_name === 'None') {
+      toast({
+        title: 'Cannot Edit',
+        description: 'The "None" restriction is a system restriction and cannot be edited.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSelectedRestriction(restriction);
     setFormData({
       restriction_name: restriction.restriction_name,
@@ -274,6 +301,15 @@ const DietaryRestrictions = () => {
   };
 
   const openDeleteDialog = (restriction: DietaryRestriction) => {
+    // Prevent deleting "None" restriction
+    if (restriction.restriction_name === 'None') {
+      toast({
+        title: 'Cannot Delete',
+        description: 'The "None" restriction is a system restriction and cannot be deleted.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSelectedRestriction(restriction);
     setDeleteDialogOpen(true);
   };
@@ -309,6 +345,9 @@ const DietaryRestrictions = () => {
   const sortedRestrictions = [...filteredRestrictions].sort((a, b) => {
     let comparison = 0;
     switch (sortBy) {
+      case 'id':
+        comparison = (a.restriction_id || 0) - (b.restriction_id || 0);
+        break;
       case 'name':
         comparison = a.restriction_name.localeCompare(b.restriction_name);
         break;
@@ -478,8 +517,8 @@ const DietaryRestrictions = () => {
                         setSearchTerm('');
                         setFilterType('all');
                         setFilterSeverity('all');
-                        setSortBy('name');
-                        setSortOrder('asc');
+                        setSortBy('id');
+                        setSortOrder('desc');
                         setGroupBy('none');
                         setCurrentPage(1);
                       }}
@@ -521,6 +560,7 @@ const DietaryRestrictions = () => {
                       <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
                         <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="id">ID</SelectItem>
                           <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="severity">Severity</SelectItem>
                           <SelectItem value="type">Type</SelectItem>

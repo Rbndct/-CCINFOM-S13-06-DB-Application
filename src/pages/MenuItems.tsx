@@ -65,8 +65,14 @@ const MenuItems = () => {
   const [menuItems, setMenuItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
-  const [sortBy, setSortBy] = useState<'name' | 'type' | 'price' | 'cost' | 'stock'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'id' | 'name' | 'type' | 'price' | 'cost' | 'stock'>(() => {
+    const stored = localStorage.getItem('default_table_sort_by');
+    return (stored as 'id' | 'name' | 'type' | 'price' | 'cost' | 'stock') || 'id';
+  });
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
+  });
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -330,8 +336,8 @@ const MenuItems = () => {
   const handleResetFilters = () => {
     setSearchTerm('');
     setFilterType('all');
-    setSortBy('name');
-    setSortOrder('asc');
+    setSortBy('id');
+    setSortOrder('desc');
     setCurrentPage(1);
   };
 
@@ -367,6 +373,10 @@ const MenuItems = () => {
       .sort((a, b) => {
       let aVal: any, bVal: any;
       switch (sortBy) {
+        case 'id':
+          aVal = a.menu_item_id || a.id || 0;
+          bVal = b.menu_item_id || b.id || 0;
+          break;
         case 'name':
           aVal = a.menu_name?.toLowerCase() || '';
           bVal = b.menu_name?.toLowerCase() || '';
@@ -553,6 +563,7 @@ const MenuItems = () => {
                       <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
                         <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="id">ID</SelectItem>
                           <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="type">Type</SelectItem>
                           <SelectItem value="price">Price</SelectItem>
@@ -792,6 +803,7 @@ const MenuItems = () => {
                       <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
                         <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="id">ID</SelectItem>
                           <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="type">Type</SelectItem>
                           <SelectItem value="price">Price</SelectItem>
