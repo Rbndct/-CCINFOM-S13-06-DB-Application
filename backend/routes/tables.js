@@ -150,12 +150,18 @@ router.post('/seating/:wedding_id/guest/:table_id/assign', async (req, res) => {
     }
     
     const capacity = tableRows[0].capacity;
+    const tableCategory = tableRows[0].table_category || '';
+    const isCoupleTable = tableCategory.toLowerCase() === 'couple';
+    const partnerCount = isCoupleTable ? 2 : 0; // Couple tables always have 2 partners seated
+    
     const [cntRows] = await promisePool.query(
         `SELECT COUNT(*) AS cnt FROM guest WHERE table_id = ?`, [tableId]);
     const current = cntRows[0].cnt || 0;
-    if (current + guest_ids.length > capacity) {
+    const totalAfterAssignment = current + partnerCount + guest_ids.length;
+    
+    if (totalAfterAssignment > capacity) {
       return res.status(409).json(
-          {success: false, error: `Assigning exceeds table capacity. Table capacity: ${capacity}, Currently assigned: ${current}, Trying to assign: ${guest_ids.length}`});
+          {success: false, error: `Assigning exceeds table capacity. Table capacity: ${capacity}, Currently assigned: ${current}${isCoupleTable ? ' + 2 partners' : ''}, Trying to assign: ${guest_ids.length}, Total would be: ${totalAfterAssignment}`});
     }
 
     // Validate guests exist and belong to this wedding
