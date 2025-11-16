@@ -98,6 +98,8 @@ type Wedding = {
   weddingTime: string;
   venue: string;
   guestCount: number;
+  equipmentRentalCost?: number;
+  foodCost?: number;
   totalCost: number;
   productionCost: number;
   paymentStatus: string;
@@ -871,16 +873,16 @@ const CoupleDetail = () => {
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground flex items-center gap-1">
                             <DollarSign className="w-3 h-3" />
-                            Total Cost:
+                            Equipment Rental Cost:
                           </span>
-                          <span className="font-semibold">{formatCurrency(wedding.total_cost || wedding.totalCost || 0)}</span>
+                          <span className="font-semibold">{formatCurrency(wedding.equipmentRentalCost || wedding.equipment_rental_cost || wedding.total_cost || wedding.totalCost || 0)}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground flex items-center gap-1">
                             <Utensils className="w-3 h-3" />
-                            Production Cost:
+                            Food Cost:
                           </span>
-                          <span className="font-semibold">{formatCurrency(wedding.production_cost || wedding.productionCost || 0)}</span>
+                          <span className="font-semibold">{formatCurrency(wedding.foodCost || wedding.food_cost || wedding.production_cost || wedding.productionCost || 0)}</span>
                         </div>
                       </div>
                       <div className="pt-2 space-y-2">

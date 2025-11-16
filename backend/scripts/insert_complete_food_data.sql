@@ -167,7 +167,7 @@ INSERT INTO ingredient (ingredient_id, ingredient_name, unit, stock_quantity, re
 -- STEP 5: INSERT MENU ITEMS (at least 10 with balanced dietary restrictions)
 -- ============================================================================
 
-INSERT INTO menu_item (menu_name, menu_cost, menu_price, menu_type, stock, restriction_id) VALUES
+INSERT INTO menu_item (menu_name, unit_cost, selling_price, menu_type, stock, restriction_id) VALUES
 -- Appetizers
 ('Ramen Appetizer Bowl', 150.00, 280.00, 'Appetizer', 0, NULL),
 ('Miso Soup Shot', 45.00, 95.00, 'Appetizer', 0, @vegetarian_id),
@@ -467,38 +467,297 @@ INSERT INTO recipe (menu_item_id, ingredient_id, quantity_needed) VALUES
 ((SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dorayaki'), 25, 0.03);
 
 -- ============================================================================
+-- STEP 6.5: ADD MULTIPLE DIETARY RESTRICTIONS TO MENU ITEMS
+-- ============================================================================
+-- Some menu items have multiple dietary restrictions (2-4 restrictions)
+-- This uses the menu_item_restrictions junction table
+
+-- Get additional restriction IDs
+SET @gluten_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Gluten Intolerant' LIMIT 1);
+SET @low_sodium_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Low-Sodium' LIMIT 1);
+SET @low_sugar_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Low-Sugar' LIMIT 1);
+SET @diabetic_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Diabetic-Friendly' LIMIT 1);
+SET @halal_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Halal' LIMIT 1);
+SET @kosher_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Kosher' LIMIT 1);
+SET @no_alcohol_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'No Alcohol' LIMIT 1);
+SET @peanut_allergy_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Peanut Allergy' LIMIT 1);
+SET @tree_nut_allergy_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Tree Nut Allergy' LIMIT 1);
+SET @shellfish_allergy_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Shellfish Allergy' LIMIT 1);
+SET @dairy_allergy_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Dairy Allergy' LIMIT 1);
+SET @egg_allergy_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Egg Allergy' LIMIT 1);
+
+-- First, migrate existing single restrictions from menu_item.restriction_id to junction table
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT menu_item_id, restriction_id FROM menu_item 
+WHERE restriction_id IS NOT NULL
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = menu_item.menu_item_id 
+    AND mir.restriction_id = menu_item.restriction_id
+);
+
+-- Add multiple restrictions to specific menu items (2-4 restrictions each)
+
+-- Miso Soup Shot: 2 restrictions (Vegetarian + Low-Sodium)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Miso Soup Shot'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sodium_id
+);
+
+-- Edamame: 3 restrictions (Vegan + Gluten Free + Low-Sodium)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Edamame (Steamed Soybeans)'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Edamame (Steamed Soybeans)'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sodium_id
+);
+
+-- Vegetable Spring Rolls: 3 restrictions (Vegan + Gluten Free + Low-Fat)
+SET @low_fat_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Low-Fat' LIMIT 1);
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Vegetable Spring Rolls'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_fat_id FROM menu_item mi WHERE mi.menu_name = 'Vegetable Spring Rolls'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_fat_id
+);
+
+-- Tofu Skewers: 4 restrictions (Vegan + Gluten Free + Low-Sodium + Low-Fat)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Skewers'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Skewers'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sodium_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_fat_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Skewers'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_fat_id
+);
+
+-- Naruto Udon Bowl: 2 restrictions (Vegetarian + Low-Sodium)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Naruto Udon Bowl'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sodium_id
+);
+
+-- Vegetarian Curry Bowl: 3 restrictions (Vegan + Gluten Free + Low-Sodium)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Vegetarian Curry Bowl'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Vegetarian Curry Bowl'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sodium_id
+);
+
+-- Tofu Teriyaki Bowl: 4 restrictions (Vegan + Gluten Free + Low-Sodium + Low-Fat)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Teriyaki Bowl'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Teriyaki Bowl'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sodium_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_fat_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Teriyaki Bowl'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_fat_id
+);
+
+-- Green Tea: 2 restrictions (Vegan + Low-Sugar)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Green Tea'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sugar_id
+);
+
+-- Matcha Latte: 3 restrictions (Vegetarian + Low-Sugar + Diabetic-Friendly)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Matcha Latte'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sugar_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @diabetic_id FROM menu_item mi WHERE mi.menu_name = 'Matcha Latte'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @diabetic_id
+);
+
+-- Japanese Iced Coffee: 2 restrictions (Vegan + Low-Sugar)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Japanese Iced Coffee'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sugar_id
+);
+
+-- Dango Trio: 2 restrictions (Vegan + Gluten Free)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Dango Trio (Sweet Rice Balls)'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+);
+
+-- Red Bean Mochi: 3 restrictions (Vegan + Gluten Free + Low-Sodium)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Red Bean Mochi'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Red Bean Mochi'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sodium_id
+);
+
+-- Sesame Balls: 4 restrictions (Vegan + Gluten Free + Low-Sodium + Low-Fat)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Sesame Balls'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Sesame Balls'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sodium_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_fat_id FROM menu_item mi WHERE mi.menu_name = 'Sesame Balls'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_fat_id
+);
+
+-- Warabimochi: 3 restrictions (Vegan + Gluten Free + Low-Sugar)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Warabimochi'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @gluten_id
+)
+UNION ALL
+SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Warabimochi'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sugar_id
+);
+
+-- Anmitsu: 2 restrictions (Vegan + Low-Sugar)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Anmitsu'
+AND NOT EXISTS (
+    SELECT 1 FROM menu_item_restrictions mir 
+    WHERE mir.menu_item_id = mi.menu_item_id 
+    AND mir.restriction_id = @low_sugar_id
+);
+
+-- ============================================================================
 -- STEP 7: INSERT PACKAGES (at least 10)
 -- ============================================================================
 
-INSERT INTO package (package_name, package_type, package_price) VALUES
--- Full Service Packages
-('Hidden Leaf Village Premium', 'Full Service', 15000.00),
-('Uchiha Clan Elite', 'Full Service', 18000.00),
-('Hokage Grand Celebration', 'Full Service', 22000.00),
-('Akatsuki Deluxe Experience', 'Full Service', 25000.00),
+INSERT INTO package (package_name, package_type, selling_price) VALUES
+-- Full Service Packages (Realistic pricing: 180-220% markup)
+('Hidden Leaf Village Premium', 'Full Service', 2500.00),
+('Uchiha Clan Elite', 'Full Service', 4100.00),
+('Hokage Grand Celebration', 'Full Service', 6600.00),
+('Akatsuki Deluxe Experience', 'Full Service', 6300.00),
 
--- Basic Packages
-('Genin Starter Package', 'Basic', 8000.00),
-('Chunin Standard Package', 'Basic', 10000.00),
-('Jonin Professional Package', 'Basic', 12000.00),
+-- Basic Packages (Realistic pricing: 200-250% markup)
+('Genin Starter Package', 'Basic', 1450.00),
+('Chunin Standard Package', 'Basic', 2240.00),
+('Jonin Professional Package', 'Basic', 3990.00),
 
--- Premium Packages
-('Jinchuriki Special Package', 'Premium', 25000.00),
-('Sage Mode Deluxe', 'Premium', 28000.00),
-('Six Paths Ultimate Package', 'Premium', 32000.00),
+-- Premium Packages (Realistic pricing: 180-200% markup)
+('Jinchuriki Special Package', 'Premium', 8400.00),
+('Sage Mode Deluxe', 'Premium', 9450.00),
+('Six Paths Ultimate Package', 'Premium', 9000.00),
 
--- Specialty Packages
-('Ramen Lovers Special', 'Specialty', 12000.00),
-('Sushi Master Collection', 'Specialty', 16000.00),
-('Anime Fusion Experience', 'Specialty', 14000.00),
-('Ninja Warrior Feast', 'Specialty', 19000.00),
-('Vegetarian Paradise Package', 'Specialty', 13000.00);
+-- Specialty Packages (Realistic pricing: 180-220% markup)
+('Ramen Lovers Special', 'Specialty', 3830.00),
+('Sushi Master Collection', 'Specialty', 3900.00),
+('Anime Fusion Experience', 'Specialty', 3810.00),
+('Ninja Warrior Feast', 'Specialty', 6750.00),
+('Vegetarian Paradise Package', 'Specialty', 4620.00),
+
+-- Diet-Specific Packages (Realistic pricing: 200-220% markup)
+('Vegan Delight Package', 'Specialty', 4200.00),
+('Gluten-Free Gourmet', 'Specialty', 4800.00),
+('Low-Sodium Healthy Choice', 'Specialty', 3600.00),
+('Halal Certified Feast', 'Specialty', 5500.00),
+('Heart-Healthy Selection', 'Specialty', 3800.00);
 
 -- ============================================================================
 -- STEP 8: LINK PACKAGES TO MENU ITEMS (package_menu_items)
 -- ============================================================================
 
--- Hidden Leaf Village Premium
+-- Hidden Leaf Village Premium (Cost: ~895, Price: 2500, Markup: ~180%)
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Hidden Leaf Village Premium'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Hidden Leaf Village Premium'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 1),
@@ -506,18 +765,18 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Hidden Leaf Village Premium'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Hidden Leaf Village Premium'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Mochi Ice Cream'), 1);
 
--- Uchiha Clan Elite
+-- Uchiha Clan Elite (Cost: ~1470, Price: 4100, Markup: ~180%) - Varied quantities
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
-((SELECT package_id FROM package WHERE package_name = 'Uchiha Clan Elite'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Edamame (Steamed Soybeans)'), 2),
-((SELECT package_id FROM package WHERE package_name = 'Uchiha Clan Elite'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Gyoza (Dumplings)'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Uchiha Clan Elite'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Edamame (Steamed Soybeans)'), 3),
+((SELECT package_id FROM package WHERE package_name = 'Uchiha Clan Elite'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Gyoza (Dumplings)'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Uchiha Clan Elite'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sasuke Teriyaki Chicken'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Uchiha Clan Elite'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sakura Sushi Platter'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Uchiha Clan Elite'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Matcha Green Tea Cake'), 1);
 
--- Hokage Grand Celebration
+-- Hokage Grand Celebration (Cost: ~2370, Price: 6600, Markup: ~180%) - High quantity package
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
-((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 2),
-((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 4),
+((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Takoyaki (Octopus Balls)'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ichiraku Ramen Special'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sakura Sushi Platter'), 1),
@@ -526,7 +785,7 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Mochi Ice Cream'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Hokage Grand Celebration'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Matcha Green Tea Cake'), 1);
 
--- Akatsuki Deluxe Experience
+-- Akatsuki Deluxe Experience (Cost: ~2240, Price: 6300, Markup: ~180%)
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Akatsuki Deluxe Experience'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tempura Shrimp'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Akatsuki Deluxe Experience'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Chicken Yakitori'), 2),
@@ -536,20 +795,20 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Akatsuki Deluxe Experience'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Red Bean Mochi'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Akatsuki Deluxe Experience'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sesame Balls'), 1);
 
--- Genin Starter Package
+-- Genin Starter Package (Cost: ~415, Price: 1450, Markup: ~250%) - Minimal items
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Genin Starter Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Genin Starter Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Naruto Udon Bowl'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Genin Starter Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 1);
 
--- Chunin Standard Package
+-- Chunin Standard Package (Cost: ~640, Price: 2240, Markup: ~250%)
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Chunin Standard Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Edamame (Steamed Soybeans)'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Chunin Standard Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Gyoza (Dumplings)'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Chunin Standard Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ichiraku Ramen Special'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Chunin Standard Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Mochi Ice Cream'), 1);
 
--- Jonin Professional Package
+-- Jonin Professional Package (Cost: ~1330, Price: 3990, Markup: ~200%)
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Jonin Professional Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Vegetable Spring Rolls'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Jonin Professional Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Chicken Yakitori'), 1),
@@ -557,7 +816,7 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Jonin Professional Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Beef Sukiyaki'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Jonin Professional Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Matcha Green Tea Cake'), 1);
 
--- Jinchuriki Special Package
+-- Jinchuriki Special Package (Cost: ~2800, Price: 8400, Markup: ~200%) - High quantity
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Jinchuriki Special Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 3),
 ((SELECT package_id FROM package WHERE package_name = 'Jinchuriki Special Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Takoyaki (Octopus Balls)'), 2),
@@ -567,7 +826,7 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Jinchuriki Special Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Jinchuriki Special Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Matcha Green Tea Cake'), 1);
 
--- Sage Mode Deluxe
+-- Sage Mode Deluxe (Cost: ~3150, Price: 9450, Markup: ~200%) - Large variety
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Sage Mode Deluxe'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Sage Mode Deluxe'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 2),
@@ -582,7 +841,7 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Sage Mode Deluxe'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Mochi Ice Cream'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Sage Mode Deluxe'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Matcha Green Tea Cake'), 1);
 
--- Six Paths Ultimate Package
+-- Six Paths Ultimate Package (Cost: ~3000, Price: 9000, Markup: ~200%)
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Six Paths Ultimate Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tempura Shrimp'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Six Paths Ultimate Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Vegetable Spring Rolls'), 2),
@@ -596,20 +855,20 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Six Paths Ultimate Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sesame Balls'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Six Paths Ultimate Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Matcha Green Tea Cake'), 1);
 
--- Ramen Lovers Special
+-- Ramen Lovers Special (Cost: ~1370, Price: 3830, Markup: ~180%) - High quantity ramen
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
-((SELECT package_id FROM package WHERE package_name = 'Ramen Lovers Special'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 2),
-((SELECT package_id FROM package WHERE package_name = 'Ramen Lovers Special'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ichiraku Ramen Special'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Ramen Lovers Special'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 4),
+((SELECT package_id FROM package WHERE package_name = 'Ramen Lovers Special'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ichiraku Ramen Special'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Ramen Lovers Special'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Naruto Udon Bowl'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Ramen Lovers Special'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 1);
 
--- Sushi Master Collection
+-- Sushi Master Collection (Cost: ~1300, Price: 3900, Markup: ~200%) - Minimal items, high quantity
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
-((SELECT package_id FROM package WHERE package_name = 'Sushi Master Collection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 2),
-((SELECT package_id FROM package WHERE package_name = 'Sushi Master Collection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sakura Sushi Platter'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Sushi Master Collection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Sushi Master Collection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sakura Sushi Platter'), 3),
 ((SELECT package_id FROM package WHERE package_name = 'Sushi Master Collection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Mochi Ice Cream'), 1);
 
--- Anime Fusion Experience
+-- Anime Fusion Experience (Cost: ~1270, Price: 3810, Markup: ~200%)
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Anime Fusion Experience'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Anime Fusion Experience'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Gyoza (Dumplings)'), 1),
@@ -618,7 +877,7 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Anime Fusion Experience'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Anime Fusion Experience'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Matcha Green Tea Cake'), 1);
 
--- Ninja Warrior Feast
+-- Ninja Warrior Feast (Cost: ~2250, Price: 6750, Markup: ~200%) - High quantity appetizers
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Ninja Warrior Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Ramen Appetizer Bowl'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Ninja Warrior Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Takoyaki (Octopus Balls)'), 2),
@@ -629,7 +888,7 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Ninja Warrior Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Ninja Warrior Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Mochi Ice Cream'), 1);
 
--- Vegetarian Paradise Package
+-- Vegetarian Paradise Package (Cost: ~1540, Price: 4620, Markup: ~200%)
 INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Vegetarian Paradise Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 2),
 ((SELECT package_id FROM package WHERE package_name = 'Vegetarian Paradise Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Edamame (Steamed Soybeans)'), 2),
@@ -640,6 +899,59 @@ INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
 ((SELECT package_id FROM package WHERE package_name = 'Vegetarian Paradise Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Vegetarian Paradise Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Red Bean Mochi'), 1),
 ((SELECT package_id FROM package WHERE package_name = 'Vegetarian Paradise Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sesame Balls'), 1);
+
+-- ============================================================================
+-- DIET-SPECIFIC PACKAGES
+-- ============================================================================
+
+-- Vegan Delight Package (Cost: ~1400, Price: 4200, Markup: ~200%) - All vegan items
+INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
+((SELECT package_id FROM package WHERE package_name = 'Vegan Delight Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Edamame (Steamed Soybeans)'), 3),
+((SELECT package_id FROM package WHERE package_name = 'Vegan Delight Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Vegetable Spring Rolls'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Vegan Delight Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tofu Skewers'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Vegan Delight Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Vegetarian Curry Bowl'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Vegan Delight Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tofu Teriyaki Bowl'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Vegan Delight Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Vegan Delight Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Red Bean Mochi'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Vegan Delight Package'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sesame Balls'), 1);
+
+-- Gluten-Free Gourmet (Cost: ~1600, Price: 4800, Markup: ~200%) - Gluten-free items only
+INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
+((SELECT package_id FROM package WHERE package_name = 'Gluten-Free Gourmet'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Edamame (Steamed Soybeans)'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Gluten-Free Gourmet'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Vegetable Spring Rolls'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Gluten-Free Gourmet'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tofu Skewers'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Gluten-Free Gourmet'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Vegetarian Curry Bowl'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Gluten-Free Gourmet'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tofu Teriyaki Bowl'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Gluten-Free Gourmet'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Dango Trio (Sweet Rice Balls)'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Gluten-Free Gourmet'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Red Bean Mochi'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Gluten-Free Gourmet'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sesame Balls'), 1);
+
+-- Low-Sodium Healthy Choice (Cost: ~1200, Price: 3600, Markup: ~200%) - Low-sodium items
+INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
+((SELECT package_id FROM package WHERE package_name = 'Low-Sodium Healthy Choice'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Low-Sodium Healthy Choice'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Edamame (Steamed Soybeans)'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Low-Sodium Healthy Choice'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Naruto Udon Bowl'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Low-Sodium Healthy Choice'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Vegetarian Curry Bowl'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Low-Sodium Healthy Choice'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tofu Teriyaki Bowl'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Low-Sodium Healthy Choice'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Red Bean Mochi'), 1);
+
+-- Halal Certified Feast (Cost: ~1833, Price: 5500, Markup: ~200%) - Halal items (no pork, no alcohol)
+INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
+((SELECT package_id FROM package WHERE package_name = 'Halal Certified Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Miso Soup Shot'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Halal Certified Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Chicken Yakitori'), 3),
+((SELECT package_id FROM package WHERE package_name = 'Halal Certified Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sasuke Teriyaki Chicken'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Halal Certified Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Beef Sukiyaki'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Halal Certified Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Chicken Katsu Curry'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Halal Certified Feast'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Matcha Green Tea Cake'), 1);
+
+-- Heart-Healthy Selection (Cost: ~1267, Price: 3800, Markup: ~200%) - Low-fat, heart-healthy items
+INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES
+((SELECT package_id FROM package WHERE package_name = 'Heart-Healthy Selection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Edamame (Steamed Soybeans)'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Heart-Healthy Selection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Vegetable Spring Rolls'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Heart-Healthy Selection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tofu Skewers'), 2),
+((SELECT package_id FROM package WHERE package_name = 'Heart-Healthy Selection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Kakashi Grilled Fish'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Heart-Healthy Selection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Tofu Teriyaki Bowl'), 1),
+((SELECT package_id FROM package WHERE package_name = 'Heart-Healthy Selection'), (SELECT menu_item_id FROM menu_item WHERE menu_name = 'Sesame Balls'), 1);
 
 -- ============================================================================
 -- STEP 9: VERIFICATION AND SUMMARY

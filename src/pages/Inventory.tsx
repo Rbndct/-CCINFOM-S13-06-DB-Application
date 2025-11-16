@@ -115,7 +115,15 @@ const Inventory = () => {
       setLoading(true);
       const response = await inventoryAPI.getAll({});
       if (response && response.data) {
-        const data = response.data.success ? response.data.data : response.data;
+        // Handle both response formats: {success: true, data: [...]} or direct array
+        let data = response.data;
+        if (data.success && data.data) {
+          data = data.data;
+        } else if (Array.isArray(data)) {
+          data = data;
+        } else {
+          data = [];
+        }
         setInventoryItems(Array.isArray(data) ? data : []);
       } else {
         setInventoryItems([]);
@@ -124,9 +132,10 @@ const Inventory = () => {
       console.error('Error fetching inventory items:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.error || 'Failed to fetch inventory items',
+        description: error.response?.data?.error || error.response?.data?.message || 'Failed to fetch inventory items',
         variant: 'destructive'
       });
+      setInventoryItems([]);
     } finally {
       setLoading(false);
     }

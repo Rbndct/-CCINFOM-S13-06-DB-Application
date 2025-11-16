@@ -10,21 +10,30 @@ router.get('/', async (req, res) => {
       SELECT 
         m.menu_item_id,
         m.menu_name,
-        m.menu_cost,
-        m.menu_price,
+        m.unit_cost,
+        m.selling_price,
+        m.default_markup_percentage,
+        m.cost_override,
         m.menu_type,
         m.restriction_id,
         dr.restriction_name,
         dr.restriction_type,
         dr.severity_level,
-        (m.menu_price - m.menu_cost) as profit_margin,
+        (m.selling_price - m.unit_cost) as profit_margin,
+        (m.selling_price - m.unit_cost) / NULLIF(m.unit_cost, 0) * 100 as profit_margin_percentage,
+        m.unit_cost * (1 + m.default_markup_percentage / 100) as suggested_price,
         (
           SELECT 
             MIN(FLOOR(i2.stock_quantity / NULLIF(r2.quantity_needed, 0)))
           FROM recipe r2
           JOIN ingredient i2 ON i2.ingredient_id = r2.ingredient_id
           WHERE r2.menu_item_id = m.menu_item_id
-        ) AS makeable_quantity
+        ) AS makeable_quantity,
+        (
+          SELECT COUNT(DISTINCT pmi.package_id)
+          FROM package_menu_items pmi
+          WHERE pmi.menu_item_id = m.menu_item_id
+        ) AS usage_count
       FROM menu_item m
       LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE 1=1
@@ -37,14 +46,18 @@ router.get('/', async (req, res) => {
         SELECT DISTINCT
           m.menu_item_id,
           m.menu_name,
-          m.menu_cost,
-          m.menu_price,
+          m.unit_cost,
+          m.selling_price,
+          m.default_markup_percentage,
+          m.cost_override,
           m.menu_type,
           m.restriction_id,
           dr.restriction_name,
           dr.restriction_type,
           dr.severity_level,
-          (m.menu_price - m.menu_cost) as profit_margin,
+          (m.selling_price - m.unit_cost) as profit_margin,
+          (m.selling_price - m.unit_cost) / NULLIF(m.unit_cost, 0) * 100 as profit_margin_percentage,
+          m.unit_cost * (1 + m.default_markup_percentage / 100) as suggested_price,
           (
             SELECT 
               MIN(FLOOR(i2.stock_quantity / NULLIF(r2.quantity_needed, 0)))
@@ -52,7 +65,12 @@ router.get('/', async (req, res) => {
             JOIN ingredient i2 ON i2.ingredient_id = r2.ingredient_id
             WHERE r2.menu_item_id = m.menu_item_id
           ) AS makeable_quantity,
-          COUNT(DISTINCT tp.table_id) as usage_count
+          COUNT(DISTINCT tp.table_id) as table_usage_count,
+          (
+            SELECT COUNT(DISTINCT pmi2.package_id)
+            FROM package_menu_items pmi2
+            WHERE pmi2.menu_item_id = m.menu_item_id
+          ) AS usage_count
         FROM menu_item m
         LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
         LEFT JOIN package_menu_items pmi ON m.menu_item_id = pmi.menu_item_id
@@ -77,10 +95,25 @@ router.get('/', async (req, res) => {
     query += ' ORDER BY m.menu_name ASC';
 
     const [rows] = await promisePool.query(query, params);
-    res.json({
-      success: true,
-      data: rows
-    });
+
+    // Fetch all dietary restrictions for each menu item (from junction table)
+    const itemsWithRestrictions = await Promise.all(rows.map(async (item) => {
+      const [restrictionRows] = await promisePool.query(
+          `SELECT 
+          dr.restriction_id,
+          dr.restriction_name,
+          dr.restriction_type,
+          dr.severity_level
+        FROM menu_item_restrictions mir
+        JOIN dietary_restriction dr ON mir.restriction_id = dr.restriction_id
+        WHERE mir.menu_item_id = ?
+        ORDER BY dr.restriction_name ASC`,
+          [item.menu_item_id]);
+
+      return {...item, restrictions: restrictionRows};
+    }));
+
+    res.json({success: true, data: itemsWithRestrictions});
   } catch (error) {
     console.error('Error fetching menu items:', error);
     res.status(500).json({
@@ -95,17 +128,21 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const [rows] = await promisePool.query(
-      `SELECT 
+        `SELECT 
         m.menu_item_id,
         m.menu_name,
-        m.menu_cost,
-        m.menu_price,
+        m.unit_cost,
+        m.selling_price,
+        m.default_markup_percentage,
+        m.cost_override,
         m.menu_type,
         m.restriction_id,
         dr.restriction_name,
         dr.restriction_type,
         dr.severity_level,
-        (m.menu_price - m.menu_cost) as profit_margin,
+        (m.selling_price - m.unit_cost) as profit_margin,
+        (m.selling_price - m.unit_cost) / NULLIF(m.unit_cost, 0) * 100 as profit_margin_percentage,
+        m.unit_cost * (1 + m.default_markup_percentage / 100) as suggested_price,
         (
           SELECT 
             MIN(FLOOR(i2.stock_quantity / NULLIF(r2.quantity_needed, 0)))
@@ -116,21 +153,18 @@ router.get('/:id', async (req, res) => {
       FROM menu_item m
       LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE m.menu_item_id = ?`,
-      [req.params.id]
-    );
+        [req.params.id]);
 
     if (rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Menu item not found'
-      });
+      return res.status(404).json(
+          {success: false, error: 'Menu item not found'});
     }
 
     const menuItem = rows[0];
 
     // Fetch recipe and ingredients
     const [recipeRows] = await promisePool.query(
-      `SELECT 
+        `SELECT 
         r.recipe_id,
         r.quantity_needed,
         i.ingredient_id,
@@ -142,15 +176,39 @@ router.get('/:id', async (req, res) => {
       JOIN ingredient i ON r.ingredient_id = i.ingredient_id
       WHERE r.menu_item_id = ?
       ORDER BY i.ingredient_name ASC`,
-      [req.params.id]
-    );
+        [req.params.id]);
 
     menuItem.recipe = recipeRows;
 
-    res.json({
-      success: true,
-      data: menuItem
-    });
+    // Fetch all dietary restrictions for this menu item (from junction table)
+    const [restrictionRows] = await promisePool.query(
+        `SELECT 
+        dr.restriction_id,
+        dr.restriction_name,
+        dr.restriction_type,
+        dr.severity_level
+      FROM menu_item_restrictions mir
+      JOIN dietary_restriction dr ON mir.restriction_id = dr.restriction_id
+      WHERE mir.menu_item_id = ?
+      ORDER BY dr.restriction_name ASC`,
+        [req.params.id]);
+
+    menuItem.restrictions = restrictionRows;
+    // Keep primary restriction for backward compatibility
+    if (restrictionRows.length > 0 && !menuItem.restriction_name) {
+      menuItem.restriction_name = restrictionRows[0].restriction_name;
+      menuItem.restriction_id = restrictionRows[0].restriction_id;
+    }
+
+    // Add usage_count
+    const [usageRows] = await promisePool.query(
+        `SELECT COUNT(DISTINCT pmi.package_id) as usage_count
+       FROM package_menu_items pmi
+       WHERE pmi.menu_item_id = ?`,
+        [req.params.id]);
+    menuItem.usage_count = usageRows[0]?.usage_count || 0;
+
+    res.json({success: true, data: menuItem});
   } catch (error) {
     console.error('Error fetching menu item:', error);
     res.status(500).json({
@@ -167,21 +225,42 @@ router.post('/', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const {menu_name, menu_cost, menu_price, menu_type, restriction_id} = req.body;
+    const {
+      menu_name,
+      unit_cost,
+      selling_price,
+      menu_type,
+      restriction_id,
+      default_markup_percentage,
+      cost_override,
+      menu_cost,
+      menu_price
+    } = req.body;
 
-    if (!menu_name || !menu_cost || !menu_price || !menu_type) {
+    // Support both new (unit_cost, selling_price) and old (menu_cost,
+    // menu_price) field names for backward compatibility
+    const finalUnitCost = unit_cost !== undefined ? unit_cost : menu_cost;
+    const finalSellingPrice =
+        selling_price !== undefined ? selling_price : menu_price;
+
+    if (!menu_name || finalUnitCost === undefined ||
+        finalSellingPrice === undefined || !menu_type) {
       await connection.rollback();
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: menu_name, menu_cost, menu_price, menu_type'
+        error:
+            'Missing required fields: menu_name, unit_cost (or menu_cost), selling_price (or menu_price), menu_type'
       });
     }
 
     const [result] = await connection.query(
-      `INSERT INTO menu_item (menu_name, menu_cost, menu_price, menu_type, restriction_id)
-       VALUES (?, ?, ?, ?, ?)`,
-      [menu_name, menu_cost, menu_price, menu_type, restriction_id || null]
-    );
+        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, cost_override, menu_type, restriction_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          menu_name, finalUnitCost, finalSellingPrice,
+          default_markup_percentage || 200.00, cost_override || false,
+          menu_type, restriction_id || null
+        ]);
 
     await connection.commit();
 
@@ -190,8 +269,10 @@ router.post('/', async (req, res) => {
       data: {
         menu_item_id: result.insertId,
         menu_name,
-        menu_cost,
-        menu_price,
+        unit_cost: finalUnitCost,
+        selling_price: finalSellingPrice,
+        default_markup_percentage: default_markup_percentage || 200.00,
+        cost_override: cost_override || false,
         menu_type,
         restriction_id: restriction_id || null
       }
@@ -215,37 +296,87 @@ router.put('/:id', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const {menu_name, menu_cost, menu_price, menu_type, restriction_id} = req.body;
+    const {
+      menu_name,
+      unit_cost,
+      selling_price,
+      menu_type,
+      restriction_id,
+      default_markup_percentage,
+      cost_override,
+      menu_cost,
+      menu_price
+    } = req.body;
     const menuItemId = req.params.id;
+
+    // Support both new (unit_cost, selling_price) and old (menu_cost,
+    // menu_price) field names for backward compatibility
+    const finalUnitCost = unit_cost !== undefined ? unit_cost : menu_cost;
+    const finalSellingPrice =
+        selling_price !== undefined ? selling_price : menu_price;
 
     // Check if menu item exists
     const [checkRows] = await connection.query(
-      'SELECT menu_item_id FROM menu_item WHERE menu_item_id = ?',
-      [menuItemId]
-    );
+        'SELECT menu_item_id FROM menu_item WHERE menu_item_id = ?',
+        [menuItemId]);
 
     if (checkRows.length === 0) {
       await connection.rollback();
-      return res.status(404).json({
-        success: false,
-        error: 'Menu item not found'
-      });
+      return res.status(404).json(
+          {success: false, error: 'Menu item not found'});
     }
+
+    // Build update query dynamically based on provided fields
+    const updateFields = [];
+    const updateValues = [];
+
+    if (menu_name !== undefined) {
+      updateFields.push('menu_name = ?');
+      updateValues.push(menu_name);
+    }
+    if (unit_cost !== undefined || menu_cost !== undefined) {
+      updateFields.push('unit_cost = ?');
+      updateValues.push(finalUnitCost);
+    }
+    if (selling_price !== undefined || menu_price !== undefined) {
+      updateFields.push('selling_price = ?');
+      updateValues.push(finalSellingPrice);
+    }
+    if (default_markup_percentage !== undefined) {
+      updateFields.push('default_markup_percentage = ?');
+      updateValues.push(default_markup_percentage);
+    }
+    if (cost_override !== undefined) {
+      updateFields.push('cost_override = ?');
+      updateValues.push(cost_override);
+    }
+    if (menu_type !== undefined) {
+      updateFields.push('menu_type = ?');
+      updateValues.push(menu_type);
+    }
+    if (restriction_id !== undefined) {
+      updateFields.push('restriction_id = ?');
+      updateValues.push(restriction_id || null);
+    }
+
+    if (updateFields.length === 0) {
+      await connection.rollback();
+      return res.status(400).json(
+          {success: false, error: 'No fields to update'});
+    }
+
+    updateValues.push(menuItemId);
 
     // Update menu item
     await connection.query(
-      `UPDATE menu_item 
-       SET menu_name = ?, menu_cost = ?, menu_price = ?, menu_type = ?, restriction_id = ?
+        `UPDATE menu_item 
+       SET ${updateFields.join(', ')}
        WHERE menu_item_id = ?`,
-      [menu_name, menu_cost, menu_price, menu_type, restriction_id || null, menuItemId]
-    );
+        updateValues);
 
     await connection.commit();
 
-    res.json({
-      success: true,
-      message: 'Menu item updated successfully'
-    });
+    res.json({success: true, message: 'Menu item updated successfully'});
   } catch (error) {
     await connection.rollback();
     console.error('Error updating menu item:', error);
@@ -269,30 +400,22 @@ router.delete('/:id', async (req, res) => {
 
     // Check if menu item exists
     const [checkRows] = await connection.query(
-      'SELECT menu_item_id FROM menu_item WHERE menu_item_id = ?',
-      [menuItemId]
-    );
+        'SELECT menu_item_id FROM menu_item WHERE menu_item_id = ?',
+        [menuItemId]);
 
     if (checkRows.length === 0) {
       await connection.rollback();
-      return res.status(404).json({
-        success: false,
-        error: 'Menu item not found'
-      });
+      return res.status(404).json(
+          {success: false, error: 'Menu item not found'});
     }
 
     // Delete menu item (cascade will handle related records)
     await connection.query(
-      'DELETE FROM menu_item WHERE menu_item_id = ?',
-      [menuItemId]
-    );
+        'DELETE FROM menu_item WHERE menu_item_id = ?', [menuItemId]);
 
     await connection.commit();
 
-    res.json({
-      success: true,
-      message: 'Menu item deleted successfully'
-    });
+    res.json({success: true, message: 'Menu item deleted successfully'});
   } catch (error) {
     await connection.rollback();
     console.error('Error deleting menu item:', error);
@@ -307,4 +430,3 @@ router.delete('/:id', async (req, res) => {
 });
 
 module.exports = router;
-

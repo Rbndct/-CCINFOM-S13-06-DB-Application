@@ -606,8 +606,8 @@ router.get('/:id/weddings', async (req, res) => {
         'LEFT JOIN couple_preferences cp ON w.preference_id = cp.preference_id' :
         'LEFT JOIN couple_preferences cp ON 1=0';
     const groupByFields = hasPreferenceColumn ?
-        'w.wedding_id, w.couple_id, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.total_cost, w.production_cost, w.payment_status, cp.ceremony_type, w.preference_id, cp.preference_id' :
-        'w.wedding_id, w.couple_id, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.total_cost, w.production_cost, w.payment_status, cp.ceremony_type';
+        'w.wedding_id, w.couple_id, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.equipment_rental_cost, w.food_cost, w.total_cost, w.production_cost, w.payment_status, cp.ceremony_type, w.preference_id, cp.preference_id' :
+        'w.wedding_id, w.couple_id, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.equipment_rental_cost, w.food_cost, w.total_cost, w.production_cost, w.payment_status, cp.ceremony_type';
 
     const [rows] = await promisePool.query(
         `SELECT 
@@ -617,6 +617,8 @@ router.get('/:id/weddings', async (req, res) => {
         w.wedding_time as weddingTime,
         w.venue,
         w.guest_count as guestCount,
+        COALESCE(w.equipment_rental_cost, w.total_cost) as equipmentRentalCost,
+        COALESCE(w.food_cost, w.production_cost) as foodCost,
         w.total_cost as totalCost,
         w.production_cost as productionCost,
         w.payment_status as paymentStatus,

@@ -89,13 +89,16 @@ const Dashboard = () => {
           return status === 'pending' || !status;
         }).length : 0;
 
-        // Calculate total revenue (sum of all wedding total_cost)
-        const totalRevenue = Array.isArray(weddings) ? weddings.reduce((sum: number, w: any) => {
-          const cost = parseFloat(w.total_cost || w.totalCost || 0);
-          return sum + (isNaN(cost) ? 0 : cost);
+        // Calculate total revenue from packages (package selling_price * usage_count per wedding)
+        // This reflects actual revenue from package sales across all weddings
+        const totalRevenue = Array.isArray(packages) ? packages.reduce((sum: number, pkg: any) => {
+          const price = parseFloat(pkg.selling_price || pkg.package_price || 0);
+          const usage = parseFloat(pkg.usage_count || 0); // usage_count now represents distinct weddings
+          return sum + (isNaN(price) ? 0 : price) * (isNaN(usage) ? 0 : usage);
         }, 0) : 0;
 
         // Calculate monthly revenue (this month's weddings)
+        // For monthly revenue, we still use wedding costs as packages are assigned per wedding
         const currentMonth = now.getMonth();
         const currentYear = now.getFullYear();
         const monthlyRevenue = Array.isArray(weddings) ? weddings.reduce((sum: number, w: any) => {
@@ -103,8 +106,9 @@ const Dashboard = () => {
           if (!weddingDate) return sum;
           const date = new Date(weddingDate);
           if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
-            const cost = parseFloat(w.total_cost || w.totalCost || 0);
-            return sum + (isNaN(cost) ? 0 : cost);
+            const equipmentCost = parseFloat(w.equipment_rental_cost || w.equipmentRentalCost || w.total_cost || w.totalCost || 0);
+            const foodCost = parseFloat(w.food_cost || w.foodCost || w.production_cost || w.productionCost || 0);
+            return sum + (isNaN(equipmentCost) ? 0 : equipmentCost) + (isNaN(foodCost) ? 0 : foodCost);
           }
           return sum;
         }, 0) : 0;

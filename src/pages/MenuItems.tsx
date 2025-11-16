@@ -5,14 +5,12 @@ import {
   Filter, 
   Utensils, 
   DollarSign,
-  Package,
   Eye,
   Edit,
   Trash2,
   MoreHorizontal,
   AlertTriangle,
   CheckCircle,
-  Lock,
   ArrowUpDown,
   X,
   ChefHat,
@@ -25,7 +23,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
   Table, 
   TableBody, 
@@ -64,7 +61,6 @@ import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
 
 const MenuItems = () => {
   const { formatCurrency } = useCurrencyFormat();
-  const [activeTab, setActiveTab] = useState('templates');
   const [menuItems, setMenuItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -131,12 +127,19 @@ const MenuItems = () => {
             id: item.menu_item_id,
             menu_item_id: item.menu_item_id,
             menu_name: item.menu_name,
-            menu_cost: parseFloat(item.menu_cost) || 0,
-            menu_price: parseFloat(item.menu_price) || 0,
+            menu_cost: parseFloat(item.unit_cost || item.menu_cost) || 0,
+            menu_price: parseFloat(item.selling_price || item.menu_price) || 0,
+            unit_cost: parseFloat(item.unit_cost) || 0,
+            selling_price: parseFloat(item.selling_price) || 0,
             menu_type: item.menu_type,
             makeable_quantity: item.makeable_quantity ?? 0,
             restriction_id: item.restriction_id,
             restriction_name: item.restriction_name,
+            restrictions: item.restrictions || (item.restriction_name ? [{
+              restriction_id: item.restriction_id,
+              restriction_name: item.restriction_name,
+              restriction_type: item.restriction_type || 'Dietary'
+            }] : []),
             profit_margin: parseFloat(item.profit_margin) || 0,
             is_template: true, // All menu items are templates (shared across weddings)
             usage_count: item.usage_count || 0
@@ -147,8 +150,10 @@ const MenuItems = () => {
             id: item.menu_item_id,
             menu_item_id: item.menu_item_id,
             menu_name: item.menu_name,
-            menu_cost: parseFloat(item.menu_cost) || 0,
-            menu_price: parseFloat(item.menu_price) || 0,
+            menu_cost: parseFloat(item.unit_cost || item.menu_cost) || 0,
+            menu_price: parseFloat(item.selling_price || item.menu_price) || 0,
+            unit_cost: parseFloat(item.unit_cost) || 0,
+            selling_price: parseFloat(item.selling_price) || 0,
             menu_type: item.menu_type,
             makeable_quantity: item.makeable_quantity ?? 0,
             restriction_id: item.restriction_id,
@@ -192,9 +197,35 @@ const MenuItems = () => {
   
   // Handle view item details
   const handleViewItem = async (item: any) => {
-    setSelectedItem(item);
-    await fetchItemRecipe(item.menu_item_id || item.id);
-    setViewDialogOpen(true);
+    try {
+      // Fetch full item details to get all restrictions
+      const response = await menuItemsAPI.getById(item.menu_item_id || item.id);
+      if (response && response.success && response.data) {
+        const fullItem = {
+          ...response.data,
+          unit_cost: parseFloat(response.data.unit_cost || response.data.menu_cost || 0),
+          selling_price: parseFloat(response.data.selling_price || response.data.menu_price || 0),
+          menu_cost: parseFloat(response.data.unit_cost || response.data.menu_cost || 0),
+          menu_price: parseFloat(response.data.selling_price || response.data.menu_price || 0),
+          restrictions: response.data.restrictions || (response.data.restriction_name ? [{
+            restriction_id: response.data.restriction_id,
+            restriction_name: response.data.restriction_name,
+            restriction_type: response.data.restriction_type || 'Dietary'
+          }] : [])
+        };
+        setSelectedItem(fullItem);
+        await fetchItemRecipe(item.menu_item_id || item.id);
+      } else {
+        setSelectedItem(item);
+        await fetchItemRecipe(item.menu_item_id || item.id);
+      }
+      setViewDialogOpen(true);
+    } catch (error) {
+      console.error('Error fetching menu item details:', error);
+      setSelectedItem(item);
+      await fetchItemRecipe(item.menu_item_id || item.id);
+      setViewDialogOpen(true);
+    }
   };
   
   // Handle edit item
@@ -202,8 +233,8 @@ const MenuItems = () => {
     setSelectedItem(item);
     setFormData({
       menu_name: item.menu_name || '',
-      menu_cost: (item.menu_cost || 0).toString(),
-      menu_price: (item.menu_price || 0).toString(),
+      menu_cost: (item.unit_cost || item.menu_cost || 0).toString(),
+      menu_price: (item.selling_price || item.menu_price || 0).toString(),
       menu_type: item.menu_type || '',
       restriction_id: (item.restriction_id || '').toString()
     });
@@ -386,12 +417,12 @@ const MenuItems = () => {
           bVal = b.menu_type?.toLowerCase() || '';
           break;
         case 'price':
-          aVal = a.menu_price || 0;
-          bVal = b.menu_price || 0;
+          aVal = a.selling_price || a.menu_price || 0;
+          bVal = b.selling_price || b.menu_price || 0;
           break;
         case 'cost':
-          aVal = a.menu_cost || 0;
-          bVal = b.menu_cost || 0;
+          aVal = a.unit_cost || a.menu_cost || 0;
+          bVal = b.unit_cost || b.menu_cost || 0;
           break;
         case 'makeable':
           aVal = a.makeable_quantity || 0;
@@ -420,17 +451,14 @@ const MenuItems = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterType, sortBy, sortOrder, activeTab]);
+  }, [searchTerm, filterType, sortBy, sortOrder]);
 
-  const templateItems = menuItems.filter(item => item.is_template);
-  const weddingItems = menuItems.filter(item => !item.is_template);
-
-  const currentItems = activeTab === 'templates' ? templateItems : weddingItems;
+  const currentItems = menuItems;
   
   // Updated statistics - more relevant to menu items
   const totalItems = currentItems.length;
   const averagePrice = currentItems.length > 0 
-    ? currentItems.reduce((sum, item) => sum + (item.menu_price || 0), 0) / currentItems.length 
+    ? currentItems.reduce((sum, item) => sum + (item.selling_price || item.menu_price || 0), 0) / currentItems.length 
     : 0;
   const totalProfitMargin = currentItems.reduce((sum, item) => sum + (item.profit_margin || 0), 0);
   const itemsWithRestrictions = currentItems.filter(item => item.restriction_id).length;
@@ -499,30 +527,16 @@ const MenuItems = () => {
           </Card>
         </div>
 
-        {/* Menu Items List with Tabs */}
+        {/* Menu Items List */}
         <Card>
           <CardHeader>
             <CardTitle>Menu Items Directory</CardTitle>
             <CardDescription>
-              {activeTab === 'templates' 
-                ? 'Template library - Default menu items available to all weddings'
-                : 'Wedding-specific menu items'}
+              Template library - Default menu items available to all weddings
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
-                <TabsTrigger value="templates" className="gap-2">
-                  <Package className="w-4 h-4" />
-                  Templates ({templateItems.length})
-                </TabsTrigger>
-                <TabsTrigger value="wedding-specific" className="gap-2">
-                  <Utensils className="w-4 h-4" />
-                  Wedding-Specific ({weddingItems.length})
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="templates" className="space-y-4">
+            <div className="space-y-4">
                 {/* Filter and Sort Section */}
                 <div className="flex items-center space-x-2 mb-4">
                   <div className="relative flex-1">
@@ -596,246 +610,7 @@ const MenuItems = () => {
                       <TableHead>Profit Margin</TableHead>
                       <TableHead>Makeable Qty</TableHead>
                       <TableHead>Restrictions</TableHead>
-                      {activeTab === 'templates' && <TableHead>Usage</TableHead>}
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={activeTab === 'templates' ? 10 : 9} className="text-center py-8">
-                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-                          <p className="text-sm text-muted-foreground mt-2">Loading menu items...</p>
-                        </TableCell>
-                      </TableRow>
-                    ) : filteredAndSortedMenuItems.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={activeTab === 'templates' ? 10 : 9} className="text-center py-8">
-                          <p className="text-sm text-muted-foreground">No menu items found</p>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      paginatedMenuItems.map((item) => (
-                        <TableRow key={item.id || item.menu_item_id} className={item.is_template ? 'bg-muted/30' : ''}>
-                          <TableCell>
-                            <Badge variant="outline" className="font-mono text-xs">
-                              #{item.menu_item_id || item.id}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                {item.is_template && (
-                                  <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-blue-700 flex-shrink-0">
-                                    <Lock className="w-3 h-3 mr-1 dark:text-blue-300" />
-                                    Template
-                                  </Badge>
-                                )}
-                                <span className="truncate">{item.menu_name}</span>
-                              </div>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {getTypeBadge(item.menu_type)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm font-medium">
-                              {formatCurrency(item.menu_cost || 0)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm font-medium">
-                              {formatCurrency(item.menu_price || 0)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm font-medium text-green-600">
-                              {formatCurrency(item.profit_margin || 0)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{item.makeable_quantity ?? 0}</span>
-                              {getMakeableStatus(item.makeable_quantity ?? 0)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {item.restriction_name ? (
-                              <div className="space-y-0.5">
-                                <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
-                                  {(() => {
-                                    const Icon = getTypeIcon('Dietary');
-                                    return <Icon className="h-3 w-3" />;
-                                  })()}
-                                  {item.restriction_name}
-                                </Badge>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">None</span>
-                            )}
-                          </TableCell>
-                          {activeTab === 'templates' && (
-                            <TableCell>
-                              <span className="text-sm text-muted-foreground">
-                                Used in {item.usage_count || 0} weddings
-                              </span>
-                            </TableCell>
-                          )}
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleViewItem(item)}>
-                                  <Eye className="mr-2 h-4 w-4 dark:text-muted-foreground" />
-                                  View Details
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600 dark:text-red-400" onClick={() => handleDeleteItem(item)}>
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-                
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {startIndex + 1} to {Math.min(endIndex, filteredAndSortedMenuItems.length)} of {filteredAndSortedMenuItems.length} items
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Previous
-                      </Button>
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageNum;
-                          if (totalPages <= 5) {
-                            pageNum = i + 1;
-                          } else if (currentPage <= 3) {
-                            pageNum = i + 1;
-                          } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i;
-                          } else {
-                            pageNum = currentPage - 2 + i;
-                          }
-                          return (
-                            <Button
-                              key={pageNum}
-                              variant={currentPage === pageNum ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setCurrentPage(pageNum)}
-                              className="w-8 h-8 p-0"
-                            >
-                              {pageNum}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-
-              <TabsContent value="wedding-specific" className="space-y-4">
-                {/* Filter and Sort Section */}
-                <div className="flex items-center space-x-2 mb-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search menu items..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-8"
-                    />
-                  </div>
-                  <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
-                    <Filter className="w-4 h-4 mr-2" />
-                    Filters
-                  </Button>
-                  <Button variant="outline" onClick={handleResetFilters}>
-                    Reset Filters
-                  </Button>
-                </div>
-                
-                {showFilters && (
-                  <div className="grid md:grid-cols-4 gap-3 mb-4">
-                    <div>
-                      <label className="text-sm text-muted-foreground">Type</label>
-                      <Select value={filterType} onValueChange={setFilterType}>
-                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          <SelectItem value="Appetizer">Appetizer</SelectItem>
-                          <SelectItem value="Main Course">Main Course</SelectItem>
-                          <SelectItem value="Dessert">Dessert</SelectItem>
-                          <SelectItem value="Beverage">Beverage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">Sort By</label>
-                      <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="id">ID</SelectItem>
-                          <SelectItem value="name">Name</SelectItem>
-                          <SelectItem value="type">Type</SelectItem>
-                          <SelectItem value="price">Price</SelectItem>
-                          <SelectItem value="cost">Cost</SelectItem>
-                        <SelectItem value="makeable">Makeable Qty</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">Order</label>
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                      >
-                        <ArrowUpDown className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Menu ID</TableHead>
-                      <TableHead>Item Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Cost</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Profit Margin</TableHead>
-                      <TableHead>Makeable Qty</TableHead>
-                      <TableHead>Restrictions</TableHead>
-                      <TableHead>Wedding</TableHead>
+                      <TableHead>Usage</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -855,31 +630,31 @@ const MenuItems = () => {
                       </TableRow>
                     ) : (
                       paginatedMenuItems.map((item) => (
-                        <TableRow key={item.id || item.menu_item_id}>
+                        <TableRow 
+                          key={item.id || item.menu_item_id} 
+                          className={item.is_template ? 'bg-muted/30' : ''}
+                          onClick={() => handleViewItem(item)}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <TableCell>
                             <Badge variant="outline" className="font-mono text-xs">
                               #{item.menu_item_id || item.id}
                             </Badge>
                           </TableCell>
                           <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                <Utensils className="h-4 w-4 text-primary" />
-                              </div>
-                              {item.menu_name}
-                            </div>
+                            <span className="truncate">{item.menu_name}</span>
                           </TableCell>
                           <TableCell>
                             {getTypeBadge(item.menu_type)}
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">
-                              {formatCurrency(item.menu_cost || 0)}
+                              {formatCurrency(item.unit_cost || item.menu_cost || 0)}
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">
-                              {formatCurrency(item.menu_price || 0)}
+                              {formatCurrency(item.selling_price || item.menu_price || 0)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -889,28 +664,43 @@ const MenuItems = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{item.makeable_quantity ?? 0}</span>
+                              <span className="text-sm font-medium w-12 text-right inline-block">{item.makeable_quantity ?? 0}</span>
                               {getMakeableStatus(item.makeable_quantity ?? 0)}
                             </div>
                           </TableCell>
                           <TableCell>
-                            {item.restriction_name ? (
-                              <div className="space-y-0.5">
-                                <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
-                                  {(() => {
-                                    const Icon = getTypeIcon('Dietary');
-                                    return <Icon className="h-3 w-3" />;
-                                  })()}
-                                  {item.restriction_name}
-                                </Badge>
-                              </div>
-                            ) : (
-                              <span className="text-sm text-muted-foreground">None</span>
-                            )}
+                            {(() => {
+                              // Get all restrictions - check if item has restrictions array or single restriction
+                              const restrictions = item.restrictions || (item.restriction_name ? [{
+                                restriction_name: item.restriction_name,
+                                restriction_type: item.restriction_type || 'Dietary'
+                              }] : []);
+                              
+                              if (restrictions.length > 0) {
+                                return (
+                                  <div className="flex flex-wrap gap-1">
+                                    {restrictions.map((r: any, idx: number) => (
+                                      <Badge 
+                                        key={idx}
+                                        variant="outline" 
+                                        className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
+                                      >
+                                        {(() => {
+                                          const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                          return <Icon className="h-3 w-3" />;
+                                        })()}
+                                        {r.restriction_name}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              return <span className="text-sm text-muted-foreground">None</span>;
+                            })()}
                           </TableCell>
                           <TableCell>
                             <span className="text-sm text-muted-foreground">
-                              N/A
+                              Used in {item.usage_count || 0} package{item.usage_count !== 1 ? 's' : ''}
                             </span>
                           </TableCell>
                           <TableCell>
@@ -991,8 +781,7 @@ const MenuItems = () => {
                     </div>
                   </div>
                 )}
-              </TabsContent>
-            </Tabs>
+            </div>
           </CardContent>
         </Card>
         
@@ -1025,30 +814,46 @@ const MenuItems = () => {
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Cost</Label>
-                  <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedItem?.menu_cost || 0)}</div>
+                  <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedItem?.unit_cost || selectedItem?.menu_cost || 0)}</div>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Price</Label>
-                  <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedItem?.menu_price || 0)}</div>
+                  <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedItem?.selling_price || selectedItem?.menu_price || 0)}</div>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Profit Margin</Label>
                   <div className="mt-1 text-lg font-semibold text-green-600">{formatCurrency(selectedItem?.profit_margin || 0)}</div>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Dietary Restriction</Label>
+                  <Label className="text-sm font-medium text-muted-foreground">Dietary Restrictions</Label>
                   <div className="mt-1">
-                    {selectedItem?.restriction_name ? (
-                      <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
-                        {(() => {
-                          const Icon = getTypeIcon('Dietary');
-                          return <Icon className="h-3 w-3" />;
-                        })()}
-                        {selectedItem.restriction_name}
-                      </Badge>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">None</span>
-                    )}
+                    {(() => {
+                      const restrictions = selectedItem?.restrictions || (selectedItem?.restriction_name ? [{
+                        restriction_name: selectedItem.restriction_name,
+                        restriction_type: selectedItem.restriction_type || 'Dietary'
+                      }] : []);
+                      
+                      if (restrictions.length > 0) {
+                        return (
+                          <div className="flex flex-wrap gap-1">
+                            {restrictions.map((r: any, idx: number) => (
+                              <Badge 
+                                key={idx}
+                                variant="outline" 
+                                className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
+                              >
+                                {(() => {
+                                  const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                  return <Icon className="h-3 w-3" />;
+                                })()}
+                                {r.restriction_name}
+                              </Badge>
+                            ))}
+                          </div>
+                        );
+                      }
+                      return <span className="text-sm text-muted-foreground">None</span>;
+                    })()}
                   </div>
                 </div>
               </div>

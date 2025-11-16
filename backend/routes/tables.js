@@ -6,7 +6,7 @@ const {promisePool} = require('../config/database');
 async function getOrCreateTableInventoryItem(
     ceremonyType, capacity, connection = null) {
   const db = connection || promisePool;
-  const itemName = `${ceremonyType} Table - ${capacity} seats`;
+  const itemName = `Seating Table - ${capacity} seats`;
 
   // Check if inventory item exists
   const [existingItems] = await db.query(
@@ -26,9 +26,9 @@ async function getOrCreateTableInventoryItem(
   const rentalCost = basePrice + (capacity * perSeatPrice);
 
   const [result] = await db.query(
-      `INSERT INTO inventory_items (item_name, category, item_condition, quantity_available, rental_cost)
-     VALUES (?, 'Furniture', 'Excellent', 999, ?)`,
-      [itemName, rentalCost]);
+      `INSERT INTO inventory_items (item_name, category, item_condition, quantity_available, unit_rental_cost, rental_cost)
+     VALUES (?, 'Furniture', 'Excellent', 999, ?, ?)`,
+      [itemName, rentalCost, rentalCost]);
 
   return result.insertId;
 }
@@ -51,9 +51,9 @@ async function getWeddingCeremonyType(weddingId) {
 async function createTableInventoryAllocation(
     weddingId, tableId, capacity, connection = null) {
   const db = connection || promisePool;
-  const ceremonyType = await getWeddingCeremonyType(weddingId);
+  // No longer need ceremony type for inventory item naming
   const inventoryId =
-      await getOrCreateTableInventoryItem(ceremonyType, capacity, connection);
+      await getOrCreateTableInventoryItem(null, capacity, connection);
 
   // Calculate rental cost
   // More realistic wedding pricing: Base 300 PHP + (capacity * 25 PHP per
@@ -73,16 +73,17 @@ async function createTableInventoryAllocation(
     await db.query(
         `UPDATE inventory_allocation 
        SET quantity_used = quantity_used + 1, 
+           unit_rental_cost = ?,
            rental_cost = ?
        WHERE allocation_id = ?`,
-        [rentalCost, existingAllocations[0].allocation_id]);
+        [rentalCost, rentalCost, existingAllocations[0].allocation_id]);
     return existingAllocations[0].allocation_id;
   } else {
     // Create new allocation
     const [result] = await db.query(
-        `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, rental_cost)
-       VALUES (?, ?, 1, ?)`,
-        [weddingId, inventoryId, rentalCost]);
+        `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost)
+       VALUES (?, ?, 1, ?, ?)`,
+        [weddingId, inventoryId, rentalCost, rentalCost]);
     return result.insertId;
   }
 }
@@ -92,8 +93,8 @@ async function updateTableInventoryAllocation(
     weddingId, oldCapacity, newCapacity, connection = null) {
   const db = connection || promisePool;
   const ceremonyType = await getWeddingCeremonyType(weddingId);
-  const oldItemName = `${ceremonyType} Table - ${oldCapacity} seats`;
-  const newItemName = `${ceremonyType} Table - ${newCapacity} seats`;
+  const oldItemName = `Seating Table - ${oldCapacity} seats`;
+  const newItemName = `Seating Table - ${newCapacity} seats`;
 
   // Find allocation with old item name
   const [oldAllocations] = await db.query(
@@ -114,7 +115,7 @@ async function updateTableInventoryAllocation(
 
   // Get or create new inventory item
   const newInventoryId = await getOrCreateTableInventoryItem(
-      ceremonyType, newCapacity, connection);
+      null, newCapacity, connection);
 
   // Calculate new rental cost
   // More realistic wedding pricing: Base 300 PHP + (capacity * 25 PHP per
@@ -127,9 +128,10 @@ async function updateTableInventoryAllocation(
     // Same item, just update the cost
     await db.query(
         `UPDATE inventory_allocation 
-       SET rental_cost = ?
+       SET unit_rental_cost = ?,
+           rental_cost = ?
        WHERE allocation_id = ?`,
-        [newRentalCost, oldAllocation.allocation_id]);
+        [newRentalCost, newRentalCost, oldAllocation.allocation_id]);
     return oldAllocation.allocation_id;
   } else {
     // Different item, need to transfer quantity
@@ -144,15 +146,15 @@ async function updateTableInventoryAllocation(
       // Update existing new allocation
       await db.query(
           `UPDATE inventory_allocation 
-         SET quantity_used = quantity_used + ?, rental_cost = ?
+         SET quantity_used = quantity_used + ?, unit_rental_cost = ?, rental_cost = ?
          WHERE allocation_id = ?`,
-          [oldQuantity, newRentalCost, newAllocations[0].allocation_id]);
+          [oldQuantity, newRentalCost, newRentalCost, newAllocations[0].allocation_id]);
     } else {
       // Create new allocation
       await db.query(
-          `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, rental_cost)
-         VALUES (?, ?, ?, ?)`,
-          [weddingId, newInventoryId, oldQuantity, newRentalCost]);
+          `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost)
+         VALUES (?, ?, ?, ?, ?)`,
+          [weddingId, newInventoryId, oldQuantity, newRentalCost, newRentalCost]);
     }
 
     // Delete old allocation if quantity becomes 0
@@ -178,7 +180,7 @@ async function deleteTableInventoryAllocation(
     weddingId, capacity, connection = null) {
   const db = connection || promisePool;
   const ceremonyType = await getWeddingCeremonyType(weddingId);
-  const itemName = `${ceremonyType} Table - ${capacity} seats`;
+  const itemName = `Seating Table - ${capacity} seats`;
 
   // Find and update allocation
   const [allocations] = await db.query(
@@ -252,11 +254,15 @@ router.post('/seating/:wedding_id/couple', async (req, res) => {
     const {capacity} = req.body;
     const cap = capacity ? Number(capacity) : 2;  // Default to 2
 
-    // Validate capacity: minimum 2 for couple table
-    if (!Number.isInteger(cap) || cap < 2) {
+    // Validate capacity: must be 2, 6, 8, or 10 (matching inventory items)
+    // For couple table, default to 2 but allow other valid sizes
+    const validCapacities = [2, 6, 8, 10];
+    if (!Number.isInteger(cap) || !validCapacities.includes(cap)) {
       await connection.rollback();
-      return res.status(400).json(
-          {success: false, error: 'Couple table capacity must be at least 2'});
+      return res.status(400).json({
+        success: false,
+        error: 'Capacity must be 2, 6, 8, or 10 seats (matching available inventory)'
+      });
     }
 
     // Get next table number (all tables share same sequence)
@@ -306,12 +312,13 @@ router.post('/seating/:wedding_id/guest', async (req, res) => {
     const cap = Number(capacity);
     const category = table_category || 'guest';
 
-    // Validate capacity: minimum 1, maximum 15
-    if (!Number.isInteger(cap) || cap < 1 || cap > 15) {
+    // Validate capacity: must be 2, 6, 8, or 10 (matching inventory items)
+    const validCapacities = [2, 6, 8, 10];
+    if (!Number.isInteger(cap) || !validCapacities.includes(cap)) {
       await connection.rollback();
       return res.status(400).json({
         success: false,
-        error: 'Capacity must be an integer between 1 and 15'
+        error: 'Capacity must be 2, 6, 8, or 10 seats (matching available inventory)'
       });
     }
 

@@ -2,6 +2,22 @@ const express = require('express');
 const router = express.Router();
 const {promisePool} = require('../config/database');
 
+// Helper function to calculate package unit_cost from menu items
+async function calculatePackageCost(packageId, connection = null) {
+  const pool = connection || promisePool;
+  
+  const [rows] = await pool.query(
+    `SELECT 
+      COALESCE(SUM(mi.unit_cost * COALESCE(pmi.quantity, 1)), 0) as total_cost
+    FROM package_menu_items pmi
+    JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+    WHERE pmi.package_id = ?`,
+    [packageId]
+  );
+  
+  return parseFloat(rows[0]?.total_cost || 0);
+}
+
 // Get all packages (with optional filters)
 router.get('/', async (req, res) => {
   try {
@@ -11,12 +27,18 @@ router.get('/', async (req, res) => {
         p.package_id,
         p.package_name,
         p.package_type,
-        p.package_price,
+        p.unit_cost,
+        p.selling_price,
+        p.default_markup_percentage,
+        (p.selling_price - p.unit_cost) as profit_margin,
+        (p.selling_price - p.unit_cost) / NULLIF(p.unit_cost, 0) * 100 as profit_margin_percentage,
+        p.unit_cost * (1 + p.default_markup_percentage / 100) as suggested_price,
         COUNT(DISTINCT pmi.menu_item_id) as total_items,
-        COUNT(DISTINCT tp.table_id) as usage_count
+        COUNT(DISTINCT st.wedding_id) as usage_count
       FROM package p
       LEFT JOIN package_menu_items pmi ON p.package_id = pmi.package_id
       LEFT JOIN table_package tp ON p.package_id = tp.package_id
+      LEFT JOIN seating_table st ON tp.table_id = st.table_id
       WHERE 1=1
     `;
     const params = [];
@@ -28,9 +50,14 @@ router.get('/', async (req, res) => {
           p.package_id,
           p.package_name,
           p.package_type,
-          p.package_price,
+          p.unit_cost,
+          p.selling_price,
+          p.default_markup_percentage,
+          (p.selling_price - p.unit_cost) as profit_margin,
+          (p.selling_price - p.unit_cost) / NULLIF(p.unit_cost, 0) * 100 as profit_margin_percentage,
+          p.unit_cost * (1 + p.default_markup_percentage / 100) as suggested_price,
           COUNT(DISTINCT pmi.menu_item_id) as total_items,
-          COUNT(DISTINCT tp.table_id) as usage_count,
+          COUNT(DISTINCT st.wedding_id) as usage_count,
           GROUP_CONCAT(DISTINCT m.menu_name SEPARATOR ', ') as menu_items
         FROM package p
         LEFT JOIN package_menu_items pmi ON p.package_id = pmi.package_id
@@ -49,15 +76,27 @@ router.get('/', async (req, res) => {
 
     const [rows] = await promisePool.query(query, params);
 
-    // Get menu items for each package (include menu_cost and menu_price)
+    // Recalculate unit_cost for all packages (in case menu item costs changed)
+    await Promise.all(rows.map(async (pkg) => {
+      const calculatedCost = await calculatePackageCost(pkg.package_id);
+      if (Math.abs(calculatedCost - parseFloat(pkg.unit_cost || 0)) > 0.01) {
+        await promisePool.query(
+          'UPDATE package SET unit_cost = ? WHERE package_id = ?',
+          [calculatedCost, pkg.package_id]
+        );
+        pkg.unit_cost = calculatedCost;
+      }
+    }));
+
+    // Get menu items for each package (include unit_cost and selling_price)
     const packagesWithItems = await Promise.all(rows.map(async (pkg) => {
       const [menuItems] = await promisePool.query(
         `SELECT 
           m.menu_item_id,
           m.menu_name,
           m.menu_type,
-          m.menu_cost,
-          m.menu_price,
+          m.unit_cost,
+          m.selling_price,
           m.restriction_id,
           dr.restriction_name,
           dr.restriction_type,
@@ -97,7 +136,12 @@ router.get('/:id', async (req, res) => {
         p.package_id,
         p.package_name,
         p.package_type,
-        p.package_price
+        p.unit_cost,
+        p.selling_price,
+        p.default_markup_percentage,
+        (p.selling_price - p.unit_cost) as profit_margin,
+        (p.selling_price - p.unit_cost) / NULLIF(p.unit_cost, 0) * 100 as profit_margin_percentage,
+        p.unit_cost * (1 + p.default_markup_percentage / 100) as suggested_price
       FROM package p
       WHERE p.package_id = ?`,
       [req.params.id]
@@ -110,22 +154,44 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    // Get menu items for this package (include menu_cost)
+    // Recalculate unit_cost (in case menu item costs changed)
+    const calculatedCost = await calculatePackageCost(req.params.id);
+    if (Math.abs(calculatedCost - parseFloat(rows[0].unit_cost || 0)) > 0.01) {
+      await promisePool.query(
+        'UPDATE package SET unit_cost = ? WHERE package_id = ?',
+        [calculatedCost, req.params.id]
+      );
+      rows[0].unit_cost = calculatedCost;
+    }
+
+    // Calculate usage_count (distinct weddings using this package)
+    const [usageRows] = await promisePool.query(
+      `SELECT COUNT(DISTINCT st.wedding_id) as wedding_count
+       FROM table_package tp
+       JOIN seating_table st ON tp.table_id = st.table_id
+       WHERE tp.package_id = ?`,
+      [req.params.id]
+    );
+    rows[0].usage_count = usageRows[0]?.wedding_count || 0;
+
+    // Get menu items for this package (include unit_cost and selling_price)
     const [menuItems] = await promisePool.query(
       `SELECT 
         m.menu_item_id,
         m.menu_name,
         m.menu_type,
-        m.menu_cost,
-        m.menu_price,
+        m.unit_cost,
+        m.selling_price,
         m.restriction_id,
         dr.restriction_name,
         dr.restriction_type,
-        pmi.quantity
+        pmi.quantity,
+        (m.unit_cost * pmi.quantity) as total_item_cost
       FROM package_menu_items pmi
       JOIN menu_item m ON pmi.menu_item_id = m.menu_item_id
       LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
-      WHERE pmi.package_id = ?`,
+      WHERE pmi.package_id = ?
+      ORDER BY m.menu_name ASC`,
       [req.params.id]
     );
 
@@ -152,21 +218,24 @@ router.post('/', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const {package_name, package_type, package_price, menu_item_ids} = req.body;
+    const {package_name, package_type, selling_price, menu_item_ids, default_markup_percentage, package_price} = req.body;
+    
+    // Support both new (selling_price) and old (package_price) field names for backward compatibility
+    const finalSellingPrice = selling_price !== undefined ? selling_price : package_price;
 
-    if (!package_name || !package_type || !package_price) {
+    if (!package_name || !package_type || finalSellingPrice === undefined) {
       await connection.rollback();
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: package_name, package_type, package_price'
+        error: 'Missing required fields: package_name, package_type, selling_price (or package_price)'
       });
     }
 
-    // Create package
+    // Create package (unit_cost will be calculated later from menu items)
     const [result] = await connection.query(
-      `INSERT INTO package (package_name, package_type, package_price)
-       VALUES (?, ?, ?)`,
-      [package_name, package_type, package_price]
+      `INSERT INTO package (package_name, package_type, unit_cost, selling_price, default_markup_percentage)
+       VALUES (?, ?, 0, ?, ?)`,
+      [package_name, package_type, finalSellingPrice, default_markup_percentage || 180.00]
     );
 
     const packageId = result.insertId;
@@ -185,7 +254,20 @@ router.post('/', async (req, res) => {
       );
     }
 
+    // Calculate package unit_cost from menu items
+    const calculatedCost = await calculatePackageCost(packageId, connection);
+    
+    // Update package with calculated cost
+    await connection.query(
+      'UPDATE package SET unit_cost = ? WHERE package_id = ?',
+      [calculatedCost, packageId]
+    );
+
     await connection.commit();
+
+    // Calculate suggested selling price
+    const markup = default_markup_percentage || 180.00;
+    const suggestedPrice = calculatedCost * (1 + markup / 100);
 
     res.json({
       success: true,
@@ -193,7 +275,10 @@ router.post('/', async (req, res) => {
         package_id: packageId,
         package_name,
         package_type,
-        package_price
+        unit_cost: calculatedCost,
+        selling_price: finalSellingPrice,
+        default_markup_percentage: markup,
+        suggested_price: suggestedPrice
       }
     });
   } catch (error) {
@@ -215,8 +300,11 @@ router.put('/:id', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const {package_name, package_type, package_price, menu_item_ids} = req.body;
+    const {package_name, package_type, selling_price, menu_item_ids, default_markup_percentage, package_price} = req.body;
     const packageId = req.params.id;
+    
+    // Support both new (selling_price) and old (package_price) field names for backward compatibility
+    const finalSellingPrice = selling_price !== undefined ? selling_price : package_price;
 
     // Check if package exists
     const [checkRows] = await connection.query(
@@ -232,13 +320,37 @@ router.put('/:id', async (req, res) => {
       });
     }
 
-    // Update package
-    await connection.query(
-      `UPDATE package 
-       SET package_name = ?, package_type = ?, package_price = ?
-       WHERE package_id = ?`,
-      [package_name, package_type, package_price, packageId]
-    );
+    // Build update query dynamically
+    const updateFields = [];
+    const updateValues = [];
+
+    if (package_name !== undefined) {
+      updateFields.push('package_name = ?');
+      updateValues.push(package_name);
+    }
+    if (package_type !== undefined) {
+      updateFields.push('package_type = ?');
+      updateValues.push(package_type);
+    }
+    if (selling_price !== undefined || package_price !== undefined) {
+      updateFields.push('selling_price = ?');
+      updateValues.push(finalSellingPrice);
+    }
+    if (default_markup_percentage !== undefined) {
+      updateFields.push('default_markup_percentage = ?');
+      updateValues.push(default_markup_percentage);
+    }
+    // Note: unit_cost is auto-calculated, not updated here
+
+    if (updateFields.length > 0) {
+      updateValues.push(packageId);
+      await connection.query(
+        `UPDATE package 
+         SET ${updateFields.join(', ')}
+         WHERE package_id = ?`,
+        updateValues
+      );
+    }
 
     // Update menu items if provided
     if (menu_item_ids && Array.isArray(menu_item_ids)) {
@@ -261,6 +373,13 @@ router.put('/:id', async (req, res) => {
           [packageMenuItems]
         );
       }
+      
+      // Recalculate package unit_cost when menu items change
+      const calculatedCost = await calculatePackageCost(packageId, connection);
+      await connection.query(
+        'UPDATE package SET unit_cost = ? WHERE package_id = ?',
+        [calculatedCost, packageId]
+      );
     }
 
     await connection.commit();
@@ -431,7 +550,9 @@ router.get('/wedding/:wedding_id/assignments', async (req, res) => {
         st.table_category,
         p.package_name,
         p.package_type,
-        p.package_price
+        p.unit_cost,
+        p.selling_price,
+        p.default_markup_percentage
       FROM table_package tp
       JOIN seating_table st ON tp.table_id = st.table_id
       JOIN package p ON tp.package_id = p.package_id

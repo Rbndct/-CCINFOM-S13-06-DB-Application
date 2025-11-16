@@ -628,20 +628,16 @@ const DietaryRestrictions = () => {
                           <TableRow key={restriction.restriction_id}>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
+                                <Badge variant="outline" className="text-xs font-mono min-w-[3rem]">
+                                  {restriction.restriction_id}
+                                </Badge>
                                 <div className={`w-8 h-8 rounded-full ${getTypeColor(restriction.restriction_type)} flex items-center justify-center border`}>
                                   {(() => {
                                     const Icon = getTypeIcon(restriction.restriction_type);
                                     return <Icon className="h-4 w-4" />;
                                   })()}
                                 </div>
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span>{restriction.restriction_name}</span>
-                                    <Badge variant="outline" className="text-xs font-mono">
-                                      ID: {restriction.restriction_id}
-                                    </Badge>
-                                  </div>
-                                </div>
+                                <span>{restriction.restriction_name}</span>
                               </div>
                             </TableCell>
                             <TableCell>

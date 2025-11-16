@@ -169,6 +169,15 @@ const Weddings = () => {
       let total = 0;
       try {
         const weddingsWithGuestCounts = await Promise.all(weddingsData.map(async (wedding: any) => {
+          // Use actualGuestCount from backend if available, otherwise fetch it
+          if (wedding.actualGuestCount !== undefined && wedding.actualGuestCount !== null) {
+            total += wedding.actualGuestCount;
+            return {
+              ...wedding,
+              guest_count: wedding.actualGuestCount,
+              guestCount: wedding.actualGuestCount
+            };
+          }
           try {
             const guestsResponse = await guestsAPI.getAll({ wedding_id: wedding.wedding_id || wedding.id });
             const guestCount = (guestsResponse.data || []).length;
@@ -176,7 +185,8 @@ const Weddings = () => {
             return {
               ...wedding,
               guest_count: guestCount,
-              guestCount: guestCount
+              guestCount: guestCount,
+              actualGuestCount: guestCount
             };
           } catch (e) {
             const fallbackCount = wedding.guest_count || wedding.guestCount || 0;
@@ -184,7 +194,8 @@ const Weddings = () => {
             return {
               ...wedding,
               guest_count: fallbackCount,
-              guestCount: fallbackCount
+              guestCount: fallbackCount,
+              actualGuestCount: fallbackCount
             };
           }
         }));
@@ -444,7 +455,7 @@ const Weddings = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {weddings.reduce((sum, wedding) => sum + (wedding.guestCount || 0), 0)}
+                {weddings.reduce((sum, wedding) => sum + (wedding.actualGuestCount || wedding.guestCount || 0), 0)}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 Across all weddings
@@ -740,9 +751,9 @@ const Weddings = () => {
                     </TableCell>
                     <TableCell>
                       <div>
-                        <div className="font-semibold">{formatCurrency(wedding.totalCost || wedding.total_cost || 0)}</div>
+                        <div className="font-semibold">{formatCurrency(wedding.equipmentRentalCost || wedding.equipment_rental_cost || wedding.totalCost || wedding.total_cost || 0)}</div>
                         <div className="text-sm text-muted-foreground">
-                          Prod: {formatCurrency(wedding.productionCost || wedding.production_cost || 0)}
+                          Food: {formatCurrency(wedding.foodCost || wedding.food_cost || wedding.productionCost || wedding.production_cost || 0)}
                         </div>
                       </div>
                     </TableCell>

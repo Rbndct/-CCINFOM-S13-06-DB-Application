@@ -5,43 +5,46 @@ const {promisePool} = require('../config/database');
 // Helper function to recalculate and update wedding costs
 async function updateWeddingCosts(weddingId) {
   try {
-    // Calculate total rental cost from inventory allocations
+    // Calculate equipment rental cost from inventory allocations
+    // Use COALESCE to support both old (rental_cost) and new (unit_rental_cost) column names
     const [inventoryCosts] = await promisePool.query(
-      `SELECT COALESCE(SUM(quantity_used * rental_cost), 0) as total_rental_cost
+      `SELECT COALESCE(SUM(quantity_used * COALESCE(unit_rental_cost, rental_cost)), 0) as equipment_rental_cost
        FROM inventory_allocation
        WHERE wedding_id = ?`,
       [weddingId]
     );
-    const totalRentalCost = parseFloat(inventoryCosts[0]?.total_rental_cost || 0);
+    const equipmentRentalCost = parseFloat(inventoryCosts[0]?.equipment_rental_cost || 0);
 
-    // Calculate total food cost from table packages
-    // Sum of menu costs from packages assigned to tables
+    // Calculate food cost from table packages
+    // Sum of unit costs from menu items in packages assigned to tables
     const [foodCosts] = await promisePool.query(
       `SELECT COALESCE(SUM(
         COALESCE(
-          (SELECT SUM(mi.menu_cost * COALESCE(pmi.quantity, 1))
+          (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
            FROM package_menu_items pmi
            JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
            WHERE pmi.package_id = tp.package_id), 0
         )
-      ), 0) as total_food_cost
+      ), 0) as food_cost
       FROM table_package tp
       WHERE tp.wedding_id = ?`,
       [weddingId]
     );
     
-    const totalFoodCost = parseFloat(foodCosts[0]?.total_food_cost || 0);
+    const foodCost = parseFloat(foodCosts[0]?.food_cost || 0);
 
-    // Update wedding with calculated costs
+    // Update wedding with calculated costs (update both old and new columns for backward compatibility)
     await promisePool.query(
       `UPDATE wedding 
-       SET total_cost = ?,
+       SET equipment_rental_cost = ?,
+           food_cost = ?,
+           total_cost = ?,
            production_cost = ?
        WHERE wedding_id = ?`,
-      [totalRentalCost, totalFoodCost, weddingId]
+      [equipmentRentalCost, foodCost, equipmentRentalCost, foodCost, weddingId]
     );
 
-    return { totalRentalCost, totalFoodCost };
+    return { equipmentRentalCost, foodCost };
   } catch (error) {
     console.error('Error updating wedding costs:', error);
     throw error;
@@ -59,6 +62,7 @@ router.get('/', async (req, res) => {
         category,
         item_condition,
         quantity_available,
+        COALESCE(unit_rental_cost, rental_cost) as unit_rental_cost,
         rental_cost,
         created_at,
         updated_at
@@ -127,9 +131,12 @@ router.get('/:id', async (req, res) => {
 // Create new inventory item
 router.post('/', async (req, res) => {
   try {
-    const {item_name, category, item_condition, quantity_available, rental_cost} = req.body;
+    const {item_name, category, item_condition, quantity_available, unit_rental_cost, rental_cost} = req.body;
+    
+    // Support both new (unit_rental_cost) and old (rental_cost) field names
+    const finalRentalCost = unit_rental_cost !== undefined ? unit_rental_cost : rental_cost;
 
-    if (!item_name || !category || !item_condition || quantity_available === undefined || rental_cost === undefined) {
+    if (!item_name || !category || !item_condition || quantity_available === undefined || finalRentalCost === undefined) {
       return res.status(400).json({
         success: false,
         error: 'Missing required fields'
@@ -137,9 +144,9 @@ router.post('/', async (req, res) => {
     }
 
     const [result] = await promisePool.query(
-      `INSERT INTO inventory_items (item_name, category, item_condition, quantity_available, rental_cost)
-       VALUES (?, ?, ?, ?, ?)`,
-      [item_name, category, item_condition, quantity_available, rental_cost]
+      `INSERT INTO inventory_items (item_name, category, item_condition, quantity_available, unit_rental_cost, rental_cost)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [item_name, category, item_condition, quantity_available, finalRentalCost, finalRentalCost]
     );
 
     res.json({
@@ -150,7 +157,8 @@ router.post('/', async (req, res) => {
         category,
         item_condition,
         quantity_available,
-        rental_cost
+        unit_rental_cost: finalRentalCost,
+        rental_cost: finalRentalCost
       }
     });
   } catch (error) {
@@ -167,13 +175,16 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const {id} = req.params;
-    const {item_name, category, item_condition, quantity_available, rental_cost} = req.body;
+    const {item_name, category, item_condition, quantity_available, unit_rental_cost, rental_cost} = req.body;
+    
+    // Support both new (unit_rental_cost) and old (rental_cost) field names
+    const finalRentalCost = unit_rental_cost !== undefined ? unit_rental_cost : rental_cost;
 
     const [result] = await promisePool.query(
       `UPDATE inventory_items 
-       SET item_name = ?, category = ?, item_condition = ?, quantity_available = ?, rental_cost = ?
+       SET item_name = ?, category = ?, item_condition = ?, quantity_available = ?, unit_rental_cost = ?, rental_cost = ?
        WHERE inventory_id = ?`,
-      [item_name, category, item_condition, quantity_available, rental_cost, id]
+      [item_name, category, item_condition, quantity_available, finalRentalCost, finalRentalCost, id]
     );
 
     if (result.affectedRows === 0) {
@@ -242,6 +253,7 @@ router.get('/allocations/:wedding_id', async (req, res) => {
         ia.wedding_id,
         ia.inventory_id,
         ia.quantity_used,
+        COALESCE(ia.unit_rental_cost, ia.rental_cost) as unit_rental_cost,
         ia.rental_cost,
         ia.created_at,
         ia.updated_at,
@@ -249,7 +261,7 @@ router.get('/allocations/:wedding_id', async (req, res) => {
         ii.category,
         ii.item_condition,
         ii.quantity_available,
-        (ia.quantity_used * ia.rental_cost) AS total_cost
+        (ia.quantity_used * COALESCE(ia.unit_rental_cost, ia.rental_cost)) AS total_cost
       FROM inventory_allocation ia
       INNER JOIN inventory_items ii ON ia.inventory_id = ii.inventory_id
       WHERE ia.wedding_id = ?
@@ -274,18 +286,21 @@ router.get('/allocations/:wedding_id', async (req, res) => {
 // Create new inventory allocation
 router.post('/allocations', async (req, res) => {
   try {
-    const {wedding_id, inventory_id, quantity_used, rental_cost} = req.body;
+    const {wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost} = req.body;
+    
+    // Support both new (unit_rental_cost) and old (rental_cost) field names
+    const providedRentalCost = unit_rental_cost !== undefined ? unit_rental_cost : rental_cost;
 
-    if (!wedding_id || !inventory_id || quantity_used === undefined || rental_cost === undefined) {
+    if (!wedding_id || !inventory_id || quantity_used === undefined || providedRentalCost === undefined) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: wedding_id, inventory_id, quantity_used, rental_cost'
+        error: 'Missing required fields: wedding_id, inventory_id, quantity_used, unit_rental_cost (or rental_cost)'
       });
     }
 
     // Check if inventory item exists and has enough quantity
     const [itemRows] = await promisePool.query(
-      'SELECT quantity_available, rental_cost FROM inventory_items WHERE inventory_id = ?',
+      'SELECT quantity_available, COALESCE(unit_rental_cost, rental_cost) as unit_rental_cost, rental_cost FROM inventory_items WHERE inventory_id = ?',
       [inventory_id]
     );
 
@@ -304,11 +319,11 @@ router.post('/allocations', async (req, res) => {
       });
     }
 
-    // Use provided rental_cost or fallback to item's rental_cost
+    // Use provided rental cost or fallback to item's rental cost
     // Handle both null/undefined and 0 values properly
-    const finalRentalCost = (rental_cost !== undefined && rental_cost !== null && rental_cost !== '') 
-      ? parseFloat(rental_cost) 
-      : itemRows[0].rental_cost;
+    const finalRentalCost = (providedRentalCost !== undefined && providedRentalCost !== null && providedRentalCost !== '') 
+      ? parseFloat(providedRentalCost) 
+      : itemRows[0].unit_rental_cost;
     
     if (isNaN(finalRentalCost) || finalRentalCost < 0) {
       return res.status(400).json({
@@ -318,9 +333,9 @@ router.post('/allocations', async (req, res) => {
     }
 
     const [result] = await promisePool.query(
-      `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, rental_cost)
-       VALUES (?, ?, ?, ?)`,
-      [wedding_id, inventory_id, quantity_used, finalRentalCost]
+      `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost)
+       VALUES (?, ?, ?, ?, ?)`,
+      [wedding_id, inventory_id, quantity_used, finalRentalCost, finalRentalCost]
     );
 
     // Fetch the created allocation with item details
@@ -330,6 +345,7 @@ router.post('/allocations', async (req, res) => {
         ia.wedding_id,
         ia.inventory_id,
         ia.quantity_used,
+        COALESCE(ia.unit_rental_cost, ia.rental_cost) as unit_rental_cost,
         ia.rental_cost,
         ia.created_at,
         ia.updated_at,
@@ -337,7 +353,7 @@ router.post('/allocations', async (req, res) => {
         ii.category,
         ii.item_condition,
         ii.quantity_available,
-        (ia.quantity_used * ia.rental_cost) AS total_cost
+        (ia.quantity_used * COALESCE(ia.unit_rental_cost, ia.rental_cost)) AS total_cost
       FROM inventory_allocation ia
       INNER JOIN inventory_items ii ON ia.inventory_id = ii.inventory_id
       WHERE ia.allocation_id = ?`,
@@ -366,12 +382,15 @@ router.post('/allocations', async (req, res) => {
 router.put('/allocations/:allocation_id', async (req, res) => {
   try {
     const {allocation_id} = req.params;
-    const {quantity_used, rental_cost} = req.body;
+    const {quantity_used, unit_rental_cost, rental_cost} = req.body;
+    
+    // Support both new (unit_rental_cost) and old (rental_cost) field names
+    const providedRentalCost = unit_rental_cost !== undefined ? unit_rental_cost : rental_cost;
 
-    if (quantity_used === undefined && rental_cost === undefined) {
+    if (quantity_used === undefined && providedRentalCost === undefined) {
       return res.status(400).json({
         success: false,
-        error: 'At least one field (quantity_used or rental_cost) must be provided'
+        error: 'At least one field (quantity_used or unit_rental_cost/rental_cost) must be provided'
       });
     }
 
@@ -413,9 +432,11 @@ router.put('/allocations/:allocation_id', async (req, res) => {
       params.push(quantity_used);
     }
     
-    if (rental_cost !== undefined) {
+    if (providedRentalCost !== undefined) {
+      updates.push('unit_rental_cost = ?');
       updates.push('rental_cost = ?');
-      params.push(rental_cost);
+      params.push(providedRentalCost);
+      params.push(providedRentalCost);
     }
     
     params.push(allocation_id);
@@ -441,6 +462,7 @@ router.put('/allocations/:allocation_id', async (req, res) => {
         ia.wedding_id,
         ia.inventory_id,
         ia.quantity_used,
+        COALESCE(ia.unit_rental_cost, ia.rental_cost) as unit_rental_cost,
         ia.rental_cost,
         ia.created_at,
         ia.updated_at,
@@ -448,7 +470,7 @@ router.put('/allocations/:allocation_id', async (req, res) => {
         ii.category,
         ii.item_condition,
         ii.quantity_available,
-        (ia.quantity_used * ia.rental_cost) AS total_cost
+        (ia.quantity_used * COALESCE(ia.unit_rental_cost, ia.rental_cost)) AS total_cost
       FROM inventory_allocation ia
       INNER JOIN inventory_items ii ON ia.inventory_id = ii.inventory_id
       WHERE ia.allocation_id = ?`,

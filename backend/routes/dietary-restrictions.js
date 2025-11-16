@@ -135,7 +135,7 @@ router.get('/:restriction_id', async (req, res) => {
 
     // Get affected menu items
     const [menuRows] = await promisePool.query(
-        `SELECT menu_item_id, menu_name as item_name, menu_type as category, menu_price as price
+        `SELECT menu_item_id, menu_name as item_name, menu_type as category, selling_price as price
          FROM menu_item
          WHERE restriction_id = ?
          ORDER BY menu_type, menu_name`,
