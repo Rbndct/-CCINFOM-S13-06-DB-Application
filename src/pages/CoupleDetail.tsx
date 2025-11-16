@@ -20,7 +20,9 @@ import {
   Filter,
   CheckCircle,
   XCircle,
-  Clock as ClockIcon
+  Clock as ClockIcon,
+  DollarSign,
+  Utensils
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -782,15 +784,6 @@ const CoupleDetail = () => {
                           <DropdownMenuItem
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleEditPreference(pref);
-                            }}
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Edit
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation();
                               handleDeletePreference(pref.preference_id);
                             }}
                             className="text-destructive focus:text-destructive"
@@ -833,104 +826,119 @@ const CoupleDetail = () => {
                     onClick={() => navigate(`/dashboard/weddings/${wedding.id}`)}
                   >
                     <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-lg">
-                          {formatDate(new Date(wedding.weddingDate))}
-                        </CardTitle>
-                        <Badge variant={wedding.paymentStatus === 'paid' ? 'default' : 'secondary'}>
-                          {wedding.paymentStatus === 'pending' ? 'Pending' : wedding.paymentStatus.charAt(0).toUpperCase() + wedding.paymentStatus.slice(1)}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <CardTitle className="text-lg truncate">
+                            {formatDate(new Date(wedding.weddingDate || wedding.wedding_date))}
+                          </CardTitle>
+                        </div>
+                        <Badge variant="outline" className="font-mono text-xs flex-shrink-0">
+                          #{wedding.id || wedding.wedding_id}
                         </Badge>
                       </div>
                     </CardHeader>
-                    <CardContent className="space-y-2">
-                      <div className="flex items-center gap-2 text-sm">
-                        <Clock className="w-4 h-4 text-muted-foreground" />
-                        <span>{(() => {
-                          const time = wedding.weddingTime;
-                          if (!time) return 'N/A';
-                          try {
-                            if (typeof time === 'string' && time.match(/^\d{2}:\d{2}/)) {
-                              const [hours, minutes] = time.split(':');
-                              const date = new Date();
-                              date.setHours(parseInt(hours), parseInt(minutes));
-                              return formatTime(date);
+                    <CardContent className="space-y-3">
+                      <div className="grid grid-cols-2 gap-2 text-sm">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">{(() => {
+                            const time = wedding.weddingTime || wedding.wedding_time;
+                            if (!time) return 'N/A';
+                            try {
+                              if (typeof time === 'string' && time.match(/^\d{2}:\d{2}/)) {
+                                const [hours, minutes] = time.split(':');
+                                const date = new Date();
+                                date.setHours(parseInt(hours), parseInt(minutes));
+                                return formatTime(date);
+                              }
+                              return time;
+                            } catch {
+                              return time;
                             }
-                            return time;
-                          } catch {
-                            return time;
-                          }
-                        })()}</span>
+                          })()}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Users className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                          <span className="truncate">{wedding.guestCount ?? wedding.guest_count ?? 0} guests</span>
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
-                        <MapPin className="w-4 h-4 text-muted-foreground" />
-                        <span className="truncate">{wedding.venue}</span>
+                        <MapPin className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                        <span className="truncate">{wedding.venue || 'N/A'}</span>
                       </div>
-                      <div className="flex items-center gap-2 text-sm">
-                        <Users className="w-4 h-4 text-muted-foreground" />
-                        <span>{wedding.guestCount ?? wedding.guest_count ?? 0} guests</span>
-                      </div>
-                      <div className="space-y-1 pt-2 border-t">
+                      <div className="space-y-1.5 pt-2 border-t">
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Total Cost:</span>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <DollarSign className="w-3 h-3" />
+                            Total Cost:
+                          </span>
                           <span className="font-semibold">{formatCurrency(wedding.total_cost || wedding.totalCost || 0)}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
-                          <span className="text-muted-foreground">Production Cost:</span>
+                          <span className="text-muted-foreground flex items-center gap-1">
+                            <Utensils className="w-3 h-3" />
+                            Production Cost:
+                          </span>
                           <span className="font-semibold">{formatCurrency(wedding.production_cost || wedding.productionCost || 0)}</span>
                         </div>
                       </div>
-                      <div className="pt-2">
+                      <div className="pt-2 space-y-2">
                         {(() => {
                           const status = wedding.payment_status || wedding.paymentStatus || 'pending';
                           const statusLower = status.toLowerCase();
                           if (statusLower === 'paid') {
                             return (
-                              <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 flex items-center gap-1">
+                              <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 flex items-center gap-1 w-fit">
                                 <CheckCircle className="h-3 w-3" />
                                 Paid
                               </Badge>
                             );
                           } else if (statusLower === 'pending') {
                             return (
-                              <Badge className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 flex items-center gap-1">
+                              <Badge className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 flex items-center gap-1 w-fit">
                                 <ClockIcon className="h-3 w-3" />
                                 Pending
                               </Badge>
                             );
                           } else {
                             return (
-                              <Badge className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 flex items-center gap-1">
+                              <Badge className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 flex items-center gap-1 w-fit">
                                 <XCircle className="h-3 w-3" />
                                 {status.charAt(0).toUpperCase() + status.slice(1)}
                               </Badge>
                             );
                           }
                         })()}
+                        {wedding.ceremony_type && (
+                          <div>
+                            <CeremonyTypeBadge type={wedding.ceremony_type} className="mb-2" />
+                            {(() => {
+                              const restrictions = wedding.all_restrictions || wedding.restrictions || [];
+                              return restrictions.length > 0 ? (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {restrictions.map((r: any) => (
+                                    <Badge 
+                                      key={r.restriction_id} 
+                                      className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1`}
+                                    >
+                                      {(() => {
+                                        const Icon = getTypeIcon(r.restriction_type || '');
+                                        return <Icon className="h-3 w-3" />;
+                                      })()}
+                                      <span>{r.restriction_name}</span>
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <Badge variant="outline" className="text-xs mt-2 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700">
+                                  No dietary restrictions
+                                </Badge>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
-                      {wedding.ceremony_type && (
-                        <div className="mt-2">
-                          <CeremonyTypeBadge type={wedding.ceremony_type} className="mb-2" />
-                          {(() => {
-                            const restrictions = wedding.all_restrictions || wedding.restrictions || [];
-                            return restrictions.length > 0 ? (
-                              <div className="flex flex-wrap gap-1 mt-2">
-                                {restrictions.map((r: any) => (
-                                  <Badge 
-                                    key={r.restriction_id} 
-                                    className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1`}
-                                  >
-                                    {(() => {
-                                      const Icon = getTypeIcon(r.restriction_type || '');
-                                      return <Icon className="h-3 w-3" />;
-                                    })()}
-                                    <span>{r.restriction_name}</span>
-                                  </Badge>
-                                ))}
-                              </div>
-                            ) : null;
-                          })()}
-                        </div>
-                      )}
                     </CardContent>
                   </Card>
                 ))}
