@@ -618,8 +618,8 @@ const Weddings = () => {
                     <TableCell className="font-medium">
                       <div>
                         <div className="flex items-start gap-2">
-                          <Badge variant="outline" className="text-xs font-mono flex items-center gap-1 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 flex-shrink-0 mt-0.5">
-                            <Heart className="h-3 w-3 text-blue-600 dark:text-blue-400" />
+                          <Badge variant="outline" className="text-xs font-mono flex items-center gap-1 bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800 flex-shrink-0 mt-0.5 w-[60px] justify-center">
+                            <Users className="h-3 w-3 text-blue-600 dark:text-blue-400" />
                             {wedding.couple_id}
                           </Badge>
                           <div className="font-semibold min-w-0 flex-1">{wedding.couple || (wedding.partner1_name && wedding.partner2_name ? `${wedding.partner1_name} & ${wedding.partner2_name}` : 'N/A')}</div>
