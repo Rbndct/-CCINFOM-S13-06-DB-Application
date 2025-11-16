@@ -50,7 +50,6 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       label: 'Venue & Logistics',
       items: [
         { to: '/dashboard/inventory', label: 'Inventory', icon: Warehouse },
-        { to: '/dashboard/ingredient-restock', label: 'Ingredient Restock', icon: Warehouse },
       ],
     },
     {
