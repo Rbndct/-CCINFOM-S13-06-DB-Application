@@ -16,6 +16,7 @@ import CoupleDetail from "./pages/CoupleDetail";
 import MenuItems from "./pages/MenuItems";
 import Packages from "./pages/Packages";
 import Inventory from "./pages/Inventory";
+import Ingredients from "./pages/Ingredients";
 import SeatingTables from "./pages/SeatingTables";
 import DietaryRestrictions from "./pages/DietaryRestrictions";
 import Reports from "./pages/Reports";
@@ -57,6 +58,7 @@ const App = () => (
           <Route path="/dashboard/guests" element={<Guests />} />
           <Route path="/dashboard/menu" element={<MenuItems />} />
           <Route path="/dashboard/packages" element={<Packages />} />
+          <Route path="/dashboard/ingredients" element={<Ingredients />} />
           <Route path="/dashboard/tables" element={<SeatingTables />} />
           <Route path="/dashboard/inventory" element={<Inventory />} />
           <Route path="/dashboard/ingredient-restock" element={<Logistics />} />

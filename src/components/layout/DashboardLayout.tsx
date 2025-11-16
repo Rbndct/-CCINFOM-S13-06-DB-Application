@@ -14,6 +14,7 @@ import {
   Utensils,
   Package as PackageIcon,
   UserCheck,
+  PackagePlus,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -42,6 +43,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       items: [
         { to: '/dashboard/menu', label: 'Menu Items', icon: Utensils },
         { to: '/dashboard/packages', label: 'Packages', icon: PackageIcon },
+        { to: '/dashboard/ingredients', label: 'Ingredients', icon: PackagePlus },
       ],
     },
     {
