@@ -19,7 +19,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Hash,
-  Heart
+  Heart,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -217,16 +219,17 @@ const Weddings = () => {
   };
 
   const getPaymentStatusBadge = (status: string) => {
-    switch (status) {
-      case 'paid':
-        return <Badge className="bg-green-100 text-green-800">Paid</Badge>;
-      case 'pending':
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
-      case 'partial':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Partial</Badge>;
-      default:
-        return <Badge variant="outline">Unknown</Badge>;
+    const statusLower = status.toLowerCase();
+    const capitalizeStatus = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
+    
+    if (statusLower === 'paid' || statusLower === 'completed') {
+      return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border flex items-center gap-1 w-fit"><CheckCircle className="w-3 h-3 dark:text-green-300" />Paid</Badge>;
+    } else if (statusLower === 'pending' || statusLower === 'partial') {
+      return <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border flex items-center gap-1 w-fit"><Clock className="w-3 h-3 dark:text-yellow-300" />{capitalizeStatus(status)}</Badge>;
+    } else if (statusLower === 'unpaid' || statusLower === 'overdue') {
+      return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border flex items-center gap-1 w-fit"><AlertCircle className="w-3 h-3 dark:text-red-300" />{capitalizeStatus(status)}</Badge>;
     }
+    return <Badge variant="outline" className="dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">{capitalizeStatus(status)}</Badge>;
   };
 
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
@@ -572,12 +575,12 @@ const Weddings = () => {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">All Types</SelectItem>
-                      <SelectItem value="Traditional">Traditional</SelectItem>
-                      <SelectItem value="Modern">Modern</SelectItem>
-                      <SelectItem value="Beach">Beach</SelectItem>
+                      <SelectItem value="Civil">Civil</SelectItem>
+                      <SelectItem value="Church">Church</SelectItem>
                       <SelectItem value="Garden">Garden</SelectItem>
-                      <SelectItem value="Destination">Destination</SelectItem>
-                      <SelectItem value="Intimate">Intimate</SelectItem>
+                      <SelectItem value="Beach">Beach</SelectItem>
+                      <SelectItem value="Outdoor">Outdoor</SelectItem>
+                      <SelectItem value="Indoor">Indoor</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -684,7 +687,7 @@ const Weddings = () => {
                           
                           if (!hasType && !hasRestrictions) {
                             return (
-                              <span className="text-xs text-muted-foreground">No preference?</span>
+                              <span className="text-xs text-muted-foreground">No preference/s</span>
                             );
                           }
                           
@@ -692,14 +695,14 @@ const Weddings = () => {
                             <>
                               {hasType && (
                                 <div>
-                                  <Badge variant="outline" className="text-xs">
+                                  <Badge variant="outline" className="text-xs dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
                                     {wedding.ceremony_type}
                                   </Badge>
                                 </div>
                               )}
                               {hasRestrictions && (
                                 <div className="space-y-0.5">
-                                  {restrictions.slice(0, 2).map((r: any) => (
+                                  {restrictions.slice(0, 1).map((r: any) => (
                                     <Badge 
                                       key={r.restriction_id} 
                                       className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1 w-fit`}
@@ -708,9 +711,9 @@ const Weddings = () => {
                                       {r.restriction_name}
                                     </Badge>
                                   ))}
-                                  {restrictions.length > 2 && (
-                                    <Badge variant="outline" className="text-xs w-fit">
-                                      +{restrictions.length - 2} more
+                                  {restrictions.length > 1 && (
+                                    <Badge variant="outline" className="text-xs w-fit dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+                                      +{restrictions.length - 1} more
                                     </Badge>
                                   )}
                                 </div>
