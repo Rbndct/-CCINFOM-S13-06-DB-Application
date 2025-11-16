@@ -20,11 +20,11 @@ router.get('/sales', async (req, res) => {
     const { period = 'month', value } = req.query;
     const { sql: whereSql, params } = periodWhere(period, value);
 
-    // Totals and averages (use total_cost as income proxy)
+    // Totals and averages (use equipment_rental_cost + food_cost as income proxy)
     const [incomeRows] = await promisePool.query(
       `SELECT 
-         COALESCE(SUM(w.total_cost), 0) AS totalIncome,
-         COALESCE(AVG(w.total_cost), 0) AS avgIncome,
+         COALESCE(SUM(COALESCE(w.equipment_rental_cost, w.total_cost) + COALESCE(w.food_cost, w.production_cost)), 0) AS totalIncome,
+         COALESCE(AVG(COALESCE(w.equipment_rental_cost, w.total_cost) + COALESCE(w.food_cost, w.production_cost)), 0) AS avgIncome,
          COUNT(*) AS weddingCount
        FROM wedding w
        WHERE ${whereSql}`,
@@ -94,6 +94,8 @@ router.get('/payments', async (req, res) => {
          w.wedding_id,
          w.couple_id,
          w.wedding_date,
+         COALESCE(w.equipment_rental_cost, w.total_cost) as equipment_rental_cost,
+         COALESCE(w.food_cost, w.production_cost) as food_cost,
          w.total_cost,
          w.production_cost,
          w.payment_status
@@ -252,6 +254,172 @@ router.get('/wedding/:id/seating', async (req, res) => {
   } catch (error) {
     console.error('Error generating wedding seating report:', error);
     res.status(500).json({ success: false, error: 'Failed to generate seating report', message: error.message });
+  }
+});
+
+// GET /reports/financial?period=month|year&value=YYYY-MM|YYYY
+// Comprehensive financial report with revenue, COGS, profit margins, etc.
+router.get('/financial', async (req, res) => {
+  try {
+    const { period = 'month', value } = req.query;
+    const { sql: whereSql, params } = periodWhere(period, value);
+
+    // Calculate revenue from actual package assignments in period
+    const [revenueData] = await promisePool.query(
+      `SELECT 
+        COALESCE(SUM(p.selling_price), 0) AS total_revenue,
+        COUNT(DISTINCT tp.table_id) AS total_table_assignments,
+        COUNT(DISTINCT st.wedding_id) AS weddings_with_packages
+      FROM table_package tp
+      JOIN seating_table st ON tp.table_id = st.table_id
+      JOIN wedding w ON st.wedding_id = w.wedding_id
+      JOIN package p ON tp.package_id = p.package_id
+      WHERE ${whereSql}`,
+      params
+    );
+
+    // Total COGS (Cost of Goods Sold) - package unit_cost * usage
+    const [cogsData] = await promisePool.query(
+      `SELECT 
+        COALESCE(SUM(p.unit_cost), 0) AS total_cogs,
+        COALESCE(SUM(p.selling_price - p.unit_cost), 0) AS total_gross_profit
+      FROM table_package tp
+      JOIN seating_table st ON tp.table_id = st.table_id
+      JOIN wedding w ON st.wedding_id = w.wedding_id
+      JOIN package p ON tp.package_id = p.package_id
+      WHERE ${whereSql}`,
+      params
+    );
+
+    // Equipment/Inventory Rental Costs
+    const [equipmentData] = await promisePool.query(
+      `SELECT 
+        COALESCE(SUM(ia.rental_cost), 0) AS total_equipment_cost
+      FROM inventory_allocation ia
+      JOIN wedding w ON ia.wedding_id = w.wedding_id
+      WHERE ${whereSql}`,
+      params
+    );
+
+    // Calculate metrics
+    const totalRevenue = parseFloat(revenueData[0]?.total_revenue || 0);
+    const totalCOGS = parseFloat(cogsData[0]?.total_cogs || 0);
+    const totalEquipmentCost = parseFloat(equipmentData[0]?.total_equipment_cost || 0);
+    const totalGrossProfit = parseFloat(cogsData[0]?.total_gross_profit || 0);
+    const totalOperatingCosts = totalEquipmentCost; // Can be extended with labor, overhead, etc.
+    const netProfit = totalGrossProfit - totalOperatingCosts;
+    const grossProfitMargin = totalRevenue > 0 ? (totalGrossProfit / totalRevenue) * 100 : 0;
+    const netProfitMargin = totalRevenue > 0 ? (netProfit / totalRevenue) * 100 : 0;
+
+    // Revenue by package type
+    const [revenueByPackageType] = await promisePool.query(
+      `SELECT 
+        p.package_type,
+        COALESCE(SUM(p.selling_price), 0) AS revenue,
+        COALESCE(SUM(p.unit_cost), 0) AS cost,
+        COUNT(DISTINCT tp.table_id) AS usage_count
+      FROM table_package tp
+      JOIN seating_table st ON tp.table_id = st.table_id
+      JOIN wedding w ON st.wedding_id = w.wedding_id
+      JOIN package p ON tp.package_id = p.package_id
+      WHERE ${whereSql}
+      GROUP BY p.package_type
+      ORDER BY revenue DESC`,
+      params
+    );
+
+    // Monthly/Yearly comparison (previous period)
+    let previousPeriodData = { total_revenue: 0, total_cogs: 0, net_profit: 0 };
+    if (period === 'month' && value) {
+      const [year, month] = value.split('-');
+      const prevMonth = parseInt(month) - 1;
+      const prevYear = prevMonth < 1 ? parseInt(year) - 1 : parseInt(year);
+      const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+      const prevWhere = periodWhere('month', prevMonthStr);
+      const [prevData] = await promisePool.query(
+        `SELECT 
+          COALESCE(SUM(p.selling_price), 0) AS total_revenue,
+          COALESCE(SUM(p.unit_cost), 0) AS total_cogs
+        FROM table_package tp
+        JOIN seating_table st ON tp.table_id = st.table_id
+        JOIN wedding w ON st.wedding_id = w.wedding_id
+        JOIN package p ON tp.package_id = p.package_id
+        WHERE ${prevWhere.sql}`,
+        prevWhere.params
+      );
+      if (prevData[0]) {
+        previousPeriodData.total_revenue = parseFloat(prevData[0].total_revenue || 0);
+        previousPeriodData.total_cogs = parseFloat(prevData[0].total_cogs || 0);
+        previousPeriodData.net_profit = previousPeriodData.total_revenue - previousPeriodData.total_cogs;
+      }
+    } else if (period === 'year' && value) {
+      const prevYear = (parseInt(value) - 1).toString();
+      const prevWhere = periodWhere('year', prevYear);
+      const [prevData] = await promisePool.query(
+        `SELECT 
+          COALESCE(SUM(p.selling_price), 0) AS total_revenue,
+          COALESCE(SUM(p.unit_cost), 0) AS total_cogs
+        FROM table_package tp
+        JOIN seating_table st ON tp.table_id = st.table_id
+        JOIN wedding w ON st.wedding_id = w.wedding_id
+        JOIN package p ON tp.package_id = p.package_id
+        WHERE ${prevWhere.sql}`,
+        prevWhere.params
+      );
+      if (prevData[0]) {
+        previousPeriodData.total_revenue = parseFloat(prevData[0].total_revenue || 0);
+        previousPeriodData.total_cogs = parseFloat(prevData[0].total_cogs || 0);
+        previousPeriodData.net_profit = previousPeriodData.total_revenue - previousPeriodData.total_cogs;
+      }
+    }
+
+    const revenueChange = previousPeriodData.total_revenue > 0 
+      ? ((totalRevenue - previousPeriodData.total_revenue) / previousPeriodData.total_revenue) * 100 
+      : 0;
+    const profitChange = previousPeriodData.net_profit !== 0
+      ? ((netProfit - previousPeriodData.net_profit) / Math.abs(previousPeriodData.net_profit)) * 100
+      : 0;
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        value,
+        // Income Statement
+        revenue: {
+          total: totalRevenue,
+          from_packages: totalRevenue,
+          change_percent: revenueChange
+        },
+        cogs: {
+          total: totalCOGS,
+          package_costs: totalCOGS
+        },
+        gross_profit: {
+          total: totalGrossProfit,
+          margin_percent: grossProfitMargin
+        },
+        operating_costs: {
+          total: totalOperatingCosts,
+          equipment_rental: totalEquipmentCost
+        },
+        net_profit: {
+          total: netProfit,
+          margin_percent: netProfitMargin,
+          change_percent: profitChange
+        },
+        // Breakdowns
+        revenue_by_package_type: revenueByPackageType,
+        // Metrics
+        weddings_count: revenueData[0]?.weddings_with_packages || 0,
+        table_assignments: revenueData[0]?.total_table_assignments || 0,
+        // Comparison
+        previous_period: previousPeriodData
+      }
+    });
+  } catch (error) {
+    console.error('Error generating financial report:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate financial report', message: error.message });
   }
 });
 
