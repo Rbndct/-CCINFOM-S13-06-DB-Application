@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { 
   Plus, 
   Search, 
@@ -63,6 +64,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { weddingsAPI, couplesAPI, guestsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, formatRestrictionsList, getRestrictionCountText } from '@/utils/restrictionUtils';
+import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
 import { useDateFormat } from '@/context/DateFormatContext';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 
@@ -72,7 +74,6 @@ const Weddings = () => {
   const { formatCurrency } = useCurrencyFormat();
   const { formatDate } = useDateFormat();
   const { formatTime } = useTimeFormat();
-  const [weddings, setWeddings] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('all');
   const [showFilters, setShowFilters] = useState(false);
@@ -84,7 +85,6 @@ const Weddings = () => {
   const [filterWeddingType, setFilterWeddingType] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [couples, setCouples] = useState([]);
-  const [loading, setLoading] = useState(false);
   const [totalGuests, setTotalGuests] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
@@ -151,20 +151,10 @@ const Weddings = () => {
     }
   };
 
-  // Fetch weddings
-  useEffect(() => {
-    fetchWeddings();
-  }, []);
-
-  // Apply filters immediately when they change
-  useEffect(() => {
-    fetchWeddings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFrom, dateTo, venueFilter, plannerFilter, hasRestrictions, filterWeddingType]);
-
-  const fetchWeddings = async () => {
-    setLoading(true);
-    try {
+  // Fetch weddings using React Query with caching
+  const { data: weddings = [], isLoading: loading, refetch } = useQuery({
+    queryKey: ['weddings', filterStatus, dateFrom, dateTo, venueFilter, plannerFilter, hasRestrictions, filterWeddingType],
+    queryFn: async () => {
       const response = await weddingsAPI.getAll({
         date_from: dateFrom || undefined,
         date_to: dateTo || undefined,
@@ -197,26 +187,25 @@ const Weddings = () => {
             };
           }
         }));
-        setWeddings(weddingsWithGuestCounts);
         setTotalGuests(total);
+        return weddingsWithGuestCounts;
       } catch (e) {
         console.error('Error calculating guest counts:', e);
         // Fallback to guest_count field if available
         total = weddingsData.reduce((sum: number, w: any) => sum + (w.guest_count || w.guestCount || 0), 0);
-        setWeddings(weddingsData);
         setTotalGuests(total);
+        return weddingsData;
       }
-    } catch (error: any) {
+    },
+    onError: (error: any) => {
       console.error('Error fetching weddings:', error);
       toast({
         title: 'Error',
         description: error.response?.data?.message || 'Failed to load weddings. Make sure backend is running.',
         variant: 'destructive',
       });
-    } finally {
-      setLoading(false);
-    }
-  };
+    },
+  });
 
   const getPaymentStatusBadge = (status: string) => {
     const statusLower = status.toLowerCase();
@@ -345,7 +334,7 @@ const Weddings = () => {
       });
 
       // Refresh weddings list
-      await fetchWeddings();
+      refetch();
 
       toast({
         title: 'Wedding Created',
@@ -695,9 +684,7 @@ const Weddings = () => {
                             <>
                               {hasType && (
                                 <div>
-                                  <Badge variant="outline" className="text-xs dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
-                                    {wedding.ceremony_type}
-                                  </Badge>
+                                  <CeremonyTypeBadge type={wedding.ceremony_type} />
                                 </div>
                               )}
                               {hasRestrictions && (
@@ -707,7 +694,10 @@ const Weddings = () => {
                                       key={r.restriction_id} 
                                       className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1 w-fit`}
                                     >
-                                      {getTypeIcon(r.restriction_type || '')}
+                                      {(() => {
+                                        const Icon = getTypeIcon(r.restriction_type || '');
+                                        return <Icon className="h-3 w-3" />;
+                                      })()}
                                       {r.restriction_name}
                                     </Badge>
                                   ))}
@@ -758,7 +748,7 @@ const Weddings = () => {
                               if (!confirm('Delete this wedding?')) return;
                               try {
                                 await weddingsAPI.delete(wedding.id);
-                                await fetchWeddings();
+                                refetch();
                                 toast({ title: 'Wedding deleted' });
                               } catch (e: any) {
                                 toast({ title: 'Error', description: e.response?.data?.error || 'Failed to delete wedding', variant: 'destructive' });
@@ -905,9 +895,7 @@ const Weddings = () => {
                       <div className="p-4 bg-muted rounded-lg border space-y-3">
                         <div>
                           <p className="text-sm font-semibold mb-1">Wedding Type:</p>
-                          <Badge variant="outline" className="font-semibold">
-                            {selectedPref.ceremony_type}
-                          </Badge>
+                          <CeremonyTypeBadge type={selectedPref.ceremony_type} />
                         </div>
                         <div>
                           <p className="text-sm font-semibold mb-2">
@@ -921,7 +909,10 @@ const Weddings = () => {
                                     key={restriction.restriction_id} 
                                     className={`${getTypeColor(restriction.restriction_type || '')} border flex items-center gap-1`}
                                   >
-                                    {getTypeIcon(restriction.restriction_type || '')}
+                                    {(() => {
+                                      const Icon = getTypeIcon(restriction.restriction_type || '');
+                                      return <Icon className="h-3 w-3" />;
+                                    })()}
                                     <span>{restriction.restriction_name}</span>
                                     {restriction.severity_level && (
                                       <span className="text-xs">({restriction.severity_level})</span>

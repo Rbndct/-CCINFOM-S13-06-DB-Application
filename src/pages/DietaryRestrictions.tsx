@@ -629,7 +629,10 @@ const DietaryRestrictions = () => {
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 <div className={`w-8 h-8 rounded-full ${getTypeColor(restriction.restriction_type)} flex items-center justify-center border`}>
-                                  {getTypeIcon(restriction.restriction_type)}
+                                  {(() => {
+                                    const Icon = getTypeIcon(restriction.restriction_type);
+                                    return <Icon className="h-4 w-4" />;
+                                  })()}
                                 </div>
                                 <div>
                                   <div className="flex items-center gap-2">
@@ -643,7 +646,10 @@ const DietaryRestrictions = () => {
                             </TableCell>
                             <TableCell>
                               <Badge className={getTypeColor(restriction.restriction_type)}>
-                                {getTypeIcon(restriction.restriction_type)}
+                                {(() => {
+                                  const Icon = getTypeIcon(restriction.restriction_type);
+                                  return <Icon className="h-3 w-3" />;
+                                })()}
                                 <span className="ml-1">{restriction.restriction_type}</span>
                               </Badge>
                             </TableCell>
@@ -934,7 +940,10 @@ const DietaryRestrictions = () => {
                 {selectedRestriction && (
                   <>
                     <div className={`w-8 h-8 rounded-full ${getTypeColor(selectedRestriction.restriction_type)} flex items-center justify-center border`}>
-                      {getTypeIcon(selectedRestriction.restriction_type)}
+                      {(() => {
+                        const Icon = getTypeIcon(selectedRestriction.restriction_type);
+                        return <Icon className="h-4 w-4" />;
+                      })()}
                     </div>
                     {selectedRestriction.restriction_name}
                   </>
@@ -951,7 +960,10 @@ const DietaryRestrictions = () => {
                     <Label className="text-muted-foreground">Type</Label>
                     <div className="mt-1">
                       <Badge className={getTypeColor(selectedRestriction.restriction_type)}>
-                        {getTypeIcon(selectedRestriction.restriction_type)}
+                        {(() => {
+                          const Icon = getTypeIcon(selectedRestriction.restriction_type);
+                          return <Icon className="h-3 w-3" />;
+                        })()}
                         <span className="ml-1">{selectedRestriction.restriction_type}</span>
                       </Badge>
                     </div>

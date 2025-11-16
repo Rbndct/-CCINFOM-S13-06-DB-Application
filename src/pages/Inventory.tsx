@@ -536,8 +536,10 @@ const Inventory = () => {
                           className="cursor-pointer hover:bg-muted/50 transition-colors"
                           onClick={() => handleViewItem(item)}
                         >
-                          <TableCell className="font-mono text-sm text-muted-foreground dark:text-muted-foreground">
-                            #{item.inventory_id}
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono text-xs">
+                              #{item.inventory_id}
+                            </Badge>
                           </TableCell>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">

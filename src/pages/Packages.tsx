@@ -6,6 +6,8 @@ import {
   Package, 
   DollarSign,
   Utensils,
+  UtensilsCrossed,
+  Heart,
   Eye,
   Edit,
   Trash2,
@@ -150,10 +152,25 @@ const Packages = () => {
     fetchPackages();
   }, [toast]);
   
-  // Handle view package
-  const handleViewPackage = (pkg: any) => {
-    setSelectedPackage(pkg);
-    setViewDialogOpen(true);
+  // Handle view package - fetch full details including menu items with cost/price
+  const handleViewPackage = async (pkg: any) => {
+    try {
+      // Fetch full package details from API to get menu items with cost/price
+      const response = await packagesAPI.getById(pkg.package_id || pkg.id);
+      if (response && response.success && response.data) {
+        setSelectedPackage(response.data);
+      } else if (response && response.data) {
+        setSelectedPackage(response.data);
+      } else {
+        setSelectedPackage(pkg);
+      }
+      setViewDialogOpen(true);
+    } catch (error: any) {
+      console.error('Error fetching package details:', error);
+      // Fallback to using the package data we already have
+      setSelectedPackage(pkg);
+      setViewDialogOpen(true);
+    }
   };
   
   // Handle edit package
@@ -172,6 +189,29 @@ const Packages = () => {
   const handleDeletePackage = (pkg: any) => {
     setSelectedPackage(pkg);
     setDeleteDialogOpen(true);
+  };
+  
+  // Calculate suggested package price based on menu item costs + serving markup
+  const calculateSuggestedPrice = (menuItemIds: number[]): number => {
+    if (!menuItemIds || menuItemIds.length === 0) return 0;
+    
+    const selectedItems = availableMenuItems.filter((item: any) => 
+      menuItemIds.includes(item.menu_item_id || item.id)
+    );
+    
+    // Sum of menu item costs
+    const totalCost = selectedItems.reduce((sum: number, item: any) => {
+      const cost = parseFloat(item.menu_cost) || 0;
+      const quantity = 1; // Default quantity per package
+      return sum + (cost * quantity);
+    }, 0);
+    
+    // Add serving cost markup (40% markup for serving, labor, overhead)
+    // This accounts for preparation, serving, and overhead costs
+    const servingMarkup = 0.40; // 40% markup
+    const suggestedPrice = totalCost * (1 + servingMarkup);
+    
+    return Math.round(suggestedPrice * 100) / 100; // Round to 2 decimal places
   };
   
   // Handle add package
@@ -549,7 +589,12 @@ const Packages = () => {
                       </TableRow>
                     ) : (
                       paginatedPackages.map((pkg) => (
-                        <TableRow key={pkg.id || pkg.package_id} className={pkg.is_template ? 'bg-muted/30' : ''}>
+                        <TableRow 
+                          key={pkg.id || pkg.package_id} 
+                          className={pkg.is_template ? 'bg-muted/30' : ''}
+                          onDoubleClick={() => handleViewPackage(pkg)}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2 min-w-0">
                               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -766,7 +811,11 @@ const Packages = () => {
                       </TableRow>
                     ) : (
                       paginatedPackages.map((pkg) => (
-                        <TableRow key={pkg.id || pkg.package_id}>
+                        <TableRow 
+                          key={pkg.id || pkg.package_id}
+                          onDoubleClick={() => handleViewPackage(pkg)}
+                          style={{ cursor: 'pointer' }}
+                        >
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
                               <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
@@ -935,6 +984,7 @@ const Packages = () => {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead>ID</TableHead>
                           <TableHead>Item Name</TableHead>
                           <TableHead>Type</TableHead>
                           <TableHead>Cost</TableHead>
@@ -942,16 +992,48 @@ const Packages = () => {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {selectedPackage.menu_items.map((item: any) => (
-                          <TableRow key={item.menu_item_id || item.id}>
-                            <TableCell className="font-medium">{item.menu_name || item.name}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className="text-xs">{item.menu_type || 'N/A'}</Badge>
-                            </TableCell>
-                            <TableCell>{formatCurrency(item.menu_cost || 0)}</TableCell>
-                            <TableCell>{formatCurrency(item.menu_price || 0)}</TableCell>
-                          </TableRow>
-                        ))}
+                        {selectedPackage.menu_items.map((item: any) => {
+                          const itemId = item.menu_item_id || item.id;
+                          const menuType = item.menu_type || 'N/A';
+                          const typeLower = menuType.toLowerCase();
+                          let icon, colorClass;
+                          if (typeLower.includes('appetizer') || typeLower.includes('starter')) {
+                            icon = Utensils;
+                            colorClass = 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700';
+                          } else if (typeLower.includes('main') || typeLower.includes('entree')) {
+                            icon = UtensilsCrossed;
+                            colorClass = 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700';
+                          } else if (typeLower.includes('dessert')) {
+                            icon = Heart;
+                            colorClass = 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700';
+                          } else if (typeLower.includes('drink') || typeLower.includes('beverage')) {
+                            icon = Package;
+                            colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                          } else {
+                            icon = Utensils;
+                            colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                          }
+                          const IconComponent = icon;
+                          return (
+                            <TableRow key={itemId}>
+                              <TableCell className="font-medium text-xs text-muted-foreground">#{itemId}</TableCell>
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  <IconComponent className="h-4 w-4 text-muted-foreground" />
+                                  {item.menu_name || item.name}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className={`text-xs ${colorClass} border flex items-center gap-1`}>
+                                  <IconComponent className="h-3 w-3" />
+                                  {menuType}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{formatCurrency(item.menu_cost || 0)}</TableCell>
+                              <TableCell>{formatCurrency(item.menu_price || 0)}</TableCell>
+                            </TableRow>
+                          );
+                        })}
                       </TableBody>
                     </Table>
                   </div>
@@ -994,7 +1076,10 @@ const Packages = () => {
                             variant="outline" 
                             className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
                           >
-                            {getTypeIcon(r.restriction_type || 'Dietary')}
+                            {(() => {
+                              const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                              return <Icon className="h-3 w-3" />;
+                            })()}
                             {r.restriction_name}
                           </Badge>
                         ))}
@@ -1040,9 +1125,23 @@ const Packages = () => {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewDialogOpen(false)}>Close</Button>
-            <Button onClick={() => {
+            <Button onClick={async () => {
               setViewDialogOpen(false);
-              if (selectedPackage) handleEditPackage(selectedPackage);
+              if (selectedPackage) {
+                // Ensure we have the full package data for editing
+                try {
+                  const response = await packagesAPI.getById(selectedPackage.package_id || selectedPackage.id);
+                  if (response && (response.success || response.data)) {
+                    const pkgData = response.data || response;
+                    handleEditPackage(pkgData);
+                  } else {
+                    handleEditPackage(selectedPackage);
+                  }
+                } catch (error) {
+                  console.error('Error fetching package for edit:', error);
+                  handleEditPackage(selectedPackage);
+                }
+              }
             }}>
               <Edit className="w-4 h-4 mr-2" />
               Edit Package

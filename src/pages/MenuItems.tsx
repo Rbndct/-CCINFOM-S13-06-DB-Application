@@ -663,7 +663,10 @@ const MenuItems = () => {
                             {item.restriction_name ? (
                               <div className="space-y-0.5">
                                 <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
-                                  {getTypeIcon('Dietary')}
+                                  {(() => {
+                                    const Icon = getTypeIcon('Dietary');
+                                    return <Icon className="h-3 w-3" />;
+                                  })()}
                                   {item.restriction_name}
                                 </Badge>
                               </div>
@@ -894,7 +897,10 @@ const MenuItems = () => {
                             {item.restriction_name ? (
                               <div className="space-y-0.5">
                                 <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
-                                  {getTypeIcon('Dietary')}
+                                  {(() => {
+                                    const Icon = getTypeIcon('Dietary');
+                                    return <Icon className="h-3 w-3" />;
+                                  })()}
                                   {item.restriction_name}
                                 </Badge>
                               </div>
@@ -1034,7 +1040,10 @@ const MenuItems = () => {
                   <div className="mt-1">
                     {selectedItem?.restriction_name ? (
                       <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
-                        {getTypeIcon('Dietary')}
+                        {(() => {
+                          const Icon = getTypeIcon('Dietary');
+                          return <Icon className="h-3 w-3" />;
+                        })()}
                         {selectedItem.restriction_name}
                       </Badge>
                     ) : (

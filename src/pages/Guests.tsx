@@ -353,9 +353,35 @@ const Guests = () => {
 
   const handleEditGuest = (guest: Guest) => {
     setSelectedGuest(guest);
+    
+    // Smart name parsing: only split if there are 3+ words (first middle last)
+    // For 2 words, keep both in firstName to avoid splitting multi-word first names
+    let firstName = '';
+    let lastName = '';
+    const fullName = guest.guest_name || '';
+    const nameParts = fullName.trim().split(/\s+/).filter(p => p.length > 0);
+    
+    if (guest.firstName && guest.lastName) {
+      // If firstName/lastName already exist, use them
+      firstName = guest.firstName;
+      lastName = guest.lastName;
+    } else if (nameParts.length >= 3) {
+      // 3+ words: first word(s) = firstName, last word = lastName
+      firstName = nameParts.slice(0, -1).join(' ');
+      lastName = nameParts[nameParts.length - 1];
+    } else if (nameParts.length === 2) {
+      // 2 words: keep both in firstName (could be "Mary Jane" or "Jack Daniel")
+      firstName = fullName;
+      lastName = '';
+    } else if (nameParts.length === 1) {
+      // Single word: all in firstName
+      firstName = fullName;
+      lastName = '';
+    }
+    
     setFormData({
-      firstName: guest.firstName || guest.guest_name?.split(' ')[0] || '',
-      lastName: guest.lastName || guest.guest_name?.split(' ').slice(1).join(' ') || '',
+      firstName,
+      lastName,
       rsvpStatus: guest.rsvpStatus || guest.rsvp_status || 'pending',
       weddingId: guest.wedding_id?.toString() || '',
       restrictionIds: (guest.dietaryRestrictions || []).map((r: any) => r.restriction_id || r.id).filter(Boolean),
@@ -684,7 +710,10 @@ const Guests = () => {
                                       variant="outline" 
                                       className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
                                     >
-                                      {getTypeIcon(restrictionType)}
+                                      {(() => {
+                                        const Icon = getTypeIcon(restrictionType);
+                                        return <Icon className="h-3 w-3" />;
+                                      })()}
                                       {restrictionName}
                                     </Badge>
                                   );

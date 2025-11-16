@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { 
   Plus, 
   Search, 
@@ -48,20 +49,19 @@ import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { getTypeIcon, getTypeColor, filterNoneFromDisplay } from '@/utils/restrictionUtils';
+import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 import { useDateFormat } from '@/context/DateFormatContext';
 
 const Couples = () => {
   const navigate = useNavigate();
   const { formatDate } = useDateFormat();
-  const [couples, setCouples] = useState([]);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [ceremonyType, setCeremonyType] = useState<string | undefined>();
   const [restrictionIds, setRestrictionIds] = useState<number[]>([]);
   const [plannerEmail, setPlannerEmail] = useState<string>('');
-  const [loading, setLoading] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [formLoading, setFormLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -78,17 +78,36 @@ const Couples = () => {
   const itemsPerPage = 5;
   const { toast } = useToast();
 
+  // Fetch couples using React Query with caching
+  const { data: couples = [], isLoading: loading, refetch } = useQuery({
+    queryKey: ['couples', ceremonyType, restrictionIds, plannerEmail],
+    queryFn: async () => {
+      const response = await couplesAPI.getAll({
+        ceremony_type: ceremonyType,
+        restriction_ids: restrictionIds.length > 0 ? restrictionIds.join(',') : undefined,
+        planner_contact: plannerEmail || undefined,
+      });
+      // Transform couple_id to id for frontend compatibility
+      const transformedCouples = (response.data || []).map((couple: any) => ({
+        ...couple,
+        id: couple.couple_id
+      }));
+      return transformedCouples;
+    },
+    onError: (error: any) => {
+      console.error('Error fetching couples:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to load couples. Make sure backend is running.',
+        variant: 'destructive',
+      });
+    },
+  });
+
   useEffect(() => {
-    fetchCouples();
     fetchDietaryRestrictions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Apply filters immediately when they change
-  useEffect(() => {
-    fetchCouples();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ceremonyType, restrictionIds, plannerEmail]);
 
   const fetchDietaryRestrictions = async () => {
     try {
@@ -99,32 +118,6 @@ const Couples = () => {
       setDietaryRestrictions(displayableRestrictions);
     } catch (error: any) {
       console.error('Error fetching dietary restrictions:', error);
-    }
-  };
-
-  const fetchCouples = async () => {
-    setLoading(true);
-    try {
-      const response = await couplesAPI.getAll({
-        ceremony_type: ceremonyType,
-        restriction_ids: restrictionIds.length > 0 ? restrictionIds.join(',') : undefined,
-        planner_contact: plannerEmail || undefined,
-      });
-      // Transform couple_id to id for frontend compatibility
-      const transformedCouples = (response.data || []).map(couple => ({
-        ...couple,
-        id: couple.couple_id
-      }));
-      setCouples(transformedCouples);
-    } catch (error: any) {
-      console.error('Error fetching couples:', error);
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to load couples. Make sure backend is running.',
-        variant: 'destructive',
-      });
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -203,7 +196,7 @@ const Couples = () => {
         planner_contact: ''
       });
       setFormErrors({});
-      await fetchCouples();
+      refetch();
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -484,9 +477,7 @@ const Couples = () => {
                             <>
                               <div className="mb-1.5 flex items-center gap-2">
                               {couple.ceremony_type && (
-                                  <Badge variant="outline" className="text-xs font-medium">
-                                    {couple.ceremony_type}
-                                  </Badge>
+                                  <CeremonyTypeBadge type={couple.ceremony_type} />
                                 )}
                                 {couple.preference_count > 1 && (
                                   <Badge variant="secondary" className="text-xs">
@@ -512,7 +503,10 @@ const Couples = () => {
                                           variant="outline"
                                           className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1 w-fit`}
                                         >
-                                          {getTypeIcon(restrictionType)}
+                                          {(() => {
+                                            const Icon = getTypeIcon(restrictionType);
+                                            return <Icon className="h-3 w-3" />;
+                                          })()}
                                           {restrictionName}
                                         </Badge>
                                       );
@@ -570,7 +564,7 @@ const Couples = () => {
                                 if (!confirm('Delete this couple?')) return;
                                 try {
                                   await couplesAPI.delete(couple.id);
-                                  await fetchCouples();
+                                  refetch();
                                   toast({ title: 'Couple deleted' });
                                 } catch (e: any) {
                                   toast({ title: 'Error', description: e.response?.data?.error || 'Failed to delete couple', variant: 'destructive' });

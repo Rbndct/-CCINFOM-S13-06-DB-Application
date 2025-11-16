@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { useDateFormat } from '@/context/DateFormatContext';
+import { TableCategoryBadge } from '@/utils/tableCategoryUtils';
 
 const SeatingTables = () => {
   const { formatDate } = useDateFormat();
@@ -109,15 +110,9 @@ const SeatingTables = () => {
     ]);
   }, []);
 
+  // Use TableCategoryBadge utility instead
   const getCategoryBadge = (category: string) => {
-    const colors = {
-      'VIP': 'bg-purple-100 text-purple-800',
-      'Family': 'bg-blue-100 text-blue-800',
-      'Friends': 'bg-green-100 text-green-800',
-      'Colleagues': 'bg-orange-100 text-orange-800',
-      'General': 'bg-gray-100 text-gray-800'
-    };
-    return <Badge className={colors[category] || 'bg-gray-100 text-gray-800'}>{category}</Badge>;
+    return <TableCategoryBadge category={category} />;
   };
 
   const getOccupancyStatus = (assigned: number, capacity: number) => {
@@ -241,6 +236,7 @@ const SeatingTables = () => {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead>Table ID</TableHead>
                   <TableHead>Table Number</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead>Wedding</TableHead>
@@ -254,6 +250,11 @@ const SeatingTables = () => {
               <TableBody>
                 {filteredTables.map((table) => (
                   <TableRow key={table.id}>
+                    <TableCell>
+                      <Badge variant="outline" className="font-mono text-xs">
+                        #{table.id || table.table_id}
+                      </Badge>
+                    </TableCell>
                     <TableCell className="font-medium">
                       <div className="flex items-center gap-2">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
