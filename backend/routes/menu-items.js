@@ -234,14 +234,60 @@ router.post('/', async (req, res) => {
       default_markup_percentage,
       cost_override,
       menu_cost,
-      menu_price
+      menu_price,
+      recipe
     } = req.body;
 
     // Support both new (unit_cost, selling_price) and old (menu_cost,
     // menu_price) field names for backward compatibility
-    const finalUnitCost = unit_cost !== undefined ? unit_cost : menu_cost;
+    let finalUnitCost = unit_cost !== undefined ? unit_cost : menu_cost;
     const finalSellingPrice =
         selling_price !== undefined ? selling_price : menu_price;
+
+    // Calculate cost from recipe if provided
+    if (recipe && Array.isArray(recipe) && recipe.length > 0) {
+      let calculatedCost = 0;
+      for (const recipeItem of recipe) {
+        if (!recipeItem.ingredient_id || !recipeItem.quantity) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            error: 'Recipe items must have ingredient_id and quantity'
+          });
+        }
+
+        // Get ingredient cost (if ingredients have cost, otherwise use 0)
+        // For now, since ingredients don't have cost, we'll need to calculate
+        // differently We'll use the provided unit_cost or calculate from recipe
+        // if ingredient costs exist
+        const [ingredientRows] = await connection.query(
+            'SELECT * FROM ingredient WHERE ingredient_id = ?',
+            [recipeItem.ingredient_id]);
+
+        if (ingredientRows.length === 0) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            error: `Ingredient with ID ${recipeItem.ingredient_id} not found`
+          });
+        }
+
+        // If unit_cost not provided, we'll calculate from recipe
+        // For now, since ingredients don't have cost, we'll require unit_cost
+        // to be provided or calculate it as 0 and let the user set it manually
+      }
+
+      // If unit_cost was not provided, we can't calculate from ingredients
+      // (they don't have cost) So we require it to be provided
+      if (finalUnitCost === undefined) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          error:
+              'unit_cost is required when using recipe (ingredients do not have cost)'
+        });
+      }
+    }
 
     if (!menu_name || finalUnitCost === undefined ||
         finalSellingPrice === undefined || !menu_type) {
@@ -253,6 +299,15 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Require recipe for new menu items
+    if (!recipe || !Array.isArray(recipe) || recipe.length === 0) {
+      await connection.rollback();
+      return res.status(400).json({
+        success: false,
+        error: 'Recipe with at least one ingredient is required'
+      });
+    }
+
     const [result] = await connection.query(
         `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, cost_override, menu_type, restriction_id)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
@@ -261,6 +316,20 @@ router.post('/', async (req, res) => {
           default_markup_percentage || 200.00, cost_override || false,
           menu_type, restriction_id || null
         ]);
+
+    const menuItemId = result.insertId;
+
+    // Insert recipe items
+    for (const recipeItem of recipe) {
+      await connection.query(
+          `INSERT INTO recipe (menu_item_id, ingredient_id, quantity_needed)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE quantity_needed = ?`,
+          [
+            menuItemId, recipeItem.ingredient_id, recipeItem.quantity,
+            recipeItem.quantity
+          ]);
+    }
 
     await connection.commit();
 
@@ -305,7 +374,8 @@ router.put('/:id', async (req, res) => {
       default_markup_percentage,
       cost_override,
       menu_cost,
-      menu_price
+      menu_price,
+      recipe
     } = req.body;
     const menuItemId = req.params.id;
 
@@ -373,6 +443,23 @@ router.put('/:id', async (req, res) => {
        SET ${updateFields.join(', ')}
        WHERE menu_item_id = ?`,
         updateValues);
+
+    // Update recipe if provided
+    if (recipe && Array.isArray(recipe)) {
+      // Delete existing recipe entries
+      await connection.query(
+          'DELETE FROM recipe WHERE menu_item_id = ?', [menuItemId]);
+
+      // Insert new recipe entries
+      for (const recipeItem of recipe) {
+        if (recipeItem.ingredient_id && recipeItem.quantity) {
+          await connection.query(
+              `INSERT INTO recipe (menu_item_id, ingredient_id, quantity_needed)
+             VALUES (?, ?, ?)`,
+              [menuItemId, recipeItem.ingredient_id, recipeItem.quantity]);
+        }
+      }
+    }
 
     await connection.commit();
 
