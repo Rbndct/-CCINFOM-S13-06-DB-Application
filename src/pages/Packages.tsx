@@ -15,7 +15,8 @@ import {
   ArrowUpDown,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  AlertTriangle
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -57,6 +58,7 @@ import { packagesAPI, menuItemsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useCurrencyFormat } from '@/utils/currency';
+import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
 
 const Packages = () => {
   const { formatCurrency } = useCurrencyFormat();
@@ -293,12 +295,12 @@ const Packages = () => {
 
   const getTypeBadge = (type: string) => {
     const colors = {
-      'Full Service': 'bg-blue-100 text-blue-800',
-      'Basic': 'bg-green-100 text-green-800',
-      'Premium': 'bg-purple-100 text-purple-800',
-      'Specialty': 'bg-orange-100 text-orange-800'
+      'Full Service': 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700',
+      'Basic': 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700',
+      'Premium': 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700',
+      'Specialty': 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700'
     };
-    return <Badge className={colors[type] || 'bg-gray-100 text-gray-800'}>{type}</Badge>;
+    return <Badge className={`${colors[type] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'} border`}>{type}</Badge>;
   };
 
   const templatePackages = packages.filter(pkg => pkg.is_template);
@@ -526,7 +528,7 @@ const Packages = () => {
                       <TableHead>Type</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Menu Items</TableHead>
-                      <TableHead>Usage Count</TableHead>
+                      <TableHead>Used in Weddings</TableHead>
                       <TableHead>Revenue</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
@@ -554,13 +556,13 @@ const Packages = () => {
                                 <Package className="h-4 w-4 text-primary" />
                               </div>
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="truncate">{pkg.package_name}</span>
                                 {pkg.is_template && (
-                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 flex-shrink-0">
-                                    <Lock className="w-3 h-3 mr-1" />
+                                  <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-blue-700 flex-shrink-0">
+                                    <Lock className="w-3 h-3 mr-1 dark:text-blue-300" />
                                     Template
                                   </Badge>
                                 )}
+                                <span className="truncate">{pkg.package_name}</span>
                               </div>
                             </div>
                           </TableCell>
@@ -586,7 +588,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              <Users className="h-4 w-4 text-muted-foreground" />
+                              <Users className="h-4 w-4 text-muted-foreground dark:text-muted-foreground" />
                               <span className="text-sm font-medium">{pkg.usage_count || 0}</span>
                             </div>
                           </TableCell>
@@ -603,15 +605,11 @@ const Packages = () => {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem>
-                                  <Eye className="mr-2 h-4 w-4" />
+                                <DropdownMenuItem onClick={() => handleViewPackage(pkg)}>
+                                  <Eye className="mr-2 h-4 w-4 dark:text-muted-foreground" />
                                   View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600">
+                                <DropdownMenuItem className="text-red-600 dark:text-red-400" onClick={() => handleDeletePackage(pkg)}>
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Delete
                                 </DropdownMenuItem>
@@ -747,7 +745,7 @@ const Packages = () => {
                       <TableHead>Type</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Menu Items</TableHead>
-                      <TableHead>Usage Count</TableHead>
+                      <TableHead>Used in Weddings</TableHead>
                       <TableHead>Wedding</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
@@ -793,7 +791,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
-                              <Users className="h-4 w-4 text-muted-foreground" />
+                              <Users className="h-4 w-4 text-muted-foreground dark:text-muted-foreground" />
                               <span className="text-sm font-medium">{pkg.usage_count || 0}</span>
                             </div>
                           </TableCell>
@@ -810,15 +808,11 @@ const Packages = () => {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem>
-                                  <Eye className="mr-2 h-4 w-4" />
+                                <DropdownMenuItem onClick={() => handleViewPackage(pkg)}>
+                                  <Eye className="mr-2 h-4 w-4 dark:text-muted-foreground" />
                                   View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600">
+                                <DropdownMenuItem className="text-red-600 dark:text-red-400" onClick={() => handleDeletePackage(pkg)}>
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Delete
                                 </DropdownMenuItem>
@@ -889,6 +883,173 @@ const Packages = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* View Package Dialog */}
+      <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Package className="w-5 h-5" />
+              {selectedPackage?.package_name}
+              <Badge variant="outline" className="ml-2 font-mono">ID: #{selectedPackage?.package_id || selectedPackage?.id}</Badge>
+            </DialogTitle>
+            <DialogDescription>
+              Package details including menu items, dietary restrictions, and pricing information
+            </DialogDescription>
+          </DialogHeader>
+          {selectedPackage && (
+            <div className="space-y-6 py-4">
+              {/* Basic Information */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Package Type</Label>
+                  <div className="mt-1">{getTypeBadge(selectedPackage.package_type)}</div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Price</Label>
+                  <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedPackage.package_price || 0)}</div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Used in Weddings</Label>
+                  <div className="mt-1 flex items-center gap-2">
+                    <Users className="h-4 w-4 text-muted-foreground dark:text-muted-foreground" />
+                    <span className="text-lg font-semibold">{selectedPackage.usage_count || 0}</span>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-muted-foreground">Total Revenue</Label>
+                  <div className="mt-1 text-lg font-semibold text-green-600">
+                    {formatCurrency((selectedPackage.package_price || 0) * (selectedPackage.usage_count || 0))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Menu Items */}
+              <div className="border-t pt-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Utensils className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Menu Items ({selectedPackage.menu_items?.length || selectedPackage.total_items || 0})</h3>
+                </div>
+                {selectedPackage.menu_items && selectedPackage.menu_items.length > 0 ? (
+                  <div className="space-y-2">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Item Name</TableHead>
+                          <TableHead>Type</TableHead>
+                          <TableHead>Cost</TableHead>
+                          <TableHead>Price</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {selectedPackage.menu_items.map((item: any) => (
+                          <TableRow key={item.menu_item_id || item.id}>
+                            <TableCell className="font-medium">{item.menu_name || item.name}</TableCell>
+                            <TableCell>
+                              <Badge variant="outline" className="text-xs">{item.menu_type || 'N/A'}</Badge>
+                            </TableCell>
+                            <TableCell>{formatCurrency(item.menu_cost || 0)}</TableCell>
+                            <TableCell>{formatCurrency(item.menu_price || 0)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground">No menu items in this package.</p>
+                )}
+              </div>
+
+              {/* Dietary Restrictions */}
+              <div className="border-t pt-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <AlertTriangle className="w-5 h-5 text-primary" />
+                  <h3 className="text-lg font-semibold">Dietary Restrictions</h3>
+                </div>
+                {(() => {
+                  // Collect all unique restrictions from menu items
+                  const allRestrictions = new Set<string>();
+                  const restrictionDetails: any[] = [];
+                  
+                  if (selectedPackage.menu_items && Array.isArray(selectedPackage.menu_items)) {
+                    selectedPackage.menu_items.forEach((item: any) => {
+                      if (item.restriction_name && item.restriction_name !== 'None') {
+                        if (!allRestrictions.has(item.restriction_name)) {
+                          allRestrictions.add(item.restriction_name);
+                          restrictionDetails.push({
+                            restriction_name: item.restriction_name,
+                            restriction_type: item.restriction_type || 'Dietary'
+                          });
+                        }
+                      }
+                    });
+                  }
+                  
+                  if (restrictionDetails.length > 0) {
+                    return (
+                      <div className="flex flex-wrap gap-2">
+                        {restrictionDetails.map((r, idx) => (
+                          <Badge 
+                            key={idx} 
+                            variant="outline" 
+                            className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
+                          >
+                            {getTypeIcon(r.restriction_type || 'Dietary')}
+                            {r.restriction_name}
+                          </Badge>
+                        ))}
+                      </div>
+                    );
+                  }
+                  return <p className="text-sm text-muted-foreground">No dietary restrictions for this package.</p>;
+                })()}
+              </div>
+
+              {/* Cost Summary */}
+              <div className="border-t pt-4">
+                <h3 className="text-lg font-semibold mb-4">Cost Summary</h3>
+                <div className="space-y-2">
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Package Price:</span>
+                    <span className="font-semibold">{formatCurrency(selectedPackage.package_price || 0)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-sm text-muted-foreground">Total Menu Items Cost:</span>
+                    <span className="font-semibold">
+                      {formatCurrency(
+                        selectedPackage.menu_items?.reduce((sum: number, item: any) => 
+                          sum + (item.menu_cost || 0), 0
+                        ) || 0
+                      )}
+                    </span>
+                  </div>
+                  <div className="flex justify-between border-t pt-2">
+                    <span className="text-sm font-medium">Estimated Profit Margin:</span>
+                    <span className="font-semibold text-green-600">
+                      {formatCurrency(
+                        (selectedPackage.package_price || 0) - 
+                        (selectedPackage.menu_items?.reduce((sum: number, item: any) => 
+                          sum + (item.menu_cost || 0), 0
+                        ) || 0)
+                      )}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewDialogOpen(false)}>Close</Button>
+            <Button onClick={() => {
+              setViewDialogOpen(false);
+              if (selectedPackage) handleEditPackage(selectedPackage);
+            }}>
+              <Edit className="w-4 h-4 mr-2" />
+              Edit Package
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </DashboardLayout>
   );
 };

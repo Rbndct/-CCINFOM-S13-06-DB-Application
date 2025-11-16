@@ -259,8 +259,8 @@ const Settings = () => {
           {/* General Settings Tab */}
           <TabsContent value="general" className="space-y-6">
             {/* Display & UI Settings */}
-            <Card>
-              <CardHeader>
+          <Card>
+            <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Monitor className="h-5 w-5" />
                   Display & UI Settings
@@ -328,19 +328,19 @@ const Settings = () => {
                   <p className="text-xs text-muted-foreground">
                     Current theme: {resolvedTheme === 'dark' ? 'Dark' : 'Light'}
                   </p>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
             {/* Table Settings */}
-            <Card>
-              <CardHeader>
+          <Card>
+            <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <TableIcon className="h-5 w-5" />
                   Table Settings
                 </CardTitle>
                 <CardDescription>Configure default table sorting preferences</CardDescription>
-              </CardHeader>
+            </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="sort-order" className="flex items-center gap-2">
@@ -362,78 +362,78 @@ const Settings = () => {
                   <p className="text-xs text-muted-foreground">
                     This will be the default sort order for all tables when sorted by ID.
                   </p>
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </CardContent>
+          </Card>
 
             {/* Currency Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="h-5 w-5" />
-                  Currency Settings
-                </CardTitle>
-                <CardDescription>Manage currency display preferences</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="currency-select">Display Currency</Label>
-                  <Select value={currency} onValueChange={(value: SupportedCurrency) => setCurrency(value)}>
-                    <SelectTrigger id="currency-select" className="w-full">
-                      <SelectValue placeholder="Select currency" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(CURRENCY_NAMES) as SupportedCurrency[]).map((curr) => (
-                        <SelectItem key={curr} value={curr}>
-                          <div className="flex items-center gap-2">
-                            <span className="font-medium">{curr}</span>
-                            <span className="text-muted-foreground">- {CURRENCY_NAMES[curr]}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {loading && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Loading exchange rates...</span>
-                  </div>
-                )}
-
-                {error && (
-                  <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-                    <p>Error loading exchange rates: {error}</p>
-                  </div>
-                )}
-
-                {!loading && !error && rates && Object.keys(rates).length > 0 && (
-                  <div className="space-y-2 rounded-md bg-muted/50 p-4">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">Current Rate</span>
-                      <span className="text-sm text-muted-foreground">
-                        {currency === 'PHP' 
-                          ? 'Base currency (PHP)' 
-                          : rates[currency] 
-                            ? `1 PHP = ${rates[currency].toFixed(4)} ${currency}`
-                            : 'Rate unavailable'
-                        }
-                      </span>
-                    </div>
-                    {currency !== 'PHP' && rates[currency] && (
-                      <div className="text-xs text-muted-foreground mt-1">
-                        All prices are converted from PHP (base currency) to {currency}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <DollarSign className="h-5 w-5" />
+              Currency Settings
+            </CardTitle>
+            <CardDescription>Manage currency display preferences</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="currency-select">Display Currency</Label>
+              <Select value={currency} onValueChange={(value: SupportedCurrency) => setCurrency(value)}>
+                <SelectTrigger id="currency-select" className="w-full">
+                  <SelectValue placeholder="Select currency" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(Object.keys(CURRENCY_NAMES) as SupportedCurrency[]).map((curr) => (
+                    <SelectItem key={curr} value={curr}>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{curr}</span>
+                        <span className="text-muted-foreground">- {CURRENCY_NAMES[curr]}</span>
                       </div>
-                    )}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {loading && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Loading exchange rates...</span>
+              </div>
+            )}
+
+            {error && (
+              <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
+                <p>Error loading exchange rates: {error}</p>
+              </div>
+            )}
+
+            {!loading && !error && rates && Object.keys(rates).length > 0 && (
+              <div className="space-y-2 rounded-md bg-muted/50 p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Current Rate</span>
+                  <span className="text-sm text-muted-foreground">
+                    {currency === 'PHP' 
+                      ? 'Base currency (PHP)' 
+                      : rates[currency] 
+                        ? `1 PHP = ${rates[currency].toFixed(4)} ${currency}`
+                        : 'Rate unavailable'
+                    }
+                  </span>
+                </div>
+                {currency !== 'PHP' && rates[currency] && (
+                  <div className="text-xs text-muted-foreground mt-1">
+                    All prices are converted from PHP (base currency) to {currency}
                   </div>
                 )}
+              </div>
+            )}
 
-                <div className="text-xs text-muted-foreground">
-                  <p>Note: All prices in the database are stored in PHP. The selected currency is used for display only.</p>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="text-xs text-muted-foreground">
+              <p>Note: All prices in the database are stored in PHP. The selected currency is used for display only.</p>
+            </div>
+          </CardContent>
+        </Card>
           </TabsContent>
 
           {/* Database Settings Tab */}
@@ -448,8 +448,8 @@ const Settings = () => {
                 <CardDescription>Manage database configuration, connection, and backups</CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Connection Status */}
-                <div className="space-y-3">
+              {/* Connection Status */}
+              <div className="space-y-3">
                 <Label className="text-base font-semibold">Connection Status</Label>
                 {dbLoading ? (
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -496,10 +496,10 @@ const Settings = () => {
                     )}
                   </div>
                 ) : null}
-                </div>
+              </div>
 
-                {/* Database Configuration */}
-                <div className="space-y-3">
+              {/* Database Configuration */}
+              <div className="space-y-3">
                 <Label className="text-base font-semibold">Database Configuration</Label>
                 <div className="space-y-2 rounded-md border p-4">
                   <div className="flex items-center justify-between">
@@ -515,10 +515,10 @@ const Settings = () => {
                     <span className="text-sm font-medium">{dbConfig?.database || 'wedding_management_db'}</span>
                   </div>
                 </div>
-                </div>
+              </div>
 
-                {/* Test Connection */}
-                <div className="space-y-3">
+              {/* Test Connection */}
+              <div className="space-y-3">
                 <Label className="text-base font-semibold">Test Connection</Label>
                 <Button 
                   onClick={handleTestConnection} 
@@ -538,10 +538,10 @@ const Settings = () => {
                     </>
                   )}
                 </Button>
-                </div>
+              </div>
 
-                {/* Export Database */}
-                <div className="space-y-3">
+              {/* Export Database */}
+              <div className="space-y-3">
                 <Label className="text-base font-semibold flex items-center gap-2">
                   <Download className="h-4 w-4" />
                   Export Database
@@ -567,10 +567,10 @@ const Settings = () => {
                     </>
                   )}
                 </Button>
-                </div>
+              </div>
 
-                {/* Import Database */}
-                <div className="space-y-3">
+              {/* Import Database */}
+              <div className="space-y-3">
                 <Label className="text-base font-semibold flex items-center gap-2">
                   <Upload className="h-4 w-4" />
                   Import Database
@@ -604,7 +604,7 @@ const Settings = () => {
                     )}
                   </Button>
                 </div>
-                </div>
+              </div>
               </CardContent>
             </Card>
           </TabsContent>

@@ -135,12 +135,12 @@ const Couples = () => {
 
   const filteredCouples = useMemo(() => {
     const filtered = couples.filter(couple => {
-      const searchLower = searchTerm.toLowerCase();
-      return couple.partner1_name.toLowerCase().includes(searchLower) ||
-             couple.partner2_name.toLowerCase().includes(searchLower) ||
-             couple.partner1_email.toLowerCase().includes(searchLower) ||
-             couple.partner2_email.toLowerCase().includes(searchLower);
-    });
+    const searchLower = searchTerm.toLowerCase();
+    return couple.partner1_name.toLowerCase().includes(searchLower) ||
+           couple.partner2_name.toLowerCase().includes(searchLower) ||
+           couple.partner1_email.toLowerCase().includes(searchLower) ||
+           couple.partner2_email.toLowerCase().includes(searchLower);
+  });
     
     // Sort by couple ID using default sort order
     return filtered.sort((a, b) => {
@@ -483,7 +483,7 @@ const Couples = () => {
                           {couple.preference_id ? (
                             <>
                               <div className="mb-1.5 flex items-center gap-2">
-                                {couple.ceremony_type && (
+                              {couple.ceremony_type && (
                                   <Badge variant="outline" className="text-xs font-medium">
                                     {couple.ceremony_type}
                                   </Badge>
@@ -493,7 +493,7 @@ const Couples = () => {
                                     {couple.preference_count} preferences
                                   </Badge>
                                 )}
-                              </div>
+                                </div>
                               {(() => {
                                 const restrictions = couple.all_restrictions || [];
                                 if (restrictions.length === 0) {

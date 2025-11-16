@@ -85,41 +85,41 @@ export const MultiSelectRestrictions = React.forwardRef<
               ) : (
                 <>
                   {selectedRestrictions.slice(0, 3).map((restriction) => (
-                    <Badge
-                      key={restriction.restriction_id}
-                      variant="outline"
-                      className={cn(
-                        "text-xs flex items-center gap-1 pr-1",
-                        getTypeColor(restriction.restriction_type || '')
-                      )}
-                    >
-                      {getTypeIcon(restriction.restriction_type || '')}
-                      <span className="max-w-[120px] truncate" title={restriction.restriction_name}>
-                        {restriction.restriction_name}
-                      </span>
-                      {!disabled && (
-                        <button
-                          type="button"
-                          className="ml-1 rounded-full outline-none hover:bg-secondary"
-                          onKeyDown={(e) => {
-                            if (e.key === "Enter") {
-                              handleToggle(restriction.restriction_id);
-                            }
-                          }}
-                          onMouseDown={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
-                          }}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            e.stopPropagation();
+                  <Badge
+                    key={restriction.restriction_id}
+                    variant="outline"
+                    className={cn(
+                      "text-xs flex items-center gap-1 pr-1",
+                      getTypeColor(restriction.restriction_type || '')
+                    )}
+                  >
+                    {getTypeIcon(restriction.restriction_type || '')}
+                    <span className="max-w-[120px] truncate" title={restriction.restriction_name}>
+                      {restriction.restriction_name}
+                    </span>
+                    {!disabled && (
+                      <button
+                        type="button"
+                        className="ml-1 rounded-full outline-none hover:bg-secondary"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
                             handleToggle(restriction.restriction_id);
-                          }}
-                        >
-                          <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                        </button>
-                      )}
-                    </Badge>
+                          }
+                        }}
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleToggle(restriction.restriction_id);
+                        }}
+                      >
+                        <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
+                      </button>
+                    )}
+                  </Badge>
                   ))}
                   {selectedRestrictions.length > 3 && (
                     <Badge

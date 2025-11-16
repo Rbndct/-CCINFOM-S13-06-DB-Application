@@ -133,12 +133,12 @@ const SeatingTables = () => {
 
   const filteredTables = useMemo(() => {
     const filtered = tables.filter(table => {
-      const matchesSearch = table.table_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           table.wedding_couple.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           table.table_category.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchesFilter = filterWedding === 'all' || table.wedding_id.toString() === filterWedding;
-      return matchesSearch && matchesFilter;
-    });
+    const matchesSearch = table.table_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         table.wedding_couple.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         table.table_category.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesFilter = filterWedding === 'all' || table.wedding_id.toString() === filterWedding;
+    return matchesSearch && matchesFilter;
+  });
     
     // Sort by table ID using default sort order
     return filtered.sort((a, b) => {
