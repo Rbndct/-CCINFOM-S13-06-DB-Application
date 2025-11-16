@@ -16,7 +16,9 @@ import {
   ChefHat,
   List,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Calculator,
+  Package
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,11 +55,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { menuItemsAPI, dietaryRestrictionsAPI } from '@/api';
+import { menuItemsAPI, dietaryRestrictionsAPI, ingredientsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
+import { Checkbox } from '@/components/ui/checkbox';
 
 const MenuItems = () => {
   const { formatCurrency } = useCurrencyFormat();
@@ -87,6 +89,7 @@ const MenuItems = () => {
   const [selectedItemRecipe, setSelectedItemRecipe] = useState<any[]>([]);
   const [showIngredients, setShowIngredients] = useState(false);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<any[]>([]);
+  const [availableIngredients, setAvailableIngredients] = useState<any[]>([]);
   
   // Form states
   const [formData, setFormData] = useState({
@@ -96,6 +99,8 @@ const MenuItems = () => {
     menu_type: '',
     restriction_id: ''
   });
+  const [recipe, setRecipe] = useState<Array<{ingredient_id: number; quantity: number}>>([]);
+  const [defaultMarkup, setDefaultMarkup] = useState(200); // 200% markup default
   const [formLoading, setFormLoading] = useState(false);
 
   // Fetch dietary restrictions
@@ -114,6 +119,25 @@ const MenuItems = () => {
     };
     fetchRestrictions();
   }, []);
+
+  // Fetch ingredients when dialog opens
+  useEffect(() => {
+    const fetchIngredients = async () => {
+      if (addDialogOpen || editDialogOpen) {
+        try {
+          const response = await ingredientsAPI.getAll();
+          if (response && response.success && response.data) {
+            setAvailableIngredients(response.data || []);
+          } else if (response && response.data) {
+            setAvailableIngredients(response.data || []);
+          }
+        } catch (error) {
+          console.error('Error fetching ingredients:', error);
+        }
+      }
+    };
+    fetchIngredients();
+  }, [addDialogOpen, editDialogOpen]);
 
   // Fetch menu items from backend
   useEffect(() => {
@@ -228,25 +252,74 @@ const MenuItems = () => {
     }
   };
   
-  // Handle edit item
-  const handleEditItem = (item: any) => {
-    setSelectedItem(item);
-    setFormData({
-      menu_name: item.menu_name || '',
-      menu_cost: (item.unit_cost || item.menu_cost || 0).toString(),
-      menu_price: (item.selling_price || item.menu_price || 0).toString(),
-      menu_type: item.menu_type || '',
-      restriction_id: (item.restriction_id || '').toString()
-    });
-    setEditDialogOpen(true);
-  };
-  
   // Handle delete item
   const handleDeleteItem = (item: any) => {
     setSelectedItem(item);
     setDeleteDialogOpen(true);
   };
   
+  // Helper to add ingredient to recipe
+  const handleAddIngredientToRecipe = (ingredientId: number) => {
+    const ingredient = availableIngredients.find(ing => 
+      (ing.ingredient_id || ing.id) === ingredientId
+    );
+    if (!ingredient) return;
+    
+    // Check if already in recipe
+    if (recipe.some(r => r.ingredient_id === ingredientId)) {
+      return;
+    }
+    
+    setRecipe([...recipe, {
+      ingredient_id: ingredientId,
+      quantity: 1
+    }]);
+  };
+
+  // Helper to remove ingredient from recipe
+  const handleRemoveIngredientFromRecipe = (ingredientId: number) => {
+    setRecipe(recipe.filter(r => r.ingredient_id !== ingredientId));
+  };
+
+  // Helper to update ingredient quantity in recipe
+  const handleUpdateRecipeQuantity = (ingredientId: number, quantity: number) => {
+    setRecipe(recipe.map(r => 
+      r.ingredient_id === ingredientId 
+        ? { ...r, quantity: Math.max(0.01, quantity) }
+        : r
+    ));
+  };
+
+  // Calculate cost from recipe ingredients
+  const calculatedCostFromIngredients = useMemo(() => {
+    if (recipe.length === 0) return 0;
+    return recipe.reduce((total, recipeItem) => {
+      const ingredient = availableIngredients.find(ing => 
+        (ing.ingredient_id || ing.id) === recipeItem.ingredient_id
+      );
+      if (!ingredient) return total;
+      const ingredientCost = parseFloat(ingredient.unit_cost || 0);
+      return total + (ingredientCost * recipeItem.quantity);
+    }, 0);
+  }, [recipe, availableIngredients]);
+
+  // Calculate suggested price based on cost and markup
+  const suggestedPrice = useMemo(() => {
+    const cost = parseFloat(formData.menu_cost) || calculatedCostFromIngredients || 0;
+    return cost * (1 + defaultMarkup / 100);
+  }, [formData.menu_cost, calculatedCostFromIngredients, defaultMarkup]);
+
+  // Update form cost when recipe changes
+  useEffect(() => {
+    if (calculatedCostFromIngredients > 0 && !selectedItem) {
+      // Auto-update cost when recipe changes (only for new items)
+      setFormData(prev => ({
+        ...prev,
+        menu_cost: calculatedCostFromIngredients.toFixed(2)
+      }));
+    }
+  }, [calculatedCostFromIngredients, selectedItem]);
+
   // Handle add item
   const handleAddItem = () => {
     setFormData({
@@ -256,16 +329,79 @@ const MenuItems = () => {
       menu_type: '',
       restriction_id: ''
     });
+    setRecipe([]);
+    setDefaultMarkup(200);
     setSelectedItem(null);
     setAddDialogOpen(true);
   };
   
+  // Handle edit item - load recipe
+  const handleEditItem = async (item: any) => {
+    setSelectedItem(item);
+    setFormData({
+      menu_name: item.menu_name || '',
+      menu_cost: (item.unit_cost || item.menu_cost || 0).toString(),
+      menu_price: (item.selling_price || item.menu_price || 0).toString(),
+      menu_type: item.menu_type || '',
+      restriction_id: (item.restriction_id || '').toString()
+    });
+    setDefaultMarkup(item.default_markup_percentage || 200);
+    
+    // Fetch recipe for this item
+    try {
+      const response = await menuItemsAPI.getById(item.menu_item_id || item.id);
+      if (response && response.success && response.data && response.data.recipe) {
+        const recipeData = response.data.recipe.map((r: any) => ({
+          ingredient_id: r.ingredient_id,
+          quantity: parseFloat(r.quantity_needed || r.quantity || 0)
+        }));
+        setRecipe(recipeData);
+      } else {
+        setRecipe([]);
+      }
+    } catch (error) {
+      console.error('Error fetching recipe:', error);
+      setRecipe([]);
+    }
+    
+    setEditDialogOpen(true);
+  };
+  
   // Save menu item (create or update)
   const handleSaveItem = async () => {
-    if (!formData.menu_name || !formData.menu_cost || !formData.menu_price || !formData.menu_type) {
+    // Validation
+    if (!formData.menu_name || !formData.menu_type) {
       toast({
         title: 'Validation Error',
-        description: 'Please fill in all required fields',
+        description: 'Please fill in menu name and type',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Require at least one ingredient for new items
+    if (!selectedItem && recipe.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select at least one ingredient for this menu item',
+        variant: 'destructive'
+      });
+      return;
+    }
+
+    // Calculate cost from recipe ingredients
+    let calculatedCost = calculatedCostFromIngredients;
+    
+    // If cost is manually entered and different from calculated, use manual cost
+    const manualCost = parseFloat(formData.menu_cost) || 0;
+    if (manualCost > 0 && Math.abs(manualCost - calculatedCost) > 0.01) {
+      calculatedCost = manualCost;
+    }
+    
+    if (calculatedCost <= 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please ensure ingredients have costs or enter a valid cost for this menu item',
         variant: 'destructive'
       });
       return;
@@ -273,12 +409,15 @@ const MenuItems = () => {
     
     setFormLoading(true);
     try {
-      const data = {
+      const data: any = {
         menu_name: formData.menu_name,
-        menu_cost: parseFloat(formData.menu_cost),
-        menu_price: parseFloat(formData.menu_price),
+        unit_cost: calculatedCost,
+        selling_price: parseFloat(formData.menu_price) || suggestedPrice,
         menu_type: formData.menu_type,
-        restriction_id: formData.restriction_id ? parseInt(formData.restriction_id) : null
+        restriction_id: formData.restriction_id && formData.restriction_id !== 'restriction-none' ? parseInt(formData.restriction_id) : null,
+        default_markup_percentage: defaultMarkup,
+        cost_override: false,
+        recipe: recipe // Send recipe data
       };
       
       if (selectedItem) {
@@ -931,92 +1070,317 @@ const MenuItems = () => {
         
         {/* Add/Edit Item Dialog */}
         <Dialog open={addDialogOpen || editDialogOpen} onOpenChange={(open) => {
-          setAddDialogOpen(open);
-          setEditDialogOpen(open);
+          if (!open) {
+            setAddDialogOpen(false);
+            setEditDialogOpen(false);
+            setFormData({
+              menu_name: '',
+              menu_cost: '',
+              menu_price: '',
+              menu_type: '',
+              restriction_id: ''
+            });
+            setRecipe([]);
+            setDefaultMarkup(200);
+            setSelectedItem(null);
+          }
         }}>
-          <DialogContent>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>{selectedItem ? 'Edit Menu Item' : 'Add New Menu Item'}</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <ChefHat className="h-5 w-5" />
+                {selectedItem ? 'Edit Menu Item' : 'Add New Menu Item'}
+              </DialogTitle>
               <DialogDescription>
-                {selectedItem ? 'Update menu item information' : 'Create a new menu item for the library'}
+                {selectedItem ? 'Update menu item information and recipe' : 'Create a new menu item with ingredients'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="menu_name">Menu Item Name *</Label>
-                <Input
-                  id="menu_name"
-                  value={formData.menu_name}
-                  onChange={(e) => setFormData({...formData, menu_name: e.target.value})}
-                  placeholder="e.g., Grilled Salmon"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="menu_type">Menu Type *</Label>
-                <Select value={formData.menu_type} onValueChange={(val) => setFormData({...formData, menu_type: val})}>
-                  <SelectTrigger id="menu_type">
-                    <SelectValue placeholder="Select menu type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Appetizer">Appetizer</SelectItem>
-                    <SelectItem value="Main Course">Main Course</SelectItem>
-                    <SelectItem value="Dessert">Dessert</SelectItem>
-                    <SelectItem value="Beverage">Beverage</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="menu_cost">Cost (PHP) *</Label>
+                  <Label htmlFor="menu_name">Menu Item Name *</Label>
                   <Input
-                    id="menu_cost"
-                    type="number"
-                    step="0.01"
-                    value={formData.menu_cost}
-                    onChange={(e) => setFormData({...formData, menu_cost: e.target.value})}
-                    placeholder="0.00"
+                    id="menu_name"
+                    value={formData.menu_name}
+                    onChange={(e) => setFormData({...formData, menu_name: e.target.value})}
+                    placeholder="e.g., Grilled Salmon"
+                    className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="menu_price">Price (PHP) *</Label>
-                  <Input
-                    id="menu_price"
-                    type="number"
-                    step="0.01"
-                    value={formData.menu_price}
-                    onChange={(e) => setFormData({...formData, menu_price: e.target.value})}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="restriction_id">Dietary Restriction</Label>
-                  <Select value={formData.restriction_id} onValueChange={(val) => setFormData({...formData, restriction_id: val})}>
-                    <SelectTrigger id="restriction_id">
-                      <SelectValue placeholder="Select restriction (optional)" />
+                  <Label htmlFor="menu_type">Menu Type *</Label>
+                  <Select value={formData.menu_type} onValueChange={(val) => setFormData({...formData, menu_type: val})}>
+                    <SelectTrigger id="menu_type" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
+                      <SelectValue placeholder="Select menu type" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="restriction-none">None</SelectItem>
-                      {dietaryRestrictions.map((restriction: any) => {
-                        const restrictionValue = restriction.restriction_id ? restriction.restriction_id.toString() : `restriction-${restriction.restriction_name || 'unknown'}`;
-                        return (
-                          <SelectItem key={restriction.restriction_id || restrictionValue} value={restrictionValue}>
-                            {restriction.restriction_name}
-                          </SelectItem>
-                        );
-                      })}
+                    <SelectContent className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
+                      <SelectItem value="Appetizer" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">Appetizer</SelectItem>
+                      <SelectItem value="Main Course" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">Main Course</SelectItem>
+                      <SelectItem value="Dessert" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">Dessert</SelectItem>
+                      <SelectItem value="Beverage" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">Beverage</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+
+              {/* Ingredient Selection */}
+              <div className="space-y-3 border-t pt-4 dark:border-[#2a2a2a]">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-medium flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Ingredients & Recipe *
+                  </Label>
+                  <span className="text-xs text-muted-foreground">
+                    {recipe.length} ingredient{recipe.length !== 1 ? 's' : ''} selected
+                  </span>
+                </div>
+                
+                {/* Selected Ingredients */}
+                {recipe.length > 0 && (
+                  <div className="space-y-2 p-3 border rounded-lg bg-muted/30 dark:bg-[#1a1a1a] dark:border-[#2a2a2a]">
+                    {recipe.map((recipeItem) => {
+                      const ingredient = availableIngredients.find(ing => 
+                        (ing.ingredient_id || ing.id) === recipeItem.ingredient_id
+                      );
+                      if (!ingredient) return null;
+                      
+                      return (
+                        <div key={recipeItem.ingredient_id} className="flex items-center gap-3 p-2 bg-background dark:bg-[#0f0f0f] rounded border dark:border-[#2a2a2a]">
+                          <div className="flex-1">
+                            <p className="font-medium text-sm">{ingredient.ingredient_name}</p>
+                            <p className="text-xs text-muted-foreground">ID: #{ingredient.ingredient_id || ingredient.id}</p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <Label className="text-xs text-muted-foreground">Qty:</Label>
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
+                              value={recipeItem.quantity}
+                              onChange={(e) => handleUpdateRecipeQuantity(recipeItem.ingredient_id, parseFloat(e.target.value) || 0)}
+                              className="w-20 h-8 text-sm dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
+                            />
+                            <span className="text-xs text-muted-foreground w-12">{ingredient.unit}</span>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveIngredientFromRecipe(recipeItem.ingredient_id)}
+                              className="h-8 w-8 p-0 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+
+                {/* Available Ingredients List */}
+                <div className="border rounded-lg max-h-[200px] overflow-y-auto dark:border-[#2a2a2a]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12"></TableHead>
+                        <TableHead>Ingredient</TableHead>
+                        <TableHead>Unit</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead className="w-20"></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {availableIngredients.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-4">
+                            No ingredients available
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        availableIngredients.map((ingredient: any) => {
+                          const isSelected = recipe.some(r => r.ingredient_id === (ingredient.ingredient_id || ingredient.id));
+                          const ingredientId = ingredient.ingredient_id || ingredient.id;
+                          
+                          return (
+                            <TableRow 
+                              key={ingredientId}
+                              className={isSelected ? 'bg-muted/50 dark:bg-[#1a1a1a]' : ''}
+                            >
+                              <TableCell>
+                                <Checkbox
+                                  checked={isSelected}
+                                  onCheckedChange={(checked) => {
+                                    if (checked) {
+                                      handleAddIngredientToRecipe(ingredientId);
+                                    } else {
+                                      handleRemoveIngredientFromRecipe(ingredientId);
+                                    }
+                                  }}
+                                  className="dark:border-[#2a2a2a] dark:data-[state=checked]:bg-primary dark:data-[state=checked]:border-primary"
+                                />
+                              </TableCell>
+                              <TableCell className="font-medium">{ingredient.ingredient_name}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground">{ingredient.unit}</TableCell>
+                              <TableCell className="text-sm">
+                                <span className={parseFloat(ingredient.stock_quantity || 0) <= parseFloat(ingredient.re_order_level || 0) ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
+                                  {parseFloat(ingredient.stock_quantity || 0).toLocaleString()}
+                                </span>
+                              </TableCell>
+                              <TableCell>
+                                {isSelected && (
+                                  <Input
+                                    type="number"
+                                    min="0.01"
+                                    step="0.01"
+                                    value={recipe.find(r => r.ingredient_id === ingredientId)?.quantity || 1}
+                                    onChange={(e) => handleUpdateRecipeQuantity(ingredientId, parseFloat(e.target.value) || 0)}
+                                    className="w-16 h-7 text-xs dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
+                                  />
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+                {recipe.length === 0 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    At least one ingredient is required
+                  </p>
+                )}
+              </div>
+
+              {/* Cost and Price */}
+              <div className="grid grid-cols-2 gap-4 border-t pt-4 dark:border-[#2a2a2a]">
+                <div className="space-y-2">
+                  <Label htmlFor="menu_cost" className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    Cost (PHP) *
+                  </Label>
+                  <Input
+                    id="menu_cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.menu_cost || (calculatedCostFromIngredients > 0 ? calculatedCostFromIngredients.toFixed(2) : '')}
+                    onChange={(e) => setFormData({...formData, menu_cost: e.target.value})}
+                    placeholder={calculatedCostFromIngredients > 0 ? calculatedCostFromIngredients.toFixed(2) : "0.00"}
+                    className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
+                  />
+                  {calculatedCostFromIngredients > 0 ? (
+                    <div className="flex items-center gap-2">
+                      <Calculator className="h-3 w-3 text-green-600 dark:text-green-400" />
+                      <p className="text-xs text-green-600 dark:text-green-400">
+                        Calculated from ingredients: <span className="font-semibold">{formatCurrency(calculatedCostFromIngredients)}</span>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground">
+                      {recipe.length > 0 ? 'Enter cost manually (ingredients have no cost)' : 'Enter the total cost for this menu item'}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="menu_price" className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    Selling Price (PHP) *
+                  </Label>
+                  <Input
+                    id="menu_price"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={formData.menu_price || (suggestedPrice > 0 ? suggestedPrice.toFixed(2) : '')}
+                    onChange={(e) => setFormData({...formData, menu_price: e.target.value})}
+                    placeholder={suggestedPrice > 0 ? suggestedPrice.toFixed(2) : "0.00"}
+                    className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
+                  />
+                  {suggestedPrice > 0 && (
+                    <div className="flex items-center gap-2">
+                      <Calculator className="h-3 w-3 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">
+                        Suggested: <span className="font-semibold text-primary">{formatCurrency(suggestedPrice)}</span> ({defaultMarkup}% markup)
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Markup Percentage */}
+              <div className="space-y-2 border-t pt-4 dark:border-[#2a2a2a]">
+                <Label htmlFor="default_markup" className="flex items-center gap-2">
+                  <Calculator className="h-4 w-4" />
+                  Default Markup Percentage
+                </Label>
+                <Input
+                  id="default_markup"
+                  type="number"
+                  step="1"
+                  min="0"
+                  value={defaultMarkup}
+                  onChange={(e) => setDefaultMarkup(parseFloat(e.target.value) || 200)}
+                  className="w-32 dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Used to calculate suggested selling price (default: 200%)
+                </p>
+              </div>
+
+              {/* Dietary Restriction */}
+              <div className="space-y-2 border-t pt-4 dark:border-[#2a2a2a]">
+                <Label htmlFor="restriction_id">Dietary Restriction</Label>
+                <Select value={formData.restriction_id} onValueChange={(val) => setFormData({...formData, restriction_id: val})}>
+                  <SelectTrigger id="restriction_id" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
+                    <SelectValue placeholder="Select restriction (optional)" />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
+                    <SelectItem value="restriction-none" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">None</SelectItem>
+                    {dietaryRestrictions.map((restriction: any) => {
+                      const restrictionValue = restriction.restriction_id ? restriction.restriction_id.toString() : `restriction-${restriction.restriction_name || 'unknown'}`;
+                      return (
+                        <SelectItem 
+                          key={restriction.restriction_id || restrictionValue} 
+                          value={restrictionValue}
+                          className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]"
+                        >
+                          {restriction.restriction_name}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setAddDialogOpen(false);
-                setEditDialogOpen(false);
-              }}>Cancel</Button>
-              <Button onClick={handleSaveItem} disabled={formLoading}>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setAddDialogOpen(false);
+                  setEditDialogOpen(false);
+                  setFormData({
+                    menu_name: '',
+                    menu_cost: '',
+                    menu_price: '',
+                    menu_type: '',
+                    restriction_id: ''
+                  });
+                  setRecipe([]);
+                  setDefaultMarkup(200);
+                  setSelectedItem(null);
+                }}
+                disabled={formLoading}
+                className="dark:border-[#2a2a2a]"
+              >
+                Cancel
+              </Button>
+              <Button 
+                onClick={handleSaveItem} 
+                disabled={formLoading || recipe.length === 0}
+                className="dark:bg-primary dark:hover:bg-primary/90"
+              >
                 {formLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
