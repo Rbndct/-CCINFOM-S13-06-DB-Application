@@ -22,7 +22,16 @@ import Reports from "./pages/Reports";
 import Logistics from "./pages/Logistics";
 import Settings from "./pages/Settings";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5 minutes - data considered fresh
+      cacheTime: 10 * 60 * 1000, // 10 minutes - cache retention
+      refetchOnWindowFocus: false, // Don't refetch on window focus
+      refetchOnMount: false, // Use cached data if available
+    },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
