@@ -7,20 +7,67 @@ router.get('/', async (req, res) => {
   try {
     const [rows] = await promisePool.query(`
       SELECT 
-        ingredient_id,
-        ingredient_name,
-        unit,
-        stock_quantity,
-        re_order_level,
-        created_at,
-        updated_at
-      FROM ingredient
-      ORDER BY ingredient_name ASC
+        i.ingredient_id,
+        i.ingredient_name,
+        i.unit,
+        i.stock_quantity,
+        i.re_order_level,
+        i.created_at,
+        i.updated_at,
+        COUNT(DISTINCT r.menu_item_id) as usage_count
+      FROM ingredient i
+      LEFT JOIN recipe r ON i.ingredient_id = r.ingredient_id
+      GROUP BY i.ingredient_id, i.ingredient_name, i.unit, i.stock_quantity, i.re_order_level, i.created_at, i.updated_at
+      ORDER BY i.ingredient_name ASC
     `);
     res.json({ success: true, data: rows });
   } catch (error) {
     console.error('Error fetching ingredients:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch ingredients', message: error.message });
+  }
+});
+
+// GET /ingredients/:id - get single ingredient with menu items that use it
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Get ingredient details
+    const [ingredientRows] = await promisePool.query(
+      `SELECT * FROM ingredient WHERE ingredient_id = ?`,
+      [id]
+    );
+    
+    if (ingredientRows.length === 0) {
+      return res.status(404).json({ success: false, error: 'Ingredient not found' });
+    }
+    
+    // Get menu items that use this ingredient
+    const [menuItems] = await promisePool.query(
+      `SELECT 
+        m.menu_item_id,
+        m.menu_name,
+        m.menu_type,
+        r.quantity_needed,
+        (FLOOR(i.stock_quantity / NULLIF(r.quantity_needed, 0))) as makeable_quantity
+      FROM recipe r
+      JOIN menu_item m ON r.menu_item_id = m.menu_item_id
+      JOIN ingredient i ON r.ingredient_id = i.ingredient_id
+      WHERE r.ingredient_id = ?
+      ORDER BY m.menu_name ASC`,
+      [id]
+    );
+    
+    res.json({
+      success: true,
+      data: {
+        ...ingredientRows[0],
+        menu_items: menuItems
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching ingredient:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch ingredient', message: error.message });
   }
 });
 
