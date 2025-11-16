@@ -227,6 +227,7 @@ const WeddingDetail = () => {
   const [packageAssignTableId, setPackageAssignTableId] = useState('');
   const [packageAssignPackageId, setPackageAssignPackageId] = useState('');
   const [packageFormLoading, setPackageFormLoading] = useState(false);
+  const [selectedTableForRecommendations, setSelectedTableForRecommendations] = useState<number | null>(null);
   
   // Available packages for this wedding
   const [availablePackages, setAvailablePackages] = useState<any[]>([]);
@@ -253,7 +254,8 @@ const WeddingDetail = () => {
   const [allocationFormData, setAllocationFormData] = useState({
     inventory_id: '',
     quantity_used: '',
-    rental_cost: ''
+    unit_rental_cost: '',
+    rental_cost: '' // Keep for backward compatibility
   });
   const [allocationFormLoading, setAllocationFormLoading] = useState(false);
   const [allocationFormErrors, setAllocationFormErrors] = useState<Record<string, string>>({});
@@ -337,8 +339,10 @@ const WeddingDetail = () => {
               wedding_time: weddingData.weddingTime || weddingData.wedding_time || '',
               venue: weddingData.venue || '',
               guest_count: (weddingData.guestCount || weddingData.guest_count || 0).toString(),
-              total_cost: (weddingData.totalCost || weddingData.total_cost || 0).toString(),
-              production_cost: (weddingData.productionCost || weddingData.production_cost || 0).toString(),
+              equipment_rental_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || weddingData.totalCost || weddingData.total_cost || 0).toString(),
+              food_cost: (weddingData.foodCost || weddingData.food_cost || weddingData.productionCost || weddingData.production_cost || 0).toString(),
+              total_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || weddingData.totalCost || weddingData.total_cost || 0).toString(),
+              production_cost: (weddingData.foodCost || weddingData.food_cost || weddingData.productionCost || weddingData.production_cost || 0).toString(),
               payment_status: weddingData.paymentStatus || weddingData.payment_status || 'pending',
               preference_id: (weddingData.preference_id || weddingData.pref_id || '').toString()
             });
@@ -792,8 +796,10 @@ const WeddingDetail = () => {
         wedding_time: wedding.weddingTime || wedding.wedding_time || '',
         venue: wedding.venue || '',
         guest_count: (wedding.guestCount || wedding.guest_count || 0).toString(),
-        total_cost: (wedding.totalCost || wedding.total_cost || 0).toString(),
-        production_cost: (wedding.productionCost || wedding.production_cost || 0).toString(),
+        equipment_rental_cost: (wedding.equipmentRentalCost || wedding.equipment_rental_cost || wedding.totalCost || wedding.total_cost || 0).toString(),
+        food_cost: (wedding.foodCost || wedding.food_cost || wedding.productionCost || wedding.production_cost || 0).toString(),
+        total_cost: (wedding.equipmentRentalCost || wedding.equipment_rental_cost || wedding.totalCost || wedding.total_cost || 0).toString(),
+        production_cost: (wedding.foodCost || wedding.food_cost || wedding.productionCost || wedding.production_cost || 0).toString(),
         payment_status: wedding.paymentStatus || wedding.payment_status || 'pending',
         preference_id: (wedding.preference_id || wedding.pref_id || '').toString()
       });
@@ -968,8 +974,10 @@ const WeddingDetail = () => {
             wedding_time: weddingData.weddingTime || weddingData.wedding_time || '',
             venue: weddingData.venue || '',
             guest_count: (weddingData.guestCount || weddingData.guest_count || 0).toString(),
-            total_cost: (weddingData.totalCost || weddingData.total_cost || 0).toString(),
-            production_cost: (weddingData.productionCost || weddingData.production_cost || 0).toString(),
+            equipment_rental_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || weddingData.totalCost || weddingData.total_cost || 0).toString(),
+            food_cost: (weddingData.foodCost || weddingData.food_cost || weddingData.productionCost || weddingData.production_cost || 0).toString(),
+            total_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || weddingData.totalCost || weddingData.total_cost || 0).toString(),
+            production_cost: (weddingData.foodCost || weddingData.food_cost || weddingData.productionCost || weddingData.production_cost || 0).toString(),
             payment_status: weddingData.paymentStatus || weddingData.payment_status || 'pending',
             preference_id: (weddingData.preference_id || weddingData.pref_id || '').toString()
           });
@@ -1797,9 +1805,15 @@ const WeddingDetail = () => {
     );
   };
 
-  // Helper to get table package
+  // Helper to get table packages (can have multiple)
+  const getTablePackages = (tableId: number) => {
+    return tablePackageAssignments.filter(a => (a.tableId || a.table_id) === tableId);
+  };
+  
+  // Helper to get single table package (for backward compatibility)
   const getTablePackage = (tableId: number) => {
-    return tablePackageAssignments.find(a => a.tableId === tableId);
+    const packages = getTablePackages(tableId);
+    return packages.length > 0 ? packages[0] : null;
   };
 
   // Helper to get all restrictions for a table (aggregate from all guests at that table + couple preferences for couple tables)
@@ -1947,25 +1961,26 @@ const WeddingDetail = () => {
     
     setAllocationFormLoading(true);
     try {
-      const rentalCostValue = allocationFormData.rental_cost 
-        ? parseFloat(allocationFormData.rental_cost) 
-        : selectedItem.rental_cost;
+      const rentalCostValue = allocationFormData.unit_rental_cost || allocationFormData.rental_cost
+        ? parseFloat(allocationFormData.unit_rental_cost || allocationFormData.rental_cost) 
+        : (selectedItem.unit_rental_cost || selectedItem.rental_cost);
       
       // Ensure rental_cost is a valid number
       const rentalCost = (rentalCostValue && !isNaN(rentalCostValue)) 
         ? rentalCostValue 
-        : (selectedItem.rental_cost || 0);
+        : (selectedItem.unit_rental_cost || selectedItem.rental_cost || 0);
       
       await inventoryAllocationAPI.create({
         wedding_id: parseInt(id || '0'),
         inventory_id: parseInt(allocationFormData.inventory_id),
         quantity_used: quantity,
-        rental_cost: rentalCost
+        unit_rental_cost: rentalCost,
+        rental_cost: rentalCost // Keep for backward compatibility
       });
       
       toast({ title: 'Success', description: 'Inventory allocated successfully' });
       setAddAllocationOpen(false);
-      setAllocationFormData({ inventory_id: '', quantity_used: '', rental_cost: '' });
+      setAllocationFormData({ inventory_id: '', quantity_used: '', unit_rental_cost: '', rental_cost: '' });
       
       // Refresh allocations
       const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id || '0');
@@ -1994,6 +2009,7 @@ const WeddingDetail = () => {
     setAllocationFormData({
       inventory_id: allocation.inventory_id?.toString() || '',
       quantity_used: allocation.quantity_used?.toString() || '',
+      unit_rental_cost: (allocation.unit_rental_cost || allocation.rental_cost)?.toString() || '',
       rental_cost: allocation.rental_cost?.toString() || ''
     });
     setAllocationFormErrors({});
@@ -2033,8 +2049,10 @@ const WeddingDetail = () => {
       if (allocationFormData.quantity_used) {
         updateData.quantity_used = parseInt(allocationFormData.quantity_used);
       }
-      if (allocationFormData.rental_cost) {
-        updateData.rental_cost = parseFloat(allocationFormData.rental_cost);
+      if (allocationFormData.unit_rental_cost || allocationFormData.rental_cost) {
+        const cost = parseFloat(allocationFormData.unit_rental_cost || allocationFormData.rental_cost);
+        updateData.unit_rental_cost = cost;
+        updateData.rental_cost = cost; // Keep for backward compatibility
       }
       
       await inventoryAllocationAPI.update(selectedAllocation.allocation_id, updateData);
@@ -2042,7 +2060,7 @@ const WeddingDetail = () => {
       toast({ title: 'Success', description: 'Inventory allocation updated successfully' });
       setEditAllocationOpen(false);
       setSelectedAllocation(null);
-      setAllocationFormData({ inventory_id: '', quantity_used: '', rental_cost: '' });
+      setAllocationFormData({ inventory_id: '', quantity_used: '', unit_rental_cost: '', rental_cost: '' });
       
       // Refresh allocations
       const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id || '0');
@@ -2875,7 +2893,7 @@ const WeddingDetail = () => {
             <CardContent>
               <div className="mb-2">{getPaymentStatusBadge(wedding?.paymentStatus || wedding?.payment_status || 'pending')}</div>
               <p className="text-xs text-muted-foreground">
-                Total: {formatCurrency((wedding?.totalCost || wedding?.total_cost || 0) as number)}
+                Total: {formatCurrency((wedding?.equipmentRentalCost || wedding?.equipment_rental_cost || wedding?.totalCost || wedding?.total_cost || 0) as number)}
               </p>
             </CardContent>
           </Card>
@@ -3526,9 +3544,10 @@ const WeddingDetail = () => {
                     const capacity = table.capacity || 0;
                     const available = Math.max(0, capacity - assignedCount);
                     const isFull = available <= 0 && capacity > 0;
-                    const tablePackage = getTablePackage(table.id || table.table_id);
+                    const tablePackages = getTablePackages(table.id || table.table_id);
                     const tableCategory = table.category || table.table_category || '';
                     const categoryLower = tableCategory.toLowerCase();
+                    const tableRestrictions = getTableRestrictions(table.id || table.table_id);
                   
                   return (
                     <Card key={table.id || table.table_id || `table-${table.tableNumber || table.table_number || 'unknown'}`} className="flex flex-col">
@@ -3582,70 +3601,6 @@ const WeddingDetail = () => {
                         </div>
                       </CardHeader>
                       <CardContent className="flex-1 space-y-3">
-                        {tablePackage && (
-                          <div className="pb-2 border-b">
-                            <Badge variant="outline" className="gap-1">
-                              <Package className="w-3 h-3" />
-                              {tablePackage.packageName}
-                            </Badge>
-                          </div>
-                        )}
-                        {(() => {
-                          const tableRestrictions = new Set<string>();
-                          const restrictionDetails: any[] = [];
-                          
-                          // For couple table, get restrictions from couple preferences
-                          if (categoryLower === 'couple' && coupleData && coupleData.preferences) {
-                            coupleData.preferences.forEach((pref: any) => {
-                              if (pref.dietaryRestrictions && Array.isArray(pref.dietaryRestrictions)) {
-                                pref.dietaryRestrictions.forEach((r: any) => {
-                                  if (r && r.restriction_name && r.restriction_name !== 'None') {
-                                    tableRestrictions.add(r.restriction_name);
-                                    restrictionDetails.push(r);
-                                  }
-                                });
-                              }
-                            });
-                          }
-                          
-                          // Also get restrictions from assigned guests
-                          assignedGuestsList.forEach((guest) => {
-                            const restrictions = Array.isArray(guest.dietaryRestrictions) 
-                              ? guest.dietaryRestrictions 
-                              : guest.dietaryRestriction 
-                                ? [{ restriction_name: guest.dietaryRestriction }] 
-                                : [];
-                            restrictions.forEach((r: any) => {
-                              if (r.restriction_name && r.restriction_name !== 'None') {
-                                tableRestrictions.add(r.restriction_name);
-                                if (!restrictionDetails.find(d => d.restriction_name === r.restriction_name)) {
-                                  restrictionDetails.push(r);
-                                }
-                              }
-                            });
-                          });
-                          
-                          return tableRestrictions.size > 0 ? (
-                            <div className="pb-2 border-b">
-                              <p className="text-xs font-medium mb-1 text-muted-foreground">Dietary Restrictions:</p>
-                              <div className="flex flex-wrap gap-1">
-                                {restrictionDetails.map((r, idx) => (
-                                  <Badge 
-                                    key={idx} 
-                                    variant="outline" 
-                                    className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
-                                  >
-                                    {(() => {
-                                      const Icon = getTypeIcon(r.restriction_type || '');
-                                      return <Icon className="h-3 w-3" />;
-                                    })()}
-                                    {r.restriction_name}
-                                  </Badge>
-                                ))}
-                              </div>
-                            </div>
-                          ) : null;
-                        })()}
                         <div>
                           {categoryLower === 'couple' ? (
                             <>
@@ -3913,6 +3868,27 @@ const WeddingDetail = () => {
                             </>
                           )}
                         </div>
+                        {/* Dietary Restrictions - Shown at the very bottom */}
+                        {tableRestrictions.length > 0 && (
+                          <div className="mt-4 pt-4 border-t">
+                            <p className="text-xs font-medium text-muted-foreground mb-2">Dietary Restrictions per Table ({tableRestrictions.length}):</p>
+                            <div className="flex flex-wrap gap-1">
+                              {tableRestrictions.map((r: any) => {
+                                const Icon = getTypeIcon(r.restriction_type || '');
+                                return (
+                                  <Badge 
+                                    key={r.restriction_id || r.id} 
+                                    variant="outline" 
+                                    className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                  >
+                                    <Icon className="h-3 w-3" />
+                                    {r.restriction_name || r.name}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                   );
@@ -4697,9 +4673,10 @@ const WeddingDetail = () => {
                       const tableId = table.id || table.table_id;
                       const tableNum = table.tableNumber || table.table_number || 'Unknown';
                       const category = table.category || table.table_category || '';
-                      const tablePackage = getTablePackage(tableId);
+                      const tablePackages = getTablePackages(tableId);
                       const tableRestrictions = getTableRestrictions(tableId);
-                      const recommendedPackages = getRecommendedPackages(tableId);
+                      const showRecommendations = selectedTableForRecommendations === tableId;
+                      const recommendedPackages = showRecommendations ? getRecommendedPackages(tableId) : [];
                       const assignedGuestsList = guests.filter(g => g && g.table_id === tableId);
                       // For couple tables, always count the 2 partners as assigned
                       const isCoupleTable = (category || '').toLowerCase() === 'couple';
@@ -4725,38 +4702,96 @@ const WeddingDetail = () => {
                             </CardDescription>
                           </CardHeader>
                           <CardContent className="flex-1 space-y-3">
-                            {tablePackage ? (
+                            {/* Total Dietary Restrictions */}
+                            {tableRestrictions.length > 0 && (
                               <div className="pb-2 border-b">
-                                <Badge variant="outline" className="gap-1">
-                                  <Package className="w-3 h-3" />
-                                  {tablePackage.packageName} (ID: {tablePackage.packageId || tablePackage.package_id})
-                                </Badge>
+                                <p className="text-xs font-medium text-muted-foreground mb-2">Total Dietary Restrictions ({tableRestrictions.length}):</p>
+                                <div className="flex flex-wrap gap-1">
+                                  {tableRestrictions.map((r: any) => {
+                                    const Icon = getTypeIcon(r.restriction_type || '');
+                                    return (
+                                      <Badge 
+                                        key={r.restriction_id || r.id} 
+                                        variant="outline" 
+                                        className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                      >
+                                        <Icon className="h-3 w-3" />
+                                        {r.restriction_name || r.name}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            ) : (
-                              <div className="space-y-2">
-                                {tableRestrictions.length > 0 && (
-                                  <div>
-                                    <p className="text-xs font-medium text-muted-foreground mb-1">Table Restrictions:</p>
-                                    <div className="flex flex-wrap gap-1">
-                                      {tableRestrictions.slice(0, 3).map((r: any) => {
-                                        const Icon = getTypeIcon(r.restriction_type || '');
-                                        return (
-                                          <Badge 
-                                            key={r.restriction_id || r.id} 
-                                            variant="outline" 
-                                            className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
-                                          >
-                                            <Icon className="h-3 w-3" />
-                                            {r.restriction_name || r.name}
-                                          </Badge>
-                                        );
-                                      })}
-                                      {tableRestrictions.length > 3 && (
-                                        <Badge variant="outline" className="text-xs">+{tableRestrictions.length - 3}</Badge>
+                            )}
+                            {/* Assigned Packages with their Dietary Restrictions */}
+                            {tablePackages.length > 0 ? (
+                              <div className="pb-2 border-b space-y-2">
+                                <p className="text-xs font-medium text-muted-foreground mb-1">Assigned Packages ({tablePackages.length}):</p>
+                                {tablePackages.map((pkg, idx) => {
+                                  // Get full package object to extract restrictions
+                                  const fullPackage = packages.find(p => (p.package_id || p.id) === (pkg.packageId || pkg.package_id));
+                                  const packageRestrictions: any[] = [];
+                                  if (fullPackage && fullPackage.menu_items && Array.isArray(fullPackage.menu_items)) {
+                                    const restrictionSet = new Set<string>();
+                                    fullPackage.menu_items.forEach((item: any) => {
+                                      if (item.restriction_name && item.restriction_name !== 'None') {
+                                        if (!restrictionSet.has(item.restriction_name)) {
+                                          restrictionSet.add(item.restriction_name);
+                                          packageRestrictions.push({
+                                            restriction_name: item.restriction_name,
+                                            restriction_type: item.restriction_type || 'Dietary'
+                                          });
+                                        }
+                                      }
+                                    });
+                                  }
+                                  return (
+                                    <div key={idx} className="space-y-1">
+                                      <div className="flex items-center gap-1 flex-wrap">
+                                        <Badge variant="outline" className="gap-1">
+                                          <Package className="w-3 h-3" />
+                                          {pkg.packageName || pkg.package_name} (ID: {pkg.packageId || pkg.package_id})
+                                        </Badge>
+                                      </div>
+                                      {packageRestrictions.length > 0 && (
+                                        <div className="ml-4">
+                                          <p className="text-xs text-muted-foreground mb-1">Package Dietary Restrictions:</p>
+                                          <div className="flex flex-wrap gap-1">
+                                            {packageRestrictions.map((r: any, rIdx: number) => {
+                                              const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                              return (
+                                                <Badge 
+                                                  key={rIdx} 
+                                                  variant="outline" 
+                                                  className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
+                                                >
+                                                  <Icon className="h-2.5 w-2.5" />
+                                                  {r.restriction_name}
+                                                </Badge>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
                                       )}
                                     </div>
-                                  </div>
-                                )}
+                                  );
+                                })}
+                              </div>
+                            ) : null}
+                            {!showRecommendations ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => {
+                                  setSelectedTableForRecommendations(tableId);
+                                }}
+                              >
+                                <Package className="w-3 h-3 mr-2" />
+                                Show Recommended Packages
+                              </Button>
+                            ) : (
+                              <div className="space-y-2">
                                 {recommendedPackages.length > 0 ? (
                                   <div className="space-y-2">
                                     <div className="pb-2 border-b border-dashed">
@@ -4857,27 +4892,40 @@ const WeddingDetail = () => {
                                     </Button>
                                   </div>
                                 ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    className="w-full"
-                                    onClick={() => {
-                                      setPackageAssignTableId(tableId.toString());
-                                      setPackageAssignPackageId('');
-                                      // Scroll to the assign package form
-                                      setTimeout(() => {
-                                        const formElement = document.getElementById('packageTable');
-                                        if (formElement) {
-                                          formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                          formElement.focus();
-                                        }
-                                      }, 100);
-                                    }}
-                                  >
-                                    <Package className="w-3 h-3 mr-2" />
-                                    Assign Package
-                                  </Button>
+                                  <div className="text-center py-2">
+                                    <p className="text-xs text-muted-foreground mb-2">No recommended packages found</p>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="w-full"
+                                      onClick={() => {
+                                        setPackageAssignTableId(tableId.toString());
+                                        setPackageAssignPackageId('');
+                                        // Scroll to the assign package form
+                                        setTimeout(() => {
+                                          const formElement = document.getElementById('packageTable');
+                                          if (formElement) {
+                                            formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                            formElement.focus();
+                                          }
+                                        }, 100);
+                                      }}
+                                    >
+                                      <Package className="w-3 h-3 mr-2" />
+                                      Assign Package Manually
+                                    </Button>
+                                  </div>
                                 )}
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="w-full"
+                                  onClick={() => {
+                                    setSelectedTableForRecommendations(null);
+                                  }}
+                                >
+                                  Hide Recommendations
+                                </Button>
                               </div>
                             )}
                           </CardContent>
@@ -5774,7 +5822,7 @@ const WeddingDetail = () => {
                     <CardDescription>Allocate inventory items to this wedding</CardDescription>
                   </div>
                   <Button onClick={() => {
-                    setAllocationFormData({ inventory_id: '', quantity_used: '', rental_cost: '' });
+                    setAllocationFormData({ inventory_id: '', quantity_used: '', unit_rental_cost: '', rental_cost: '' });
                     setAllocationFormErrors({});
                     setAddAllocationOpen(true);
                   }}>
@@ -5849,10 +5897,10 @@ const WeddingDetail = () => {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {formatCurrency((typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0))}
+                              {formatCurrency((typeof (allocation.unit_rental_cost || allocation.rental_cost) === 'number' ? (allocation.unit_rental_cost || allocation.rental_cost) : parseFloat((allocation.unit_rental_cost || allocation.rental_cost || '0').toString()) || 0))}
                             </TableCell>
                             <TableCell className="font-semibold">
-                              {formatCurrency(((allocation.quantity_used || 0) * (typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0)))}
+                              {formatCurrency(((allocation.quantity_used || 0) * (typeof (allocation.unit_rental_cost || allocation.rental_cost) === 'number' ? (allocation.unit_rental_cost || allocation.rental_cost) : parseFloat((allocation.unit_rental_cost || allocation.rental_cost || '0').toString()) || 0)))}
                             </TableCell>
                             <TableCell>
                               <DropdownMenu>
@@ -5897,9 +5945,11 @@ const WeddingDetail = () => {
                         <div className="text-right">
                           <p className="text-sm text-muted-foreground">Total Rental Cost</p>
                           <p className="text-2xl font-bold">
-                            {formatCurrency(inventoryAllocations.reduce((sum, a) => 
-                              sum + ((a.quantity_used || 0) * (typeof a.rental_cost === 'number' ? a.rental_cost : parseFloat(a.rental_cost || '0') || 0)), 0
-                            ))}
+                            {formatCurrency(inventoryAllocations.reduce((sum, a) => {
+                              const cost = (a.unit_rental_cost || a.rental_cost);
+                              const costValue = typeof cost === 'number' ? cost : parseFloat(cost?.toString() || '0') || 0;
+                              return sum + ((a.quantity_used || 0) * costValue);
+                            }, 0))}
                           </p>
                         </div>
                       </div>
@@ -6573,6 +6623,7 @@ const WeddingDetail = () => {
                       setAllocationFormData(prev => ({
                         ...prev,
                         inventory_id: val,
+                        unit_rental_cost: (selectedItem.unit_rental_cost || selectedItem.rental_cost)?.toString() || '',
                         rental_cost: selectedItem.rental_cost?.toString() || ''
                       }));
                     }
@@ -6601,7 +6652,7 @@ const WeddingDetail = () => {
                     <div className="p-3 bg-muted rounded-lg text-sm">
                       <p><strong>Available:</strong> {selectedItem.quantity_available}</p>
                       <p><strong>Condition:</strong> {selectedItem.item_condition}</p>
-                      <p><strong>Default Rental Cost:</strong> {formatCurrency((typeof selectedItem.rental_cost === 'number' ? selectedItem.rental_cost : parseFloat(selectedItem.rental_cost || '0') || 0))} per unit</p>
+                      <p><strong>Default Rental Cost:</strong> {formatCurrency((typeof (selectedItem.unit_rental_cost || selectedItem.rental_cost) === 'number' ? (selectedItem.unit_rental_cost || selectedItem.rental_cost) : parseFloat((selectedItem.unit_rental_cost || selectedItem.rental_cost || '0').toString()) || 0))} per unit</p>
                     </div>
                   ) : null;
                 })()}
@@ -6621,7 +6672,7 @@ const WeddingDetail = () => {
                         item.inventory_id?.toString() === allocationFormData.inventory_id
                       );
                       if (selectedItem && qty) {
-                        const total = parseFloat(qty) * (selectedItem.rental_cost || 0);
+                        const total = parseFloat(qty) * (selectedItem.unit_rental_cost || selectedItem.rental_cost || 0);
                         // Don't auto-update rental_cost if user has manually set it
                       }
                     }
@@ -6639,7 +6690,7 @@ const WeddingDetail = () => {
                   );
                   if (selectedItem) {
                     const qty = parseInt(allocationFormData.quantity_used) || 0;
-                    const cost = parseFloat(allocationFormData.rental_cost || selectedItem.rental_cost?.toString() || '0');
+                    const cost = parseFloat(allocationFormData.unit_rental_cost || allocationFormData.rental_cost || (selectedItem.unit_rental_cost || selectedItem.rental_cost)?.toString() || '0');
                     const total = qty * cost;
                     const stockAvailable = selectedItem.quantity_available || 0;
                     const canAllocate = qty <= stockAvailable;
@@ -6666,8 +6717,8 @@ const WeddingDetail = () => {
                   type="number"
                   step="0.01"
                   min="0"
-                  value={allocationFormData.rental_cost}
-                  onChange={(e) => setAllocationFormData({ ...allocationFormData, rental_cost: e.target.value })}
+                  value={allocationFormData.unit_rental_cost || allocationFormData.rental_cost}
+                  onChange={(e) => setAllocationFormData({ ...allocationFormData, unit_rental_cost: e.target.value, rental_cost: e.target.value })}
                   disabled={allocationFormLoading}
                   placeholder="Enter rental cost per unit"
                 />
@@ -6751,8 +6802,8 @@ const WeddingDetail = () => {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={allocationFormData.rental_cost}
-                    onChange={(e) => setAllocationFormData({ ...allocationFormData, rental_cost: e.target.value })}
+                    value={allocationFormData.unit_rental_cost || allocationFormData.rental_cost}
+                    onChange={(e) => setAllocationFormData({ ...allocationFormData, unit_rental_cost: e.target.value, rental_cost: e.target.value })}
                     disabled={allocationFormLoading}
                   />
                 </div>
@@ -6800,7 +6851,9 @@ const WeddingDetail = () => {
             </DialogHeader>
             {selectedAllocation && (() => {
               const item = availableInventoryItems.find(i => i.inventory_id === selectedAllocation.inventory_id);
-              const totalCost = (selectedAllocation.quantity_used || 0) * (typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0);
+              const cost = (selectedAllocation.unit_rental_cost || selectedAllocation.rental_cost);
+              const costValue = typeof cost === 'number' ? cost : parseFloat(cost?.toString() || '0') || 0;
+              const totalCost = (selectedAllocation.quantity_used || 0) * costValue;
               const stockAvailable = item?.quantity_available || 0;
               const remainingStock = stockAvailable - (selectedAllocation.quantity_used || 0);
               return (
@@ -6824,7 +6877,7 @@ const WeddingDetail = () => {
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Rental Cost (per unit)</Label>
-                      <p className="font-semibold">{formatCurrency((typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0))}</p>
+                      <p className="font-semibold">{formatCurrency((typeof (selectedAllocation.unit_rental_cost || selectedAllocation.rental_cost) === 'number' ? (selectedAllocation.unit_rental_cost || selectedAllocation.rental_cost) : parseFloat((selectedAllocation.unit_rental_cost || selectedAllocation.rental_cost || '0').toString()) || 0))}</p>
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Total Cost</Label>
@@ -7066,7 +7119,11 @@ const WeddingDetail = () => {
                 <p className="font-medium">{selectedAllocation.item_name}</p>
                 <p className="text-sm text-muted-foreground">
                   Quantity: {selectedAllocation.quantity_used} • 
-                  Total Cost: {formatCurrency(((selectedAllocation.quantity_used || 0) * (typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0)))}
+                  Total Cost: {formatCurrency((() => {
+                    const cost = (selectedAllocation.unit_rental_cost || selectedAllocation.rental_cost);
+                    const costValue = typeof cost === 'number' ? cost : parseFloat(cost?.toString() || '0') || 0;
+                    return (selectedAllocation.quantity_used || 0) * costValue;
+                  })())}
                 </p>
               </div>
             )}
