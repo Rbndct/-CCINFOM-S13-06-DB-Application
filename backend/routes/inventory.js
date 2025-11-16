@@ -2,6 +2,52 @@ const express = require('express');
 const router = express.Router();
 const {promisePool} = require('../config/database');
 
+// Helper function to recalculate and update wedding costs
+async function updateWeddingCosts(weddingId) {
+  try {
+    // Calculate total rental cost from inventory allocations
+    const [inventoryCosts] = await promisePool.query(
+      `SELECT COALESCE(SUM(quantity_used * rental_cost), 0) as total_rental_cost
+       FROM inventory_allocation
+       WHERE wedding_id = ?`,
+      [weddingId]
+    );
+    const totalRentalCost = parseFloat(inventoryCosts[0]?.total_rental_cost || 0);
+
+    // Calculate total food cost from table packages
+    // Sum of menu costs from packages assigned to tables
+    const [foodCosts] = await promisePool.query(
+      `SELECT COALESCE(SUM(
+        COALESCE(
+          (SELECT SUM(mi.menu_cost * COALESCE(pmi.quantity, 1))
+           FROM package_menu_items pmi
+           JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+           WHERE pmi.package_id = tp.package_id), 0
+        )
+      ), 0) as total_food_cost
+      FROM table_package tp
+      WHERE tp.wedding_id = ?`,
+      [weddingId]
+    );
+    
+    const totalFoodCost = parseFloat(foodCosts[0]?.total_food_cost || 0);
+
+    // Update wedding with calculated costs
+    await promisePool.query(
+      `UPDATE wedding 
+       SET total_cost = ?,
+           production_cost = ?
+       WHERE wedding_id = ?`,
+      [totalRentalCost, totalFoodCost, weddingId]
+    );
+
+    return { totalRentalCost, totalFoodCost };
+  } catch (error) {
+    console.error('Error updating wedding costs:', error);
+    throw error;
+  }
+}
+
 // Get all inventory items
 router.get('/', async (req, res) => {
   try {
@@ -298,6 +344,9 @@ router.post('/allocations', async (req, res) => {
       [result.insertId]
     );
 
+    // Update wedding costs
+    await updateWeddingCosts(wedding_id);
+
     res.status(201).json({
       success: true,
       data: newAllocation[0],
@@ -406,6 +455,15 @@ router.put('/allocations/:allocation_id', async (req, res) => {
       [allocation_id]
     );
 
+    // Get wedding_id from allocation and update wedding costs
+    const [allocationData] = await promisePool.query(
+      'SELECT wedding_id FROM inventory_allocation WHERE allocation_id = ?',
+      [allocation_id]
+    );
+    if (allocationData.length > 0) {
+      await updateWeddingCosts(allocationData[0].wedding_id);
+    }
+
     res.json({
       success: true,
       data: updatedAllocation[0],
@@ -426,6 +484,12 @@ router.delete('/allocations/:allocation_id', async (req, res) => {
   try {
     const {allocation_id} = req.params;
 
+    // Get wedding_id before deleting
+    const [allocationBeforeDelete] = await promisePool.query(
+      'SELECT wedding_id FROM inventory_allocation WHERE allocation_id = ?',
+      [allocation_id]
+    );
+
     const [result] = await promisePool.query(
       'DELETE FROM inventory_allocation WHERE allocation_id = ?',
       [allocation_id]
@@ -436,6 +500,11 @@ router.delete('/allocations/:allocation_id', async (req, res) => {
         success: false,
         error: 'Inventory allocation not found'
       });
+    }
+
+    // Update wedding costs after deletion
+    if (allocationBeforeDelete.length > 0) {
+      await updateWeddingCosts(allocationBeforeDelete[0].wedding_id);
     }
 
     res.json({

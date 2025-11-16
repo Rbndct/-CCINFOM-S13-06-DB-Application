@@ -172,12 +172,23 @@ router.post('/', async (req, res) => {
           {success: false, error: 'Guest name and wedding_id are required'});
     }
 
-    // Use first restriction_id for backward compatibility if no restriction_ids
-    // array
-    const restrictionIdForGuest =
-        restriction_ids && restriction_ids.length > 0 ?
-        restriction_ids[0] :
-        (restriction_id || null);
+    // Use first restriction_id for backward compatibility
+    // Auto-assign "None" if no restrictions provided (consistent with PUT
+    // endpoint)
+    let restrictionIdForGuest = null;
+    if (restriction_ids && restriction_ids.length > 0) {
+      restrictionIdForGuest = restriction_ids[0];
+    } else if (restriction_id) {
+      restrictionIdForGuest = restriction_id;
+    } else {
+      // Auto-assign "None" if no restrictions provided
+      const [noneRows] = await connection.query(
+          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+          ['None']);
+      if (noneRows.length > 0) {
+        restrictionIdForGuest = noneRows[0].restriction_id;
+      }
+    }
 
     const [result] = await connection.query(
         'INSERT INTO guest (guest_name, wedding_id, rsvp_status, table_id, restriction_id) VALUES (?, ?, ?, ?, ?)',
@@ -192,19 +203,23 @@ router.post('/', async (req, res) => {
     // restriction_ids array is provided
     let restrictionIdsArray =
         restriction_ids || (restriction_id ? [restriction_id] : []);
-    
+
     // Auto-assign "None" if no restrictions provided
     if (restrictionIdsArray.length === 0) {
-      // Get "None" restriction ID
-      const [noneRows] = await connection.query(
-          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-          ['None']
-      );
-      if (noneRows.length > 0) {
-        restrictionIdsArray = [noneRows[0].restriction_id];
+      // Get "None" restriction ID (use same value as restrictionIdForGuest for
+      // consistency)
+      if (restrictionIdForGuest !== null) {
+        restrictionIdsArray = [restrictionIdForGuest];
+      } else {
+        const [noneRows] = await connection.query(
+            'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+            ['None']);
+        if (noneRows.length > 0) {
+          restrictionIdsArray = [noneRows[0].restriction_id];
+        }
       }
     }
-    
+
     if (restrictionIdsArray.length > 0) {
       // Check if guest_restrictions table exists
       const [tableCheck] = await connection.query(`
@@ -257,8 +272,15 @@ router.put('/:id', async (req, res) => {
   const connection = await promisePool.getConnection();
   try {
     await connection.beginTransaction();
-    
-    const {name, guest_name, rsvp_status, table_id, restriction_id, restriction_ids} = req.body;
+
+    const {
+      name,
+      guest_name,
+      rsvp_status,
+      table_id,
+      restriction_id,
+      restriction_ids
+    } = req.body;
 
     // Use guest_name if provided, otherwise use name
     const finalGuestName = guest_name || name;
@@ -273,8 +295,7 @@ router.put('/:id', async (req, res) => {
       // Auto-assign "None" if no restrictions provided
       const [noneRows] = await connection.query(
           'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-          ['None']
-      );
+          ['None']);
       if (noneRows.length > 0) {
         restrictionIdForGuest = noneRows[0].restriction_id;
       }
@@ -293,15 +314,15 @@ router.put('/:id', async (req, res) => {
     }
 
     // Update junction table if restriction_ids array is provided
-    const restrictionIdsArray = restriction_ids || (restriction_id ? [restriction_id] : []);
-    
+    const restrictionIdsArray =
+        restriction_ids || (restriction_id ? [restriction_id] : []);
+
     // Auto-assign "None" if no restrictions provided
     let finalRestrictionIds = restrictionIdsArray;
     if (finalRestrictionIds.length === 0) {
       const [noneRows] = await connection.query(
           'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-          ['None']
-      );
+          ['None']);
       if (noneRows.length > 0) {
         finalRestrictionIds = [noneRows[0].restriction_id];
       }
@@ -315,20 +336,19 @@ router.put('/:id', async (req, res) => {
       AND TABLE_NAME = 'guest_restrictions'
     `);
 
-    if (tableCheck[0]?.cnt > 0 && finalRestrictionIds.length > 0) {
-      // Delete existing restrictions
+    if (tableCheck[0]?.cnt > 0) {
+      // Always delete existing restrictions to ensure clean state
+      // This prevents stale data if "None" doesn't exist or finalRestrictionIds
+      // is empty
       await connection.query(
-          'DELETE FROM guest_restrictions WHERE guest_id = ?',
-          [req.params.id]
-      );
-      
-      // Insert new restrictions
-      const values = finalRestrictionIds.map((rid) => [req.params.id, rid]);
-      if (values.length > 0) {
+          'DELETE FROM guest_restrictions WHERE guest_id = ?', [req.params.id]);
+
+      // Insert new restrictions only if we have any
+      if (finalRestrictionIds.length > 0) {
+        const values = finalRestrictionIds.map((rid) => [req.params.id, rid]);
         await connection.query(
             'INSERT INTO guest_restrictions (guest_id, restriction_id) VALUES ?',
-            [values]
-        );
+            [values]);
       }
     }
 

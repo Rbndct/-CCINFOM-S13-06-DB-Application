@@ -11,14 +11,13 @@ USE wedding_management_db;
 -- DELETE FROM inventory_allocation;
 -- DELETE FROM inventory_items;
 
--- Insert Naruto-themed inventory items
+-- Insert Naruto-themed inventory items (excluding tables - tables are auto-created via API)
 INSERT INTO inventory_items (item_name, category, item_condition, quantity_available, rental_cost) VALUES
--- Furniture Category
-('Konoha Leaf Village Round Tables (8-person)', 'Furniture', 'Excellent', 20, 25.00),
+-- Furniture Category (excluding tables)
 ('Uzumaki Clan Red Table Linens', 'Linens', 'Good', 50, 8.00),
 ('Shinobi Scroll Display Stands', 'Furniture', 'Excellent', 15, 35.00),
 ('Hidden Leaf Village Chair Covers (Red & White)', 'Linens', 'Good', 200, 3.50),
-('Ninja Headband Display Tables', 'Furniture', 'Fair', 10, 20.00),
+('Cocktail Tables (Decorative)', 'Furniture', 'Excellent', 10, 25.00),
 
 -- Lighting Category
 ('Rasengan Glow Centerpieces (Blue)', 'Lighting', 'Excellent', 30, 45.00),
@@ -47,19 +46,27 @@ INSERT INTO inventory_items (item_name, category, item_condition, quantity_avail
 -- ============================================================================
 -- Summary
 -- ============================================================================
--- Total Items Added: 23
+-- Total Items Added: 21 (tables excluded - auto-created via API)
 -- Categories:
---   - Furniture: 5 items
+--   - Furniture: 2 items (excluding tables)
 --   - Linens: 2 items
 --   - Lighting: 5 items
 --   - Decorations: 8 items
 --   - Audio/Visual: 5 items
 -- 
 -- Conditions:
---   - Excellent: 10 items
---   - Good: 11 items
---   - Fair: 2 items
+--   - Excellent: 9 items
+--   - Good: 10 items
+--   - Fair: 1 item
+-- 
+-- Pricing Notes:
+--   - Linens: 3.50-8.00 PHP (realistic for table linens and chair covers)
+--   - Furniture: 25-35 PHP (display stands, cocktail tables)
+--   - Lighting: 15-120 PHP (candles to chandeliers)
+--   - Decorations: 12-85 PHP (runners to arches)
+--   - Audio/Visual: 35-350 PHP (guest book stands to dance floors)
 -- 
 -- All items are priced in PHP and suitable for wedding rental use
+-- Tables are NOT included as they are automatically created via the API
 -- ============================================================================
 

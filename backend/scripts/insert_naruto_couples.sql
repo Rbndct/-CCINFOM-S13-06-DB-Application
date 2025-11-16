@@ -9,6 +9,8 @@ USE wedding_management_db;
 
 -- Insert Naruto-themed couples
 INSERT INTO couple (partner1_name, partner2_name, partner1_phone, partner2_phone, partner1_email, partner2_email, planner_contact) VALUES
+-- Main Canon Couple (Naruto & Hinata)
+('Naruto', 'Hinata', '+63 917 000 0001', '+63 917 000 0002', 'naruto.uzumaki@konoha.nin', 'hinata.hyuga@konoha.nin', 'wedding.planner@konoha.nin'),
 -- Canon Couples from Naruto/Boruto
 ('Sasuke', 'Sakura', '+63 917 123 4567', '+63 917 123 4568', 'sasuke.uchiha@konoha.nin', 'sakura.haruno@konoha.nin', 'wedding.planner@konoha.nin'),
 ('Shikamaru', 'Temari', '+63 917 234 5678', '+63 917 234 5679', 'shikamaru.nara@konoha.nin', 'temari.nara@sand.nin', 'planner@konoha.nin'),

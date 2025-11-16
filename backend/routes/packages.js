@@ -49,16 +49,22 @@ router.get('/', async (req, res) => {
 
     const [rows] = await promisePool.query(query, params);
 
-    // Get menu items for each package
+    // Get menu items for each package (include menu_cost and menu_price)
     const packagesWithItems = await Promise.all(rows.map(async (pkg) => {
       const [menuItems] = await promisePool.query(
         `SELECT 
           m.menu_item_id,
           m.menu_name,
           m.menu_type,
+          m.menu_cost,
+          m.menu_price,
+          m.restriction_id,
+          dr.restriction_name,
+          dr.restriction_type,
           pmi.quantity
         FROM package_menu_items pmi
         JOIN menu_item m ON pmi.menu_item_id = m.menu_item_id
+        LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
         WHERE pmi.package_id = ?`,
         [pkg.package_id]
       );
@@ -104,16 +110,21 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    // Get menu items for this package
+    // Get menu items for this package (include menu_cost)
     const [menuItems] = await promisePool.query(
       `SELECT 
         m.menu_item_id,
         m.menu_name,
         m.menu_type,
+        m.menu_cost,
         m.menu_price,
+        m.restriction_id,
+        dr.restriction_name,
+        dr.restriction_type,
         pmi.quantity
       FROM package_menu_items pmi
       JOIN menu_item m ON pmi.menu_item_id = m.menu_item_id
+      LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE pmi.package_id = ?`,
       [req.params.id]
     );
