@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Heart,
   X,
+  XCircle,
   Search,
   AlertTriangle,
   Eye,
@@ -1404,21 +1405,34 @@ const WeddingDetail = () => {
     }
     
     // Check table capacity (count guests that will remain after reassignment)
-    // For couple tables, always count the 2 partners as assigned
+    // For couple tables, always count the 2 partners as assigned (they're automatically seated)
     const isCoupleTable = (table.category || table.table_category || '').toLowerCase() === 'couple';
-    const partnerCount = isCoupleTable ? 2 : 0;
-    const guestsStayingOnTable = guests.filter(g => g.table_id === tableId && g.id !== guestId).length;
+    const partnerCount = isCoupleTable ? 2 : 0; // Couple tables always have 2 partners seated
+    const guestsStayingOnTable = guests.filter(g => {
+      const gId = g.id || g.guest_id;
+      return g.table_id === tableId && gId !== guestId;
+    }).length;
     const totalAfterAssignment = guestsStayingOnTable + partnerCount + 1; // +1 for the guest being assigned
     const capacity = table.capacity || 0;
     const available = capacity - guestsStayingOnTable - partnerCount;
     
+    // Block assignment if it would exceed capacity
     if (totalAfterAssignment > capacity) {
       toast({
-        title: 'Warning',
-        description: `Table ${table.tableNumber || table.table_number} capacity will be exceeded (${capacity} max, ${totalAfterAssignment} after assignment). Do you want to continue?`,
-        variant: 'default',
+        title: 'Error',
+        description: `Cannot assign guest: Table ${table.tableNumber || table.table_number} capacity would be exceeded (${capacity} max, ${totalAfterAssignment} after assignment${isCoupleTable ? ' including the couple' : ''})`,
+        variant: 'destructive',
       });
-      // Still allow assignment - backend will handle validation
+      return;
+    }
+    
+    if (available < 1) {
+      toast({
+        title: 'Error',
+        description: `Table ${table.tableNumber || table.table_number} is full${isCoupleTable ? ' (couple already seated)' : ''}. No available seats.`,
+        variant: 'destructive',
+      });
+      return;
     }
     
     setAllocationLoading(true);
@@ -1648,28 +1662,35 @@ const WeddingDetail = () => {
     }
     
     // Check table capacity (count guests that will remain after reassignment)
+    // For couple tables, always count the 2 partners as assigned (they're automatically seated)
+    const isCoupleTable = (table.category || table.table_category || '').toLowerCase() === 'couple';
+    const partnerCount = isCoupleTable ? 2 : 0; // Couple tables always have 2 partners seated
+    
     const guestsStayingOnTable = guests.filter(g => {
       const gTableId = g.table_id;
       const gId = g.id || g.guest_id;
       return gTableId === tableId && !guestsToAssign.includes(gId);
     }).length;
-    const newAssignments = guestsToAssign.length;
-    const totalAfterAssignment = guestsStayingOnTable + newAssignments;
-    const available = (table.capacity || 0) - guestsStayingOnTable;
     
-    if (newAssignments > available) {
+    const newAssignments = guestsToAssign.length;
+    const totalAfterAssignment = guestsStayingOnTable + partnerCount + newAssignments;
+    const capacity = table.capacity || 0;
+    const available = capacity - guestsStayingOnTable - partnerCount;
+    
+    // Block assignment if it would exceed capacity
+    if (totalAfterAssignment > capacity) {
       toast({
         title: 'Error',
-        description: `Table ${table.tableNumber || table.table_number} only has ${available} available seat(s), but ${newAssignments} guest(s) selected`,
+        description: `Cannot assign ${newAssignments} guest(s): Table ${table.tableNumber || table.table_number} capacity would be exceeded (${capacity} max, ${totalAfterAssignment} after assignment${isCoupleTable ? ' including the couple' : ''})`,
         variant: 'destructive',
       });
       return;
     }
     
-    if (totalAfterAssignment > (table.capacity || 0)) {
+    if (newAssignments > available) {
       toast({
         title: 'Error',
-        description: `Assigning ${newAssignments} guest(s) would exceed table capacity of ${table.capacity || 0}`,
+        description: `Table ${table.tableNumber || table.table_number} only has ${available} available seat(s)${isCoupleTable ? ' (couple already seated)' : ''}, but ${newAssignments} guest(s) selected`,
         variant: 'destructive',
       });
       return;
@@ -2949,9 +2970,24 @@ const WeddingDetail = () => {
                         <SelectValue placeholder="Select RSVP status" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="accepted">Accepted</SelectItem>
-                        <SelectItem value="declined">Declined</SelectItem>
+                        <SelectItem value="pending" className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                            <span>Pending</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="accepted" className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                            <span>Accepted</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="declined" className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]">
+                          <div className="flex items-center gap-2">
+                            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+                            <span>Declined</span>
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -4501,8 +4537,12 @@ const WeddingDetail = () => {
                           const selectedTable = tables.find(t => (t.id ?? t.table_id)?.toString() === bulkTableId);
                           if (!selectedTable) return '';
                           const tableId = selectedTable.id || selectedTable.table_id;
-                          const assignedCount = guests.filter(g => g && g.table_id === tableId).length;
-                          const available = (selectedTable.capacity || 0) - assignedCount;
+                          // For couple tables, always count the 2 partners as assigned
+                          const isCoupleTable = (selectedTable.category || selectedTable.table_category || '').toLowerCase() === 'couple';
+                          const partnerCount = isCoupleTable ? 2 : 0;
+                          const assignedGuestsCount = guests.filter(g => g && g.table_id === tableId).length;
+                          const assignedCount = assignedGuestsCount + partnerCount;
+                          const available = Math.max(0, (selectedTable.capacity || 0) - assignedCount);
                           return selectedGuestIds.length > available 
                             ? 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30' 
                             : 'border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30';
@@ -4511,14 +4551,18 @@ const WeddingDetail = () => {
                             const selectedTable = tables.find(t => (t.id ?? t.table_id)?.toString() === bulkTableId);
                             if (!selectedTable) return null;
                             const tableId = selectedTable.id || selectedTable.table_id;
-                            const assignedCount = guests.filter(g => g && g.table_id === tableId).length;
-                            const available = (selectedTable.capacity || 0) - assignedCount;
+                            // For couple tables, always count the 2 partners as assigned
+                            const isCoupleTable = (selectedTable.category || selectedTable.table_category || '').toLowerCase() === 'couple';
+                            const partnerCount = isCoupleTable ? 2 : 0;
+                            const assignedGuestsCount = guests.filter(g => g && g.table_id === tableId).length;
+                            const assignedCount = assignedGuestsCount + partnerCount;
+                            const available = Math.max(0, (selectedTable.capacity || 0) - assignedCount);
                             return (
                               <>
                                 <p className="text-sm font-medium dark:text-[#e5e5e5]">{selectedTable.tableNumber || selectedTable.table_number || 'Unknown'}</p>
                                 <p className="text-xs text-muted-foreground dark:text-[#d4d4d4]">
                                   Capacity: {selectedTable.capacity || 0} | 
-                                  Assigned: {assignedCount} | 
+                                  Assigned: {assignedCount}{isCoupleTable ? ' (includes couple)' : ''} | 
                                   Available: {available}
                                 </p>
                                 {selectedGuestIds.length > 0 && (
@@ -4657,7 +4701,10 @@ const WeddingDetail = () => {
                       const tableRestrictions = getTableRestrictions(tableId);
                       const recommendedPackages = getRecommendedPackages(tableId);
                       const assignedGuestsList = guests.filter(g => g && g.table_id === tableId);
-                      const assignedCount = assignedGuestsList.length;
+                      // For couple tables, always count the 2 partners as assigned
+                      const isCoupleTable = (category || '').toLowerCase() === 'couple';
+                      const partnerCount = isCoupleTable ? 2 : 0;
+                      const assignedCount = assignedGuestsList.length + partnerCount;
                       const capacity = table.capacity || 0;
                       const available = Math.max(0, capacity - assignedCount);
                       
@@ -4711,105 +4758,77 @@ const WeddingDetail = () => {
                                   </div>
                                 )}
                                 {recommendedPackages.length > 0 ? (
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div className="pb-2 border-b border-dashed">
-                                        <Badge variant="outline" className="gap-1 cursor-help">
-                                          <Package className="w-3 h-3" />
-                                          {recommendedPackages.length} Recommended Package{recommendedPackages.length !== 1 ? 's' : ''}
-                                        </Badge>
-                                      </div>
-                                    </TooltipTrigger>
-                                    <TooltipContent className="max-w-md p-3" side="right">
-                                      <div className="space-y-2">
-                                        <p className="font-semibold text-sm mb-2">Recommended Packages:</p>
-                                        <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
-                                          {recommendedPackages.slice(0, 5).map((rec, idx) => {
-                                            const pkg = rec.pkg;
-                                            const pkgId = pkg.package_id || pkg.id;
-                                            const packageRestrictions: any[] = [];
-                                            if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
-                                              const restrictionSet = new Set<string>();
-                                              pkg.menu_items.forEach((item: any) => {
-                                                if (item.restriction_name && item.restriction_name !== 'None') {
-                                                  if (!restrictionSet.has(item.restriction_name)) {
-                                                    restrictionSet.add(item.restriction_name);
-                                                    packageRestrictions.push({
-                                                      restriction_name: item.restriction_name,
-                                                      restriction_type: item.restriction_type || 'Dietary'
-                                                    });
-                                                  }
-                                                }
-                                              });
+                                  <div className="space-y-2">
+                                    <div className="pb-2 border-b border-dashed">
+                                      <Badge variant="outline" className="gap-1">
+                                        <Package className="w-3 h-3" />
+                                        {recommendedPackages.length} Recommended Package{recommendedPackages.length !== 1 ? 's' : ''} (Based on Table Restrictions)
+                                      </Badge>
+                                    </div>
+                                    <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                                      {recommendedPackages.slice(0, 5).map((rec, idx) => {
+                                        const pkg = rec.pkg;
+                                        const pkgId = pkg.package_id || pkg.id;
+                                        const packageRestrictions: any[] = [];
+                                        if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                                          const restrictionSet = new Set<string>();
+                                          pkg.menu_items.forEach((item: any) => {
+                                            if (item.restriction_name && item.restriction_name !== 'None') {
+                                              if (!restrictionSet.has(item.restriction_name)) {
+                                                restrictionSet.add(item.restriction_name);
+                                                packageRestrictions.push({
+                                                  restriction_name: item.restriction_name,
+                                                  restriction_type: item.restriction_type || 'Dietary'
+                                                });
+                                              }
                                             }
-                                            return (
-                                              <div key={pkgId || idx} className="p-2 rounded border bg-background">
-                                                <div className="flex items-center gap-2 mb-1">
-                                                  <Package className="h-3 w-3" />
-                                                  <span className="font-medium text-xs">{pkg.package_name || pkg.packageName}</span>
-                                                  <Badge variant="outline" className="text-xs">ID: {pkgId}</Badge>
-                                                  <Badge variant="outline" className="text-xs">{pkg.package_type || 'Standard'}</Badge>
-                                                </div>
-                                                {packageRestrictions.length > 0 && (
-                                                  <div className="flex flex-wrap gap-1 mt-1">
-                                                    {packageRestrictions.slice(0, 3).map((r: any, rIdx: number) => {
-                                                      const Icon = getTypeIcon(r.restriction_type || 'Dietary');
-                                                      return (
-                                                        <Badge key={rIdx} variant="outline" className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}>
-                                                          <Icon className="h-2.5 w-2.5" />
-                                                          {r.restriction_name}
-                                                        </Badge>
-                                                      );
-                                                    })}
-                                                    {packageRestrictions.length > 3 && (
-                                                      <Badge variant="outline" className="text-xs">+{packageRestrictions.length - 3}</Badge>
-                                                    )}
-                                                  </div>
-                                                )}
-                                              </div>
-                                            );
-                                          })}
-                                          {recommendedPackages.length > 5 && (
-                                            <p className="text-xs text-muted-foreground mt-1">+{recommendedPackages.length - 5} more packages</p>
-                                          )}
-                                        </div>
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                ) : (
-                                  <p className="text-xs text-muted-foreground">No compatible packages found</p>
-                                )}
-                                {recommendedPackages.length > 0 ? (
-                                  <div className="space-y-1">
-                                    <Select
-                                      value=""
-                                      onValueChange={async (pkgId) => {
-                                        if (pkgId) {
-                                          const pkgIdNum = parseInt(pkgId);
-                                          // Call handleAssignPackage directly with parameters
-                                          try {
-                                            await handleAssignPackage(tableId, pkgIdNum);
-                                          } catch (error) {
-                                            console.error('Error assigning package:', error);
-                                          }
+                                          });
                                         }
-                                      }}
-                                    >
-                                      <SelectTrigger className="w-full h-8 text-xs">
-                                        <SelectValue placeholder="Quick Assign Package" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {recommendedPackages.slice(0, 5).map((rec) => {
-                                          const pkg = rec.pkg;
-                                          const pkgId = pkg.package_id || pkg.id;
-                                          return (
-                                            <SelectItem key={pkgId} value={pkgId?.toString() || ''}>
-                                              {pkg.package_name || pkg.packageName} (ID: {pkgId})
-                                            </SelectItem>
-                                          );
-                                        })}
-                                      </SelectContent>
-                                    </Select>
+                                        return (
+                                          <Button
+                                            key={pkgId || idx}
+                                            size="sm"
+                                            variant="outline"
+                                            className="w-full justify-start text-left h-auto py-2"
+                                            onClick={async () => {
+                                              try {
+                                                await handleAssignPackage(tableId, pkgId);
+                                              } catch (error) {
+                                                console.error('Error assigning package:', error);
+                                              }
+                                            }}
+                                          >
+                                            <div className="flex flex-col gap-1 w-full">
+                                              <div className="flex items-center gap-2">
+                                                <Package className="h-3 w-3 flex-shrink-0" />
+                                                <span className="font-medium text-xs flex-1">{pkg.package_name || pkg.packageName}</span>
+                                                <Badge variant="outline" className="text-xs">ID: {pkgId}</Badge>
+                                                <Badge variant="outline" className="text-xs">{pkg.package_type || 'Standard'}</Badge>
+                                              </div>
+                                              {packageRestrictions.length > 0 && (
+                                                <div className="flex flex-wrap gap-1 mt-1 ml-5">
+                                                  {packageRestrictions.slice(0, 2).map((r: any, rIdx: number) => {
+                                                    const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                                    return (
+                                                      <Badge key={rIdx} variant="outline" className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}>
+                                                        <Icon className="h-2.5 w-2.5" />
+                                                        {r.restriction_name}
+                                                      </Badge>
+                                                    );
+                                                  })}
+                                                  {packageRestrictions.length > 2 && (
+                                                    <Badge variant="outline" className="text-xs">+{packageRestrictions.length - 2}</Badge>
+                                                  )}
+                                                </div>
+                                              )}
+                                            </div>
+                                          </Button>
+                                        );
+                                      })}
+                                      {recommendedPackages.length > 5 && (
+                                        <p className="text-xs text-muted-foreground text-center mt-1">+{recommendedPackages.length - 5} more packages</p>
+                                      )}
+                                    </div>
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -4821,8 +4840,14 @@ const WeddingDetail = () => {
                                         setTimeout(() => {
                                           const formElement = document.getElementById('packageTable');
                                           if (formElement) {
-                                            formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                            formElement.focus();
+                                            formElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                            // Focus on the package select dropdown
+                                            setTimeout(() => {
+                                              const packageSelect = document.getElementById('packageSelectDropdown');
+                                              if (packageSelect) {
+                                                packageSelect.focus();
+                                              }
+                                            }, 300);
                                           }
                                         }, 100);
                                       }}
@@ -4865,10 +4890,10 @@ const WeddingDetail = () => {
               </CardContent>
             </Card>
 
-            <Card>
+            <Card id="packageTable">
               <CardHeader>
                 <CardTitle>Assign Package to Table</CardTitle>
-                <CardDescription>Assign a package to a specific table</CardDescription>
+                <CardDescription>Assign a package to a specific table (multiple packages allowed per table)</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -5969,7 +5994,7 @@ const WeddingDetail = () => {
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Assigned Guests</Label>
-                      <p className="font-semibold">{assignedCount}</p>
+                      <p className="font-semibold">{actualAssignedCount}{isCoupleTable ? ' (includes couple)' : ''}</p>
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Available Seats</Label>
