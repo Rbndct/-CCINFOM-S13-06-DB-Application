@@ -17,7 +17,11 @@ import {
   ChevronUp,
   ChevronLeft,
   ChevronRight,
-  Heart
+  Heart,
+  AlertCircle,
+  Info,
+  CheckCircle,
+  ArrowUpDown
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -333,6 +337,20 @@ const DietaryRestrictions = () => {
     return 'Low';
   };
 
+  // Get priority icon
+  const getPriorityIcon = (priority: string) => {
+    switch (priority) {
+      case 'High':
+        return AlertTriangle;
+      case 'Medium':
+        return AlertCircle;
+      case 'Low':
+        return CheckCircle;
+      default:
+        return Info;
+    }
+  };
+
   // Filtering and sorting
   const filteredRestrictions = restrictions.filter(restriction => {
     const matchesSearch = restriction.restriction_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -612,6 +630,23 @@ const DietaryRestrictions = () => {
                             <Table>
                               <TableHeader>
                                 <TableRow>
+                                  <TableHead className="w-[100px]">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8"
+                                      onClick={() => {
+                                        const newOrder = sortBy === 'id' && sortOrder === 'desc' ? 'asc' : 'desc';
+                                        setSortBy('id');
+                                        setSortOrder(newOrder);
+                                        localStorage.setItem('default_table_sort_by', 'id');
+                                        localStorage.setItem('default_table_sort_order', newOrder);
+                                      }}
+                                    >
+                                      Restriction ID
+                                      <ArrowUpDown className="ml-2 h-4 w-4" />
+                                    </Button>
+                                  </TableHead>
                                   <TableHead>Restriction Name</TableHead>
                                   <TableHead>Type</TableHead>
                                   <TableHead>Severity Level</TableHead>
@@ -627,10 +662,12 @@ const DietaryRestrictions = () => {
                                 {paginatedRestrictions.map((restriction) => (
                           <TableRow key={restriction.restriction_id}>
                             <TableCell className="font-medium">
+                              <Badge variant="outline" className="text-xs font-mono">
+                                #{restriction.restriction_id}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
-                                <Badge variant="outline" className="text-xs font-mono min-w-[3rem]">
-                                  {restriction.restriction_id}
-                                </Badge>
                                 <div className={`w-8 h-8 rounded-full ${getTypeColor(restriction.restriction_type)} flex items-center justify-center border`}>
                                   {(() => {
                                     const Icon = getTypeIcon(restriction.restriction_type);
@@ -695,9 +732,16 @@ const DietaryRestrictions = () => {
                               </Tooltip>
                             </TableCell>
                             <TableCell>
-                              <Badge variant={getPriority(restriction) === 'High' ? 'destructive' : getPriority(restriction) === 'Medium' ? 'secondary' : 'outline'}>
-                                {getPriority(restriction)}
-                              </Badge>
+                              {(() => {
+                                const priority = getPriority(restriction);
+                                const PriorityIcon = getPriorityIcon(priority);
+                                return (
+                                  <Badge variant={priority === 'High' ? 'destructive' : priority === 'Medium' ? 'secondary' : 'outline'}>
+                                    <PriorityIcon className="h-3 w-3 mr-1" />
+                                    {priority}
+                                  </Badge>
+                                );
+                              })()}
                             </TableCell>
                             <TableCell>
                               <DropdownMenu>
@@ -989,9 +1033,16 @@ const DietaryRestrictions = () => {
                   <div>
                     <Label className="text-muted-foreground">Priority</Label>
                     <div className="mt-1">
-                      <Badge variant={getPriority(selectedRestriction) === 'High' ? 'destructive' : getPriority(selectedRestriction) === 'Medium' ? 'secondary' : 'outline'}>
-                        {getPriority(selectedRestriction)}
-                      </Badge>
+                      {(() => {
+                        const priority = getPriority(selectedRestriction);
+                        const PriorityIcon = getPriorityIcon(priority);
+                        return (
+                          <Badge variant={priority === 'High' ? 'destructive' : priority === 'Medium' ? 'secondary' : 'outline'}>
+                            <PriorityIcon className="h-3 w-3 mr-1" />
+                            {priority}
+                          </Badge>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>

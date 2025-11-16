@@ -17,7 +17,9 @@ import {
   Loader2,
   TrendingUp,
   TrendingDown,
-  PackagePlus
+  PackagePlus,
+  AlertCircle,
+  Info
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -375,11 +377,21 @@ const Ingredients = () => {
 
   const getStockStatus = (stock: number, reorder: number) => {
     if (stock <= reorder) {
-      return { label: 'Low Stock', color: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700' };
+      return { label: 'Low Stock', color: 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700', icon: AlertTriangle };
     } else if (stock <= reorder * 1.5) {
-      return { label: 'Warning', color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700' };
+      return { label: 'Warning', color: 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700', icon: AlertCircle };
     }
-    return { label: 'In Stock', color: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700' };
+    return { label: 'In Stock', color: 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700', icon: CheckCircle };
+  };
+
+  // Get re-order level icon based on stock status
+  const getReorderLevelIcon = (stock: number, reorder: number) => {
+    if (stock <= reorder) {
+      return AlertTriangle; // Critical - below reorder level
+    } else if (stock <= reorder * 1.5) {
+      return AlertCircle; // Warning - approaching reorder level
+    }
+    return CheckCircle; // Good - well above reorder level
   };
 
   return (
@@ -527,7 +539,7 @@ const Ingredients = () => {
                             localStorage.setItem('ingredients_sort_order', newOrder);
                           }}
                         >
-                          ID
+                          Ingredient ID
                           <ArrowUpDown className="ml-2 h-4 w-4" />
                         </Button>
                       </TableHead>
@@ -600,8 +612,10 @@ const Ingredients = () => {
                           className="cursor-pointer hover:bg-muted/50"
                           onClick={() => handleViewIngredient(ingredient)}
                         >
-                          <TableCell className="font-medium text-xs text-muted-foreground">
-                            #{ingredient.ingredient_id || ingredient.id}
+                          <TableCell className="font-medium">
+                            <Badge variant="outline" className="text-xs font-mono">
+                              #{ingredient.ingredient_id || ingredient.id}
+                            </Badge>
                           </TableCell>
                           <TableCell className="font-medium">{ingredient.ingredient_name}</TableCell>
                           <TableCell>
@@ -611,12 +625,24 @@ const Ingredients = () => {
                             <span className="font-semibold">{stock.toLocaleString()}</span>
                           </TableCell>
                           <TableCell>
-                            <span className="text-muted-foreground">{reorder.toLocaleString()}</span>
+                            <div className="flex items-center gap-1.5">
+                              {(() => {
+                                const ReorderIcon = getReorderLevelIcon(stock, reorder);
+                                return <ReorderIcon className="h-3.5 w-3.5 text-muted-foreground" />;
+                              })()}
+                              <span className="text-muted-foreground">{reorder.toLocaleString()}</span>
+                            </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className={status.color}>
-                              {status.label}
-                            </Badge>
+                            {(() => {
+                              const StatusIcon = status.icon;
+                              return (
+                                <Badge variant="outline" className={status.color}>
+                                  <StatusIcon className="h-3 w-3 mr-1" />
+                                  {status.label}
+                                </Badge>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <span className="text-sm text-muted-foreground">
@@ -725,9 +751,19 @@ const Ingredients = () => {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Re-order Level</Label>
-                    <p className="font-semibold">
-                      {(parseFloat(selectedIngredient.re_order_level) || 0).toLocaleString()} {selectedIngredient.unit}
-                    </p>
+                    <div className="mt-1 flex items-center gap-1.5">
+                      {(() => {
+                        const stock = parseFloat(selectedIngredient.stock_quantity) || 0;
+                        const reorder = parseFloat(selectedIngredient.re_order_level) || 0;
+                        const ReorderIcon = getReorderLevelIcon(stock, reorder);
+                        return (
+                          <>
+                            <ReorderIcon className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-semibold">{(parseFloat(selectedIngredient.re_order_level) || 0).toLocaleString()} {selectedIngredient.unit}</span>
+                          </>
+                        );
+                      })()}
+                    </div>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Stock Status</Label>
@@ -736,8 +772,10 @@ const Ingredients = () => {
                         const stock = parseFloat(selectedIngredient.stock_quantity) || 0;
                         const reorder = parseFloat(selectedIngredient.re_order_level) || 0;
                         const status = getStockStatus(stock, reorder);
+                        const StatusIcon = status.icon;
                         return (
                           <Badge variant="outline" className={status.color}>
+                            <StatusIcon className="h-3 w-3 mr-1" />
                             {status.label}
                           </Badge>
                         );
