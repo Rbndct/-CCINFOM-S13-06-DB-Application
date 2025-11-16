@@ -40,7 +40,9 @@ import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
-import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, getSeverityBadge, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
+import { useDateFormat } from '@/context/DateFormatContext';
+import { useTimeFormat } from '@/context/TimeFormatContext';
 
 type Couple = {
   couple_id: number;
@@ -221,14 +223,12 @@ const CoupleDetail = () => {
       const response = await dietaryRestrictionsAPI.getAll();
       const allRestrictions = response.data || [];
       
-      // Find and store the "None" restriction ID
-      const noneRestriction = allRestrictions.find((r: any) => r.restriction_name === 'None');
-      if (noneRestriction) {
-        setNoneRestrictionId(noneRestriction.restriction_id);
-      }
+      // Get and store the "None" restriction ID using utility function
+      const noneId = getNoneRestrictionId(allRestrictions);
+      setNoneRestrictionId(noneId);
       
-      // Filter out "None" from the displayed list
-      const displayableRestrictions = allRestrictions.filter((r: any) => r.restriction_name !== 'None');
+      // Filter out "None" from the displayed list using utility function
+      const displayableRestrictions = filterNoneFromDisplay(allRestrictions);
       setDietaryRestrictions(displayableRestrictions);
     } catch (error: any) {
       console.error('Error fetching dietary restrictions:', error);
@@ -271,21 +271,17 @@ const CoupleDetail = () => {
       return;
     }
 
-    // Prepare restriction IDs: if none selected, use "None"; otherwise use selected ones
-    let finalRestrictionIds = [...preferenceForm.restriction_ids];
+    // Auto-assign "None" if no restrictions selected using utility function
+    const finalRestrictionIds = ensureNoneRestriction(preferenceForm.restriction_ids, noneRestrictionId);
     
-    // If no restrictions selected, automatically add "None"
+    // If no restrictions selected and "None" ID not found, show error
     if (finalRestrictionIds.length === 0) {
-      if (noneRestrictionId) {
-        finalRestrictionIds = [noneRestrictionId];
-      } else {
-        toast({
-          title: 'Validation Error',
-          description: 'Please select at least one dietary restriction',
-          variant: 'destructive',
-        });
-        return;
-      }
+      toast({
+        title: 'Validation Error',
+        description: 'Unable to assign default restriction. Please try again.',
+        variant: 'destructive',
+      });
+      return;
     }
 
     setPreferenceLoading(true);
