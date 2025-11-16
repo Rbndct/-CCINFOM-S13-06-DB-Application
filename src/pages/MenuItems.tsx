@@ -65,7 +65,7 @@ const MenuItems = () => {
   const [menuItems, setMenuItems] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
-  const [sortBy, setSortBy] = useState<'name' | 'type' | 'price' | 'cost' | 'stock'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'type' | 'price' | 'cost' | 'makeable'>('name');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
@@ -88,7 +88,6 @@ const MenuItems = () => {
     menu_cost: '',
     menu_price: '',
     menu_type: '',
-    stock: '',
     restriction_id: ''
   });
   const [formLoading, setFormLoading] = useState(false);
@@ -125,7 +124,7 @@ const MenuItems = () => {
             menu_cost: parseFloat(item.menu_cost) || 0,
             menu_price: parseFloat(item.menu_price) || 0,
             menu_type: item.menu_type,
-            stock: item.stock || 0,
+            makeable_quantity: item.makeable_quantity ?? 0,
             restriction_id: item.restriction_id,
             restriction_name: item.restriction_name,
             profit_margin: parseFloat(item.profit_margin) || 0,
@@ -141,7 +140,7 @@ const MenuItems = () => {
             menu_cost: parseFloat(item.menu_cost) || 0,
             menu_price: parseFloat(item.menu_price) || 0,
             menu_type: item.menu_type,
-            stock: item.stock || 0,
+            makeable_quantity: item.makeable_quantity ?? 0,
             restriction_id: item.restriction_id,
             restriction_name: item.restriction_name,
             profit_margin: parseFloat(item.profit_margin) || 0,
@@ -196,7 +195,6 @@ const MenuItems = () => {
       menu_cost: (item.menu_cost || 0).toString(),
       menu_price: (item.menu_price || 0).toString(),
       menu_type: item.menu_type || '',
-      stock: (item.stock || 0).toString(),
       restriction_id: (item.restriction_id || '').toString()
     });
     setEditDialogOpen(true);
@@ -215,7 +213,6 @@ const MenuItems = () => {
       menu_cost: '',
       menu_price: '',
       menu_type: '',
-      stock: '',
       restriction_id: ''
     });
     setSelectedItem(null);
@@ -224,7 +221,7 @@ const MenuItems = () => {
   
   // Save menu item (create or update)
   const handleSaveItem = async () => {
-    if (!formData.menu_name || !formData.menu_cost || !formData.menu_price || !formData.menu_type || !formData.stock) {
+    if (!formData.menu_name || !formData.menu_cost || !formData.menu_price || !formData.menu_type) {
       toast({
         title: 'Validation Error',
         description: 'Please fill in all required fields',
@@ -240,7 +237,6 @@ const MenuItems = () => {
         menu_cost: parseFloat(formData.menu_cost),
         menu_price: parseFloat(formData.menu_price),
         menu_type: formData.menu_type,
-        stock: parseInt(formData.stock),
         restriction_id: formData.restriction_id ? parseInt(formData.restriction_id) : null
       };
       
@@ -266,7 +262,7 @@ const MenuItems = () => {
           menu_cost: parseFloat(item.menu_cost) || 0,
           menu_price: parseFloat(item.menu_price) || 0,
           menu_type: item.menu_type,
-          stock: item.stock || 0,
+          makeable_quantity: item.makeable_quantity ?? 0,
           restriction_id: item.restriction_id,
           restriction_name: item.restriction_name,
           profit_margin: parseFloat(item.profit_margin) || 0,
@@ -306,7 +302,7 @@ const MenuItems = () => {
           menu_cost: parseFloat(item.menu_cost) || 0,
           menu_price: parseFloat(item.menu_price) || 0,
           menu_type: item.menu_type,
-          stock: item.stock || 0,
+          makeable_quantity: item.makeable_quantity ?? 0,
           restriction_id: item.restriction_id,
           restriction_name: item.restriction_name,
           profit_margin: parseFloat(item.profit_margin) || 0,
@@ -335,13 +331,13 @@ const MenuItems = () => {
     setCurrentPage(1);
   };
 
-  const getStockStatus = (stock: number) => {
-    if (stock === 0) {
-      return <Badge variant="destructive" className="bg-red-100 text-red-800">Out of Stock</Badge>;
-    } else if (stock < 10) {
-      return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Low Stock</Badge>;
+  const getMakeableStatus = (qty: number) => {
+    if (!qty || qty <= 0) {
+      return <Badge variant="destructive" className="bg-red-100 text-red-800">Unavailable</Badge>;
+    } else if (qty < 10) {
+      return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Low Availability</Badge>;
     } else {
-      return <Badge className="bg-green-100 text-green-800">In Stock</Badge>;
+      return <Badge className="bg-green-100 text-green-800">Available</Badge>;
     }
   };
 
@@ -383,9 +379,9 @@ const MenuItems = () => {
           aVal = a.menu_cost || 0;
           bVal = b.menu_cost || 0;
           break;
-        case 'stock':
-          aVal = a.stock || 0;
-          bVal = b.stock || 0;
+        case 'makeable':
+          aVal = a.makeable_quantity || 0;
+          bVal = b.makeable_quantity || 0;
           break;
         default:
           return 0;
@@ -552,12 +548,12 @@ const MenuItems = () => {
                       <label className="text-sm text-muted-foreground">Sort By</label>
                       <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
                         <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
-                        <SelectContent>
+                      <SelectContent>
                           <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="type">Type</SelectItem>
                           <SelectItem value="price">Price</SelectItem>
                           <SelectItem value="cost">Cost</SelectItem>
-                          <SelectItem value="stock">Stock</SelectItem>
+                        <SelectItem value="makeable">Makeable Qty</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -583,7 +579,7 @@ const MenuItems = () => {
                       <TableHead>Cost</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Profit Margin</TableHead>
-                      <TableHead>Stock</TableHead>
+                      <TableHead>Makeable Qty</TableHead>
                       <TableHead>Restrictions</TableHead>
                       {activeTab === 'templates' && <TableHead>Usage</TableHead>}
                       <TableHead className="w-[50px]"></TableHead>
@@ -647,8 +643,8 @@ const MenuItems = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{item.stock || 0}</span>
-                              {getStockStatus(item.stock || 0)}
+                              <span className="text-sm font-medium">{item.makeable_quantity ?? 0}</span>
+                              {getMakeableStatus(item.makeable_quantity ?? 0)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -791,12 +787,12 @@ const MenuItems = () => {
                       <label className="text-sm text-muted-foreground">Sort By</label>
                       <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
                         <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
-                        <SelectContent>
+                      <SelectContent>
                           <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="type">Type</SelectItem>
                           <SelectItem value="price">Price</SelectItem>
                           <SelectItem value="cost">Cost</SelectItem>
-                          <SelectItem value="stock">Stock</SelectItem>
+                        <SelectItem value="makeable">Makeable Qty</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -822,7 +818,7 @@ const MenuItems = () => {
                       <TableHead>Cost</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Profit Margin</TableHead>
-                      <TableHead>Stock</TableHead>
+                      <TableHead>Makeable Qty</TableHead>
                       <TableHead>Restrictions</TableHead>
                       <TableHead>Wedding</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
@@ -878,8 +874,8 @@ const MenuItems = () => {
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{item.stock || 0}</span>
-                              {getStockStatus(item.stock || 0)}
+                              <span className="text-sm font-medium">{item.makeable_quantity ?? 0}</span>
+                              {getMakeableStatus(item.makeable_quantity ?? 0)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -1004,10 +1000,10 @@ const MenuItems = () => {
                   <div className="mt-1">{getTypeBadge(selectedItem?.menu_type)}</div>
                 </div>
                 <div>
-                  <Label className="text-sm font-medium text-muted-foreground">Stock</Label>
+                  <Label className="text-sm font-medium text-muted-foreground">Makeable Qty</Label>
                   <div className="mt-1 flex items-center gap-2">
-                    <span className="text-lg font-semibold">{selectedItem?.stock || 0}</span>
-                    {getStockStatus(selectedItem?.stock || 0)}
+                    <span className="text-lg font-semibold">{selectedItem?.makeable_quantity ?? 0}</span>
+                    {getMakeableStatus(selectedItem?.makeable_quantity ?? 0)}
                   </div>
                 </div>
                 <div>
@@ -1148,16 +1144,6 @@ const MenuItems = () => {
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="stock">Stock Quantity *</Label>
-                  <Input
-                    id="stock"
-                    type="number"
-                    value={formData.stock}
-                    onChange={(e) => setFormData({...formData, stock: e.target.value})}
-                    placeholder="0"
-                  />
-                </div>
                 <div className="space-y-2">
                   <Label htmlFor="restriction_id">Dietary Restriction</Label>
                   <Select value={formData.restriction_id} onValueChange={(val) => setFormData({...formData, restriction_id: val})}>

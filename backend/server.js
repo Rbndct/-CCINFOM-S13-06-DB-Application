@@ -32,6 +32,8 @@ const tablesRoutes = require('./routes/tables');
 const menuItemsRoutes = require('./routes/menu-items');
 const packagesRoutes = require('./routes/packages');
 const inventoryRoutes = require('./routes/inventory');
+const ingredientsRoutes = require('./routes/ingredients');
+const reportsRoutes = require('./routes/reports');
 const databaseRoutes = require('./routes/database');
 const healthRoute = require('./routes/health');
 
@@ -44,6 +46,8 @@ app.use('/tables', tablesRoutes);
 app.use('/menu-items', menuItemsRoutes);
 app.use('/packages', packagesRoutes);
 app.use('/inventory', inventoryRoutes);
+app.use('/ingredients', ingredientsRoutes);
+app.use('/reports', reportsRoutes);
 app.use('/database', databaseRoutes);
 app.use('/health', healthRoute);
 

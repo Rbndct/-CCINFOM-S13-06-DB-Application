@@ -13,12 +13,18 @@ router.get('/', async (req, res) => {
         m.menu_cost,
         m.menu_price,
         m.menu_type,
-        m.stock,
         m.restriction_id,
         dr.restriction_name,
         dr.restriction_type,
         dr.severity_level,
-        (m.menu_price - m.menu_cost) as profit_margin
+        (m.menu_price - m.menu_cost) as profit_margin,
+        (
+          SELECT 
+            MIN(FLOOR(i2.stock_quantity / NULLIF(r2.quantity_needed, 0)))
+          FROM recipe r2
+          JOIN ingredient i2 ON i2.ingredient_id = r2.ingredient_id
+          WHERE r2.menu_item_id = m.menu_item_id
+        ) AS makeable_quantity
       FROM menu_item m
       LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE 1=1
@@ -34,12 +40,18 @@ router.get('/', async (req, res) => {
           m.menu_cost,
           m.menu_price,
           m.menu_type,
-          m.stock,
           m.restriction_id,
           dr.restriction_name,
           dr.restriction_type,
           dr.severity_level,
           (m.menu_price - m.menu_cost) as profit_margin,
+          (
+            SELECT 
+              MIN(FLOOR(i2.stock_quantity / NULLIF(r2.quantity_needed, 0)))
+            FROM recipe r2
+            JOIN ingredient i2 ON i2.ingredient_id = r2.ingredient_id
+            WHERE r2.menu_item_id = m.menu_item_id
+          ) AS makeable_quantity,
           COUNT(DISTINCT tp.table_id) as usage_count
         FROM menu_item m
         LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
@@ -89,12 +101,18 @@ router.get('/:id', async (req, res) => {
         m.menu_cost,
         m.menu_price,
         m.menu_type,
-        m.stock,
         m.restriction_id,
         dr.restriction_name,
         dr.restriction_type,
         dr.severity_level,
-        (m.menu_price - m.menu_cost) as profit_margin
+        (m.menu_price - m.menu_cost) as profit_margin,
+        (
+          SELECT 
+            MIN(FLOOR(i2.stock_quantity / NULLIF(r2.quantity_needed, 0)))
+          FROM recipe r2
+          JOIN ingredient i2 ON i2.ingredient_id = r2.ingredient_id
+          WHERE r2.menu_item_id = m.menu_item_id
+        ) AS makeable_quantity
       FROM menu_item m
       LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE m.menu_item_id = ?`,
@@ -149,20 +167,20 @@ router.post('/', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const {menu_name, menu_cost, menu_price, menu_type, stock, restriction_id} = req.body;
+    const {menu_name, menu_cost, menu_price, menu_type, restriction_id} = req.body;
 
-    if (!menu_name || !menu_cost || !menu_price || !menu_type || stock === undefined) {
+    if (!menu_name || !menu_cost || !menu_price || !menu_type) {
       await connection.rollback();
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: menu_name, menu_cost, menu_price, menu_type, stock'
+        error: 'Missing required fields: menu_name, menu_cost, menu_price, menu_type'
       });
     }
 
     const [result] = await connection.query(
-      `INSERT INTO menu_item (menu_name, menu_cost, menu_price, menu_type, stock, restriction_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [menu_name, menu_cost, menu_price, menu_type, stock, restriction_id || null]
+      `INSERT INTO menu_item (menu_name, menu_cost, menu_price, menu_type, restriction_id)
+       VALUES (?, ?, ?, ?, ?)`,
+      [menu_name, menu_cost, menu_price, menu_type, restriction_id || null]
     );
 
     await connection.commit();
@@ -175,7 +193,6 @@ router.post('/', async (req, res) => {
         menu_cost,
         menu_price,
         menu_type,
-        stock,
         restriction_id: restriction_id || null
       }
     });
@@ -198,7 +215,7 @@ router.put('/:id', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const {menu_name, menu_cost, menu_price, menu_type, stock, restriction_id} = req.body;
+    const {menu_name, menu_cost, menu_price, menu_type, restriction_id} = req.body;
     const menuItemId = req.params.id;
 
     // Check if menu item exists
@@ -218,9 +235,9 @@ router.put('/:id', async (req, res) => {
     // Update menu item
     await connection.query(
       `UPDATE menu_item 
-       SET menu_name = ?, menu_cost = ?, menu_price = ?, menu_type = ?, stock = ?, restriction_id = ?
+       SET menu_name = ?, menu_cost = ?, menu_price = ?, menu_type = ?, restriction_id = ?
        WHERE menu_item_id = ?`,
-      [menu_name, menu_cost, menu_price, menu_type, stock, restriction_id || null, menuItemId]
+      [menu_name, menu_cost, menu_price, menu_type, restriction_id || null, menuItemId]
     );
 
     await connection.commit();

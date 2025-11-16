@@ -275,4 +275,12 @@ export const inventoryAllocationAPI = {
   delete: (allocationId) => api.delete(`/inventory/allocations/${allocationId}`),
 };
 
+export const ingredientsAPI = {
+  getAll: () => api.get('/ingredients'),
+  create: (data) => api.post('/ingredients', data),
+  update: (id, data) => api.put(`/ingredients/${id}`, data),
+  restock: (id, delta) => api.put(`/ingredients/${id}/restock`, { delta }),
+  delete: (id) => api.delete(`/ingredients/${id}`),
+};
+
 export default api;

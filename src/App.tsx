@@ -19,6 +19,7 @@ import Inventory from "./pages/Inventory";
 import SeatingTables from "./pages/SeatingTables";
 import DietaryRestrictions from "./pages/DietaryRestrictions";
 import Reports from "./pages/Reports";
+import Logistics from "./pages/Logistics";
 import Settings from "./pages/Settings";
 
 const queryClient = new QueryClient();
@@ -44,6 +45,7 @@ const App = () => (
           <Route path="/dashboard/packages" element={<Packages />} />
           <Route path="/dashboard/tables" element={<SeatingTables />} />
           <Route path="/dashboard/inventory" element={<Inventory />} />
+          <Route path="/dashboard/ingredient-restock" element={<Logistics />} />
           <Route path="/dashboard/dietary" element={<DietaryRestrictions />} />
           <Route path="/dashboard/reports" element={<Reports />} />
           <Route path="/dashboard/settings" element={<Settings />} />
