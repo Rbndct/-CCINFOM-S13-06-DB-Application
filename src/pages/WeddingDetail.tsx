@@ -1341,17 +1341,21 @@ const WeddingDetail = () => {
     }
     
     // Check table capacity (count guests that will remain after reassignment)
+    // For couple tables, always count the 2 partners as assigned
+    const isCoupleTable = (table.category || table.table_category || '').toLowerCase() === 'couple';
+    const partnerCount = isCoupleTable ? 2 : 0;
     const guestsStayingOnTable = guests.filter(g => g.table_id === tableId && g.id !== guestId).length;
-    const totalAfterAssignment = guestsStayingOnTable + 1;
-    const available = (table.capacity || 0) - guestsStayingOnTable;
+    const totalAfterAssignment = guestsStayingOnTable + partnerCount + 1; // +1 for the guest being assigned
+    const capacity = table.capacity || 0;
+    const available = capacity - guestsStayingOnTable - partnerCount;
     
-    if (totalAfterAssignment > (table.capacity || 0)) {
+    if (totalAfterAssignment > capacity) {
       toast({
-        title: 'Error',
-        description: `Table ${table.tableNumber || table.table_number} is at full capacity (${table.capacity || 0})`,
-        variant: 'destructive',
+        title: 'Warning',
+        description: `Table ${table.tableNumber || table.table_number} capacity will be exceeded (${capacity} max, ${totalAfterAssignment} after assignment). Do you want to continue?`,
+        variant: 'default',
       });
-      return;
+      // Still allow assignment - backend will handle validation
     }
     
     setAllocationLoading(true);
@@ -3148,19 +3152,6 @@ const WeddingDetail = () => {
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => {
-                                  setAllocationTableId(tableId.toString());
-                                  // Scroll to assignment form
-                                  setTimeout(() => {
-                                    const formElement = document.getElementById('allocationTable');
-                                    if (formElement) {
-                                      formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                    }
-                                  }, 100);
-                                }}>
-                                  <Users className="mr-2 h-4 w-4" />
-                                  Assign Guest
-                                </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleEditTable(table)}>
                                   <Edit className="mr-2 h-4 w-4" />
                                   Edit
@@ -3384,30 +3375,6 @@ const WeddingDetail = () => {
                                 })()}
                               </div>
                               
-                              {/* Assign Guest Button for Couple Tables with capacity > 2 */}
-                              {capacity > 2 && available > 0 && (
-                                <div className="mt-3 pt-3 border-t border-blue-200">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full text-xs"
-                                    onClick={() => {
-                                      setAllocationTableId(tableId.toString());
-                                      // Scroll to assignment form
-                                      setTimeout(() => {
-                                        const formElement = document.getElementById('allocationTable');
-                                        if (formElement) {
-                                          formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                                        }
-                                      }, 100);
-                                    }}
-                                    disabled={available === 0}
-                                  >
-                                    <Plus className="h-3 w-3 mr-1" />
-                                    Assign Guest to This Table
-                                  </Button>
-                                </div>
-                              )}
                               
                               {/* Assigned Guests Section - Show all guests including partners if they exist as guests */}
                               {assignedGuestsList.length > 0 && (
@@ -3477,21 +3444,8 @@ const WeddingDetail = () => {
                             </>
                           ) : (
                             <>
-                              <div className="flex items-center justify-between mb-2">
+                              <div className="mb-2">
                                 <p className="text-sm font-medium">Assigned Guests:</p>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-7 text-xs"
-                                  onClick={() => {
-                                    setAllocationTableId(tableId.toString());
-                                    // Scroll to assignment form or open a modal
-                                  }}
-                                  disabled={available === 0}
-                                >
-                                  <Plus className="h-3 w-3 mr-1" />
-                                  Assign Guest
-                                </Button>
                               </div>
                               {assignedGuestsList.length === 0 ? (
                                 <p className="text-sm text-muted-foreground">No guests assigned</p>
@@ -3699,19 +3653,19 @@ const WeddingDetail = () => {
                           const capacity = table.capacity || 0;
                           const available = Math.max(0, capacity - assignedCount);
                         const categoryColors: Record<string, string> = {
-                          'VIP': 'bg-purple-200 border-purple-400',
-                            'kids': 'bg-blue-200 border-blue-400',
-                            'elderly': 'bg-orange-200 border-orange-400',
-                            'family': 'bg-green-200 border-green-400',
-                            'entourage': 'bg-indigo-200 border-indigo-400',
-                            'friends': 'bg-cyan-200 border-cyan-400',
-                            'vendor': 'bg-yellow-200 border-yellow-400',
-                            'staff': 'bg-gray-200 border-gray-400',
-                            'reserved': 'bg-amber-200 border-amber-400',
-                            'special_needs': 'bg-red-200 border-red-400',
-                            'couple': 'bg-pink-200 border-pink-400',
-                            'guest': 'bg-blue-200 border-blue-400',
-                          'General': 'bg-gray-200 border-gray-400'
+                          'VIP': 'bg-purple-200 dark:bg-purple-900 border-purple-400 dark:border-purple-600',
+                            'kids': 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-600',
+                            'elderly': 'bg-orange-200 dark:bg-orange-900 border-orange-400 dark:border-orange-600',
+                            'family': 'bg-green-200 dark:bg-green-900 border-green-400 dark:border-green-600',
+                            'entourage': 'bg-indigo-200 dark:bg-indigo-900 border-indigo-400 dark:border-indigo-600',
+                            'friends': 'bg-cyan-200 dark:bg-cyan-900 border-cyan-400 dark:border-cyan-600',
+                            'vendor': 'bg-yellow-200 dark:bg-yellow-900 border-yellow-400 dark:border-yellow-600',
+                            'staff': 'bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-500',
+                            'reserved': 'bg-amber-200 dark:bg-amber-900 border-amber-400 dark:border-amber-600',
+                            'special_needs': 'bg-red-200 dark:bg-red-900 border-red-400 dark:border-red-600',
+                            'couple': 'bg-pink-200 dark:bg-pink-900 border-pink-400 dark:border-pink-600',
+                            'guest': 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-600',
+                          'General': 'bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-500'
                         };
                           const tableCategory = table.category || table.table_category || 'General';
                           const tableNum = table.tableNumber || table.table_number || 'Unknown';
@@ -3726,6 +3680,9 @@ const WeddingDetail = () => {
                           const defaultX = 10 + ((tableId || 0) % 6) * 15;
                           const defaultY = 10 + Math.floor((tableId || 0) / 6) * 20;
                           const position = tablePositions[tableId] || { x: defaultX, y: defaultY };
+                          
+                          // Calculate assigned count including partners for couple tables (for display)
+                          const actualAssignedCount = assignedCount; // Already includes partners from line 3648
                           
                         return (
                           <div
@@ -3756,14 +3713,15 @@ const WeddingDetail = () => {
                                   const maxSize = 120;
                                   const sizeStep = (maxSize - minSize) / 14; // 14 steps from 1 to 15
                                   const tableSize = Math.max(minSize, Math.min(maxSize, minSize + (capacity - 1) * sizeStep));
-                                  const chairRadius = capacity > 1 ? tableSize * 0.35 : 0; // Scale chair radius with table size, no chairs for capacity 1
+                                  // Always show chairs for all capacity levels
+                                  const chairRadius = capacity === 1 ? tableSize * 0.25 : tableSize * 0.35; // Smaller radius for capacity 1
                                   
                                   return (
                                     <>
                                       {/* Chairs arranged around table in a circle */}
                                       <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 1 }}>
                                         {Array.from({ length: capacity }, (_, i) => {
-                                          const angle = (i * 360) / capacity;
+                                          const angle = capacity === 1 ? 0 : (i * 360) / capacity; // For capacity 1, place at top
                                           const radian = (angle * Math.PI) / 180;
                                           const chairX = Math.cos(radian) * chairRadius;
                                           const chairY = Math.sin(radian) * chairRadius;
@@ -3782,15 +3740,15 @@ const WeddingDetail = () => {
                                                   : 'bg-green-500 dark:bg-green-600 border-green-600 dark:border-green-700'
                                               }`}
                                               style={{
-                                                width: '10px',
-                                                height: '10px',
+                                                width: capacity === 1 ? '8px' : '10px',
+                                                height: capacity === 1 ? '8px' : '10px',
                                                 left: `calc(50% + ${chairX}px)`,
                                                 top: `calc(50% + ${chairY}px)`,
                                                 transform: 'translate(-50%, -50%)',
                                                 zIndex: 1,
                                                 boxShadow: isOccupied 
-                                                  ? '0 0 0 1px rgba(220, 38, 38, 0.2), 0 0 0 1px rgba(239, 68, 68, 0.3) inset' 
-                                                  : '0 0 0 1px rgba(34, 197, 94, 0.2), 0 0 0 1px rgba(22, 163, 74, 0.3) inset'
+                                                  ? '0 0 0 1px rgba(220, 38, 38, 0.3), 0 0 0 2px rgba(239, 68, 68, 0.2) inset' 
+                                                  : '0 0 0 1px rgba(34, 197, 94, 0.3), 0 0 0 2px rgba(22, 163, 74, 0.2) inset'
                                               }}
                                               title={`Seat ${i + 1}: ${isOccupied ? 'Occupied' : 'Available'}`}
                                             />
@@ -3805,18 +3763,17 @@ const WeddingDetail = () => {
                                           width: `${tableSize}px`,
                                           height: `${tableSize}px`,
                                           zIndex: 2,
-                                          backgroundColor: categoryColors[tableCategory] || categoryColors[tableCategory.toLowerCase()] || 'rgb(229, 231, 235)',
                                           minWidth: '50px',
                                           minHeight: '50px'
                                         }}
-                                        title={`${displayTableNum} - ${assignedCount}/${capacity} guests`}
+                                        title={`${displayTableNum} - ${actualAssignedCount}/${capacity} guests`}
                                       >
-                                        <div className="font-semibold text-[10px] leading-tight relative z-10 dark:text-gray-100 truncate max-w-full px-0.5">{displayTableNum}</div>
+                                        <div className="font-semibold text-[10px] leading-tight relative z-10 text-gray-900 dark:text-gray-100 truncate max-w-full px-0.5">{displayTableNum}</div>
                                         {capacity > 1 && (
-                                          <div className="text-[7px] text-muted-foreground dark:text-gray-400 mt-0.5 relative z-10">ID: {tableId}</div>
+                                          <div className="text-[7px] text-gray-600 dark:text-gray-400 mt-0.5 relative z-10">ID: {tableId}</div>
                                         )}
-                                        <div className="text-[9px] mt-0.5 font-medium relative z-10 dark:text-gray-200">{assignedCount}/{capacity}</div>
-                                        {available === 0 && (
+                                        <div className="text-[9px] mt-0.5 font-medium relative z-10 text-gray-800 dark:text-gray-200">{actualAssignedCount}/{capacity}</div>
+                                        {(capacity - actualAssignedCount) === 0 && (
                                           <div className="text-[7px] text-red-600 dark:text-red-400 mt-0.5 font-bold relative z-10">Full</div>
                                         )}
                                       </div>
@@ -4638,9 +4595,9 @@ const WeddingDetail = () => {
                               <Badge variant="secondary">{allocation.item_condition}</Badge>
                             </TableCell>
                             <TableCell>{allocation.quantity_used}</TableCell>
-                            <TableCell>${(allocation.rental_cost || 0).toFixed(2)}</TableCell>
+                            <TableCell>${(typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0).toFixed(2)}</TableCell>
                             <TableCell className="font-semibold">
-                              ${((allocation.quantity_used || 0) * (allocation.rental_cost || 0)).toFixed(2)}
+                              ${((allocation.quantity_used || 0) * (typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0)).toFixed(2)}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
@@ -4703,10 +4660,12 @@ const WeddingDetail = () => {
               const table = selectedTableForView;
               const tableId = table.id || table.table_id;
               const tableGuests = guests.filter(g => g && g.table_id === tableId);
-              const assignedCount = tableGuests.length;
-              const capacity = table.capacity || 0;
-              const available = capacity - assignedCount;
               const isCoupleTable = (table.category || table.table_category || '').toLowerCase() === 'couple';
+              const partnerCount = isCoupleTable ? 2 : 0;
+              const assignedCount = tableGuests.length;
+              const actualAssignedCount = assignedCount + partnerCount;
+              const capacity = table.capacity || 0;
+              const available = Math.max(0, capacity - actualAssignedCount);
               const partner1Name = wedding?.partner1 || wedding?.partner1_name || '';
               const partner2Name = wedding?.partner2 || wedding?.partner2_name || '';
               
@@ -4897,10 +4856,36 @@ const WeddingDetail = () => {
                 </div>
               );
             })()}
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setViewTableOpen(false)}>
-                Close
+            <DialogFooter className="flex items-center justify-between sm:justify-between">
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (selectedTableForView && window.confirm(`Are you sure you want to delete ${selectedTableForView.tableNumber || selectedTableForView.table_number || 'this table'}? This action cannot be undone.`)) {
+                    handleDeleteTable(selectedTableForView.id || selectedTableForView.table_id);
+                    setViewTableOpen(false);
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Table
               </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (selectedTableForView) {
+                      handleEditTable(selectedTableForView);
+                      setViewTableOpen(false);
+                    }
+                  }}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button variant="outline" onClick={() => setViewTableOpen(false)}>
+                  Close
+                </Button>
+              </div>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -5340,7 +5325,7 @@ const WeddingDetail = () => {
                     <div className="p-3 bg-muted rounded-lg text-sm">
                       <p><strong>Available:</strong> {selectedItem.quantity_available}</p>
                       <p><strong>Condition:</strong> {selectedItem.item_condition}</p>
-                      <p><strong>Default Rental Cost:</strong> ${(selectedItem.rental_cost || 0).toFixed(2)} per unit</p>
+                      <p><strong>Default Rental Cost:</strong> ${(typeof selectedItem.rental_cost === 'number' ? selectedItem.rental_cost : parseFloat(selectedItem.rental_cost || '0') || 0).toFixed(2)} per unit</p>
                     </div>
                   ) : null;
                 })()}
@@ -5533,7 +5518,7 @@ const WeddingDetail = () => {
                 <p className="font-medium">{selectedAllocation.item_name}</p>
                 <p className="text-sm text-muted-foreground">
                   Quantity: {selectedAllocation.quantity_used} • 
-                  Total Cost: ${((selectedAllocation.quantity_used || 0) * (selectedAllocation.rental_cost || 0)).toFixed(2)}
+                  Total Cost: ${((selectedAllocation.quantity_used || 0) * (typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0)).toFixed(2)}
                 </p>
               </div>
             )}
