@@ -16,7 +16,8 @@ import {
   ChevronDown,
   ChevronUp,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Heart
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -63,7 +64,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { dietaryRestrictionsAPI } from '@/api';
-import { getTypeIcon, getTypeColor, getSeverityBadge } from '@/utils/restrictionUtils';
+import { useDateFormat } from '@/context/DateFormatContext';
+import { getTypeIcon, getTypeColor, getSeverityBadge, filterNoneFromDisplay } from '@/utils/restrictionUtils';
 
 type DietaryRestriction = {
   restriction_id: number;
@@ -73,6 +75,7 @@ type DietaryRestriction = {
   affected_guests: number;
   menu_items_count: number;
   couple_preferences_count: number;
+  affected_couples: number;
   affected_guests_list?: Array<{
     guest_id: number;
     guest_name: string;
@@ -86,17 +89,30 @@ type DietaryRestriction = {
     category: string;
     price: number;
   }>;
+  affected_couples_list?: Array<{
+    couple_id: number;
+    partner1_name: string;
+    partner2_name: string;
+    preference_count: number;
+  }>;
 };
 
 const DietaryRestrictions = () => {
+  const { formatDate } = useDateFormat();
   const { toast } = useToast();
   const [restrictions, setRestrictions] = useState<DietaryRestriction[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [filterSeverity, setFilterSeverity] = useState('all');
-  const [sortBy, setSortBy] = useState<'name' | 'severity' | 'type' | 'guests' | 'menu'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'id' | 'name' | 'severity' | 'type' | 'guests' | 'menu' | 'couples'>(() => {
+    const stored = localStorage.getItem('default_table_sort_by');
+    return (stored as 'id' | 'name' | 'severity' | 'type' | 'guests' | 'menu' | 'couples') || 'id';
+  });
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
+  });
   const [groupBy, setGroupBy] = useState<'none' | 'type' | 'severity'>('none');
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
@@ -128,7 +144,10 @@ const DietaryRestrictions = () => {
     try {
       setLoading(true);
       const response = await dietaryRestrictionsAPI.getAll();
-      setRestrictions(response.data || []);
+      const allRestrictions = response.data || [];
+      // Filter out "None" from the display (it's a system restriction) using utility function
+      const displayableRestrictions = filterNoneFromDisplay(allRestrictions);
+      setRestrictions(displayableRestrictions);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -220,6 +239,18 @@ const DietaryRestrictions = () => {
   const handleDelete = async () => {
     if (!selectedRestriction) return;
 
+    // Prevent deleting "None" restriction
+    if (selectedRestriction.restriction_name === 'None') {
+      toast({
+        title: 'Cannot Delete',
+        description: 'The "None" restriction is a system restriction and cannot be deleted.',
+        variant: 'destructive',
+      });
+      setDeleteDialogOpen(false);
+      setSelectedRestriction(null);
+      return;
+    }
+
     try {
       setFormLoading(true);
       await dietaryRestrictionsAPI.delete(selectedRestriction.restriction_id);
@@ -242,6 +273,15 @@ const DietaryRestrictions = () => {
   };
 
   const openEditDialog = (restriction: DietaryRestriction) => {
+    // Prevent editing "None" restriction
+    if (restriction.restriction_name === 'None') {
+      toast({
+        title: 'Cannot Edit',
+        description: 'The "None" restriction is a system restriction and cannot be edited.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSelectedRestriction(restriction);
     setFormData({
       restriction_name: restriction.restriction_name,
@@ -261,6 +301,15 @@ const DietaryRestrictions = () => {
   };
 
   const openDeleteDialog = (restriction: DietaryRestriction) => {
+    // Prevent deleting "None" restriction
+    if (restriction.restriction_name === 'None') {
+      toast({
+        title: 'Cannot Delete',
+        description: 'The "None" restriction is a system restriction and cannot be deleted.',
+        variant: 'destructive',
+      });
+      return;
+    }
     setSelectedRestriction(restriction);
     setDeleteDialogOpen(true);
   };
@@ -276,7 +325,7 @@ const DietaryRestrictions = () => {
       'Low': 1,
     };
     const weight = severityWeight[restriction.severity_level as keyof typeof severityWeight] || 1;
-    const totalImpact = restriction.affected_guests + restriction.menu_items_count + restriction.couple_preferences_count;
+    const totalImpact = restriction.affected_guests + restriction.menu_items_count + restriction.couple_preferences_count + (restriction.affected_couples || 0);
     const priorityScore = weight * totalImpact;
 
     if (priorityScore >= 20) return 'High';
@@ -296,6 +345,9 @@ const DietaryRestrictions = () => {
   const sortedRestrictions = [...filteredRestrictions].sort((a, b) => {
     let comparison = 0;
     switch (sortBy) {
+      case 'id':
+        comparison = (a.restriction_id || 0) - (b.restriction_id || 0);
+        break;
       case 'name':
         comparison = a.restriction_name.localeCompare(b.restriction_name);
         break;
@@ -312,6 +364,9 @@ const DietaryRestrictions = () => {
         break;
       case 'menu':
         comparison = a.menu_items_count - b.menu_items_count;
+        break;
+      case 'couples':
+        comparison = (a.affected_couples || 0) - (b.affected_couples || 0);
         break;
     }
     return sortOrder === 'asc' ? comparison : -comparison;
@@ -333,9 +388,14 @@ const DietaryRestrictions = () => {
       }, {} as Record<string, DietaryRestriction[]>);
 
   const totalAffectedGuests = restrictions.reduce((sum, r) => sum + r.affected_guests, 0);
+  const totalAffectedCouples = restrictions.reduce((sum, r) => sum + (r.affected_couples || 0), 0);
   const criticalRestrictions = restrictions.filter(r => r.severity_level === 'Critical').length;
+  const highSeverityRestrictions = restrictions.filter(r => r.severity_level === 'High').length;
   const totalMenuItems = restrictions.reduce((sum, r) => sum + r.menu_items_count, 0);
+  const totalPreferences = restrictions.reduce((sum, r) => sum + r.couple_preferences_count, 0);
   const uniqueTypes = [...new Set(restrictions.map(r => r.restriction_type))];
+  const avgGuestsPerRestriction = restrictions.length > 0 ? (totalAffectedGuests / restrictions.length).toFixed(1) : '0';
+  const avgCouplesPerRestriction = restrictions.length > 0 ? (totalAffectedCouples / restrictions.length).toFixed(1) : '0';
 
   if (loading) {
     return (
@@ -354,9 +414,9 @@ const DietaryRestrictions = () => {
           {/* Header */}
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-3xl font-bold tracking-tight">Dietary Restrictions Overview</h1>
+              <h1 className="text-3xl font-bold tracking-tight">Dietary Restrictions Management</h1>
               <p className="text-muted-foreground">
-                Manage dietary restrictions and special requirements with visual indicators
+                Track and manage all dietary restrictions, monitor their impact on guests, couples, and menu items across all weddings
               </p>
             </div>
             <Button onClick={() => setCreateDialogOpen(true)}>
@@ -369,45 +429,52 @@ const DietaryRestrictions = () => {
           <div className="grid gap-4 md:grid-cols-4">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Restrictions</CardTitle>
+                <CardTitle className="text-sm font-medium">Active Restrictions</CardTitle>
                 <UserCheck className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{restrictions.length}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {uniqueTypes.length} unique categor{uniqueTypes.length !== 1 ? 'ies' : 'y'}
+                </p>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Affected Guests</CardTitle>
+                <CardTitle className="text-sm font-medium">Total Affected Guests</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalAffectedGuests}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Avg {avgGuestsPerRestriction} guests per restriction
+                </p>
               </CardContent>
             </Card>
             
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Critical Alerts</CardTitle>
+                <CardTitle className="text-sm font-medium">Affected Couples</CardTitle>
+                <Heart className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{totalAffectedCouples}</div>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {totalPreferences} total preference{totalPreferences !== 1 ? 's' : ''} configured
+                </p>
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">High Priority Alerts</CardTitle>
                 <AlertTriangle className="h-4 w-4 text-red-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-red-600">{criticalRestrictions}</div>
-              </CardContent>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Restriction Categories</CardTitle>
-                <Utensils className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">
-                  {uniqueTypes.length}
-                </div>
+                <div className="text-2xl font-bold text-red-600">{criticalRestrictions + highSeverityRestrictions}</div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  {uniqueTypes.slice(0, 3).join(', ')}{uniqueTypes.length > 3 ? '...' : ''}
+                  {criticalRestrictions} critical, {highSeverityRestrictions} high severity
                 </p>
               </CardContent>
             </Card>
@@ -450,8 +517,8 @@ const DietaryRestrictions = () => {
                         setSearchTerm('');
                         setFilterType('all');
                         setFilterSeverity('all');
-                        setSortBy('name');
-                        setSortOrder('asc');
+                        setSortBy('id');
+                        setSortOrder('desc');
                         setGroupBy('none');
                         setCurrentPage(1);
                       }}
@@ -493,11 +560,13 @@ const DietaryRestrictions = () => {
                       <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
                         <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="id">ID</SelectItem>
                           <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="severity">Severity</SelectItem>
                           <SelectItem value="type">Type</SelectItem>
                           <SelectItem value="guests">Affected Guests</SelectItem>
                           <SelectItem value="menu">Menu Items</SelectItem>
+                          <SelectItem value="couples">Affected Couples</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -549,6 +618,7 @@ const DietaryRestrictions = () => {
                                   <TableHead>Affected Guests</TableHead>
                                   <TableHead>Menu Items</TableHead>
                                   <TableHead>Couple Preferences</TableHead>
+                                  <TableHead>Affected Couples</TableHead>
                                   <TableHead>Priority</TableHead>
                                   <TableHead className="w-[50px]"></TableHead>
                                 </TableRow>
@@ -608,6 +678,19 @@ const DietaryRestrictions = () => {
                             </TableCell>
                             <TableCell>
                               <span className="text-sm font-medium">{restriction.couple_preferences_count}</span>
+                            </TableCell>
+                            <TableCell>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <div className="flex items-center gap-1 cursor-help">
+                                    <Heart className="h-4 w-4 text-muted-foreground" />
+                                    <span className="text-sm font-medium">{restriction.affected_couples || 0}</span>
+                                  </div>
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p>{restriction.affected_couples || 0} couple{(restriction.affected_couples || 0) !== 1 ? 's' : ''} affected</p>
+                                </TooltipContent>
+                              </Tooltip>
                             </TableCell>
                             <TableCell>
                               <Badge variant={getPriority(restriction) === 'High' ? 'destructive' : getPriority(restriction) === 'Medium' ? 'secondary' : 'outline'}>
@@ -892,6 +975,10 @@ const DietaryRestrictions = () => {
                     <div className="mt-1 text-lg font-semibold">{selectedRestriction.couple_preferences_count}</div>
                   </div>
                   <div>
+                    <Label className="text-muted-foreground">Affected Couples</Label>
+                    <div className="mt-1 text-lg font-semibold">{selectedRestriction.affected_couples || 0}</div>
+                  </div>
+                  <div>
                     <Label className="text-muted-foreground">Priority</Label>
                     <div className="mt-1">
                       <Badge variant={getPriority(selectedRestriction) === 'High' ? 'destructive' : getPriority(selectedRestriction) === 'Medium' ? 'secondary' : 'outline'}>
@@ -909,7 +996,7 @@ const DietaryRestrictions = () => {
                         <div key={guest.guest_id} className="flex items-center justify-between text-sm">
                           <span className="font-medium">{guest.guest_name}</span>
                           <span className="text-muted-foreground">
-                            {guest.partner1_name} & {guest.partner2_name} - {new Date(guest.wedding_date).toLocaleDateString()}
+                            {guest.partner1_name} & {guest.partner2_name} - {formatDate(new Date(guest.wedding_date))}
                           </span>
                         </div>
                       ))}
@@ -926,6 +1013,22 @@ const DietaryRestrictions = () => {
                           <span className="font-medium">{item.item_name}</span>
                           <span className="text-muted-foreground">
                             {item.category} - ${item.price?.toFixed(2) || '0.00'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {selectedRestriction.affected_couples_list && selectedRestriction.affected_couples_list.length > 0 && (
+                  <div>
+                    <Label className="text-muted-foreground mb-2 block">Affected Couples</Label>
+                    <div className="space-y-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                      {selectedRestriction.affected_couples_list.map((couple) => (
+                        <div key={couple.couple_id} className="flex items-center justify-between text-sm">
+                          <span className="font-medium">{couple.partner1_name} & {couple.partner2_name}</span>
+                          <span className="text-muted-foreground">
+                            {couple.preference_count} preference{couple.preference_count !== 1 ? 's' : ''}
                           </span>
                         </div>
                       ))}
@@ -959,7 +1062,7 @@ const DietaryRestrictions = () => {
               <DialogDescription>
                 Are you sure you want to delete "{selectedRestriction?.restriction_name}"? 
                 This action cannot be undone.
-                {selectedRestriction && (selectedRestriction.affected_guests > 0 || selectedRestriction.menu_items_count > 0 || selectedRestriction.couple_preferences_count > 0) && (
+                {selectedRestriction && (selectedRestriction.affected_guests > 0 || selectedRestriction.menu_items_count > 0 || selectedRestriction.couple_preferences_count > 0 || (selectedRestriction.affected_couples || 0) > 0) && (
                   <div className="mt-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                     <p className="text-sm text-yellow-800">
                       <strong>Warning:</strong> This restriction is currently in use:
@@ -968,6 +1071,7 @@ const DietaryRestrictions = () => {
                       {selectedRestriction.affected_guests > 0 && <li>{selectedRestriction.affected_guests} guest(s)</li>}
                       {selectedRestriction.menu_items_count > 0 && <li>{selectedRestriction.menu_items_count} menu item(s)</li>}
                       {selectedRestriction.couple_preferences_count > 0 && <li>{selectedRestriction.couple_preferences_count} couple preference(s)</li>}
+                      {(selectedRestriction.affected_couples || 0) > 0 && <li>{selectedRestriction.affected_couples} couple(s)</li>}
                     </ul>
                     <p className="text-sm text-yellow-800 mt-2">
                       You may not be able to delete this restriction if it's actively being used.

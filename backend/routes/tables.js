@@ -118,7 +118,7 @@ router.post('/seating/:wedding_id/guest', async (req, res) => {
   }
 });
 
-// Assign guests to a guest table (enforce max capacity)
+// Assign guests to a table (enforce max capacity) - works for all table types
 router.post('/seating/:wedding_id/guest/:table_id/assign', async (req, res) => {
   try {
     const weddingId = Number(req.params.wedding_id);
@@ -130,29 +130,58 @@ router.post('/seating/:wedding_id/guest/:table_id/assign', async (req, res) => {
           {success: false, error: 'guest_ids must be a non-empty array'});
     }
 
+    // Validate all guest_ids are numbers
+    const invalidIds = guest_ids.filter(id => !Number.isInteger(Number(id)));
+    if (invalidIds.length > 0) {
+      return res.status(400).json(
+          {success: false, error: 'All guest_ids must be valid integers'});
+    }
+
     const [tableRows] = await promisePool.query(
         `SELECT table_id, wedding_id, table_category, capacity FROM seating_table WHERE table_id = ?`,
         [tableId]);
-    if (tableRows.length === 0 || tableRows[0].wedding_id !== weddingId ||
-        tableRows[0].table_category !== 'guest') {
-      return res.status(400).json(
-          {success: false, error: 'Invalid guest table for this wedding'});
+    if (tableRows.length === 0) {
+      return res.status(404).json(
+          {success: false, error: 'Table not found'});
     }
+    if (tableRows[0].wedding_id !== weddingId) {
+      return res.status(400).json(
+          {success: false, error: 'Table does not belong to this wedding'});
+    }
+    
     const capacity = tableRows[0].capacity;
+    const tableCategory = tableRows[0].table_category || '';
+    const isCoupleTable = tableCategory.toLowerCase() === 'couple';
+    const partnerCount = isCoupleTable ? 2 : 0; // Couple tables always have 2 partners seated
+    
     const [cntRows] = await promisePool.query(
         `SELECT COUNT(*) AS cnt FROM guest WHERE table_id = ?`, [tableId]);
     const current = cntRows[0].cnt || 0;
-    if (current + guest_ids.length > capacity) {
+    const totalAfterAssignment = current + partnerCount + guest_ids.length;
+    
+    if (totalAfterAssignment > capacity) {
       return res.status(409).json(
-          {success: false, error: 'Assigning exceeds table capacity'});
+          {success: false, error: `Assigning exceeds table capacity. Table capacity: ${capacity}, Currently assigned: ${current}${isCoupleTable ? ' + 2 partners' : ''}, Trying to assign: ${guest_ids.length}, Total would be: ${totalAfterAssignment}`});
     }
 
+    // Validate guests exist and belong to this wedding
     const placeholders = guest_ids.map(() => '?').join(',');
-    const params = [tableId, ...guest_ids];
+    const [guestCheckRows] = await promisePool.query(
+        `SELECT guest_id FROM guest WHERE guest_id IN (${placeholders}) AND wedding_id = ?`,
+        [...guest_ids, weddingId]);
+    
+    if (guestCheckRows.length !== guest_ids.length) {
+      const foundIds = guestCheckRows.map(r => r.guest_id);
+      const missingIds = guest_ids.filter(id => !foundIds.includes(Number(id)));
+      return res.status(400).json(
+          {success: false, error: `Some guests not found or don't belong to this wedding. Missing: ${missingIds.join(', ')}`});
+    }
+
+    // Update guest table assignments
+    const updatePlaceholders = guest_ids.map(() => '?').join(',');
     await promisePool.query(
-        `UPDATE guest SET table_id = ? WHERE guest_id IN (${
-            placeholders}) AND wedding_id = ?`,
-        [tableId, ...guest_ids, weddingId]);
+        `UPDATE guest SET table_id = ? WHERE guest_id IN (${updatePlaceholders}) AND wedding_id = ?`,
+        [tableId, ...guest_ids.map(id => Number(id)), weddingId]);
 
     res.json({success: true, message: 'Guests assigned to table'});
   } catch (error) {

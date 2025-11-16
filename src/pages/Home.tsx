@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Users, Calendar, Warehouse, BarChart3, Settings, ArrowRight, CheckCircle2, XCircle } from 'lucide-react';
+import { Users, Calendar, Warehouse, BarChart3, Settings, ArrowRight, CheckCircle2, XCircle, Database, Hash, UserRound, UserRoundCheck, UserRoundPlus } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -33,17 +33,41 @@ const Home = () => {
   const checkAPIConnection = async () => {
     setApiStatus(prev => ({ ...prev, loading: true }));
     try {
-      const response = await testAPI.checkConnection();
+      const response = await testAPI.checkConnection() as { message?: string };
       let mysqlStatus = false;
       try {
-        const healthResponse = await testAPI.healthCheck();
-        mysqlStatus = healthResponse?.status === 'ok' && healthResponse?.database?.connected === true;
+        const healthResponse = (await testAPI.healthCheck() as unknown) as {
+          status?: string;
+          database?: {
+            connected?: boolean;
+            name?: string;
+            tableCount?: number;
+          };
+        };
+        // Check if response has the expected structure
+        if (healthResponse && typeof healthResponse === 'object') {
+          mysqlStatus = healthResponse.status === 'ok' && 
+                       healthResponse.database !== undefined && 
+                       healthResponse.database.connected === true;
+          // Debug: Log the health response to verify it's correct
+          if (!mysqlStatus) {
+            console.warn('MySQL status check failed. Health response:', healthResponse);
+          }
+        } else {
+          console.warn('Invalid health response structure:', healthResponse);
+        }
       } catch (healthError: any) {
         console.error('Health check failed:', healthError);
+        console.error('Health check error details:', {
+          message: healthError?.message,
+          response: healthError?.response?.data,
+          status: healthError?.response?.status
+        });
+        mysqlStatus = false;
       }
       setApiStatus({
         connected: true,
-        message: response.message || 'Backend connected!',
+        message: response?.message || 'Backend connected!',
         loading: false,
         mysqlConnected: mysqlStatus,
       });
@@ -103,14 +127,14 @@ const Home = () => {
       y: 0,
       transition: {
         duration: 0.5,
-        ease: 'easeOut',
+        ease: [0.4, 0, 0.2, 1] as const,
       },
     },
     hover: {
       y: -8,
       transition: {
         duration: 0.3,
-        ease: 'easeOut',
+        ease: [0.4, 0, 0.2, 1] as const,
       },
     },
   };
@@ -123,25 +147,25 @@ const Home = () => {
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           transition={{ duration: 0.5, delay: 0.3 }}
-          className="fixed top-6 right-6 z-50 bg-white/90 backdrop-blur-md border border-primary/20 rounded-2xl p-4 shadow-lg"
+          className="fixed top-6 right-6 z-50 bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-md border border-primary/20 dark:border-[#333] rounded-2xl p-4 shadow-lg"
         >
           <div className="space-y-3 min-w-[200px]">
             <div className="flex items-center justify-between gap-4">
-              <span className="text-sm font-medium text-foreground/70">Backend Server</span>
+              <span className="text-sm font-medium text-foreground/70 dark:text-[#d4d4d4]">Backend Server</span>
               <div className="flex items-center gap-2">
                 {apiStatus.connected ? (
-                  <CheckCircle2 className="w-4 h-4 text-green-600" />
+                  <CheckCircle2 className="w-4 h-4 text-green-600 dark:text-green-500" />
                 ) : (
-                  <XCircle className="w-4 h-4 text-red-600" />
+                  <XCircle className="w-4 h-4 text-red-600 dark:text-red-500" />
                 )}
-                <span className={`text-sm font-semibold ${apiStatus.connected ? 'text-green-600' : 'text-red-600'}`}>
+                <span className={`text-sm font-semibold ${apiStatus.connected ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
                   {apiStatus.loading ? 'Checking...' : apiStatus.connected ? 'Online' : 'Offline'}
                 </span>
               </div>
             </div>
             <div className="flex items-center justify-between gap-4">
-              <span className="text-sm font-medium text-foreground/70">MySQL Database</span>
-              <span className="text-sm font-semibold text-foreground/60">
+              <span className="text-sm font-medium text-foreground/70 dark:text-[#d4d4d4]">MySQL Database</span>
+              <span className={`text-sm font-semibold ${!apiStatus.connected ? 'text-foreground/60 dark:text-[#a3a3a3]' : apiStatus.mysqlConnected ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'}`}>
                 {!apiStatus.connected ? 'Unknown' : apiStatus.mysqlConnected ? 'Connected' : 'Disconnected'}
               </span>
             </div>
@@ -222,12 +246,11 @@ const Home = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.8, delay: 0.7 }}
-              className="flex justify-center gap-4"
+              className="flex justify-center items-center gap-4"
             >
               <Link to="/dashboard/couples">
                 <Button
-                  size="lg"
-                  className="group relative overflow-hidden rounded-full px-8 py-6 text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground"
+                  className="group relative overflow-hidden rounded-full px-8 h-14 min-w-[180px] text-base font-semibold shadow-lg hover:shadow-xl transition-all duration-300 bg-primary hover:bg-primary/90 text-primary-foreground flex items-center justify-center"
                 >
                   <span className="relative z-10 flex items-center gap-2">
                     Get Started
@@ -237,9 +260,8 @@ const Home = () => {
               </Link>
               <Link to="/dashboard/weddings">
                 <Button
-                  size="lg"
                   variant="outline"
-                  className="group rounded-full px-8 py-6 text-base font-semibold border-2 border-primary/30 hover:border-primary/50 bg-background/50 backdrop-blur-sm hover:bg-primary/5 transition-all duration-300"
+                  className="group rounded-full px-8 h-14 min-w-[180px] text-base font-semibold border-2 border-primary/30 hover:border-primary/50 bg-background/50 backdrop-blur-sm hover:bg-primary/5 transition-all duration-300 flex items-center justify-center"
                 >
                   <span className="flex items-center gap-2 text-foreground">
                     View Weddings
@@ -334,21 +356,42 @@ const Home = () => {
                   Wedding Management System
                 </span>
               </div>
-              <p className="text-sm text-foreground/60">
-                © 2024 Wedding Management System. All rights reserved.
-              </p>
-              <div className="flex items-center justify-center gap-6 text-sm text-foreground/60">
-                <a href="#" className="hover:text-primary transition-colors duration-200">
-                  Privacy Policy
-                </a>
-                <span>•</span>
-                <a href="#" className="hover:text-primary transition-colors duration-200">
-                  Terms of Service
-                </a>
-                <span>•</span>
-                <a href="#" className="hover:text-primary transition-colors duration-200">
-                  Contact Support
-                </a>
+              
+              {/* Group Info - Horizontal Layout */}
+              <div className="flex items-center justify-center gap-6 md:gap-8 flex-wrap">
+                <div className="flex items-center gap-2 text-sm text-foreground/70">
+                  <div className="relative flex items-center">
+                    <div className="flex -space-x-1">
+                      <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary flex items-center justify-center">
+                        <UserRound className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                      <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary flex items-center justify-center">
+                        <UserRoundCheck className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                      <div className="w-6 h-6 rounded-full bg-primary/20 border border-primary flex items-center justify-center">
+                        <UserRoundPlus className="w-3.5 h-3.5 text-primary" />
+                      </div>
+                    </div>
+                  </div>
+                  <span className="font-medium">Group #6 Best Group FR</span>
+                </div>
+                
+                <div className="flex items-center gap-2 text-sm text-foreground/70">
+                  <Database className="w-5 h-5 text-primary" />
+                  <span className="font-medium">CCINFOM</span>
+                </div>
+                
+                <div className="flex items-center gap-2 text-sm text-foreground/70">
+                  <Hash className="w-5 h-5 text-primary" />
+                  <span className="font-medium">S13</span>
+                </div>
+              </div>
+              
+              {/* Surnames */}
+              <div className="pt-4 border-t border-border/30">
+                <p className="text-sm text-foreground/60 font-medium">
+                  MAAGMA • ONG • PAINGAN • PALOMO
+                </p>
               </div>
             </motion.div>
           </div>

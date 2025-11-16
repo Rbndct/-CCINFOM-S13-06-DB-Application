@@ -20,8 +20,10 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { weddingsAPI, couplesAPI, guestsAPI, menuItemsAPI, packagesAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { useDateFormat } from '@/context/DateFormatContext';
 
 const Dashboard = () => {
+  const { formatDate } = useDateFormat();
   const [stats, setStats] = useState({
     totalWeddings: 0,
     totalCouples: 0,
@@ -356,7 +358,7 @@ const Dashboard = () => {
                           {wedding.couple}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {wedding.date ? new Date(wedding.date).toLocaleDateString() : 'N/A'} • {wedding.venue}
+                          {wedding.date ? formatDate(new Date(wedding.date)) : 'N/A'} • {wedding.venue}
                         </p>
                       </div>
                       {getStatusBadge(wedding.status)}
@@ -391,7 +393,7 @@ const Dashboard = () => {
                           {event.couple}
                         </p>
                         <p className="text-sm text-muted-foreground">
-                          {event.date ? new Date(event.date).toLocaleDateString() : 'N/A'} • {event.venue}
+                          {event.date ? formatDate(new Date(event.date)) : 'N/A'} • {event.venue}
                         </p>
                       </div>
                       <Badge variant="outline">

@@ -286,8 +286,8 @@ const Packages = () => {
   const handleResetFilters = () => {
     setSearchTerm('');
     setFilterType('all');
-    setSortBy('name');
-    setSortOrder('asc');
+    setSortBy('id');
+    setSortOrder('desc');
     setCurrentPage(1);
   };
 
@@ -318,6 +318,10 @@ const Packages = () => {
       .sort((a, b) => {
       let aVal: any, bVal: any;
       switch (sortBy) {
+        case 'id':
+          aVal = a.package_id || a.id || 0;
+          bVal = b.package_id || b.id || 0;
+          break;
         case 'name':
           aVal = a.package_name?.toLowerCase() || '';
           bVal = b.package_name?.toLowerCase() || '';
@@ -494,6 +498,7 @@ const Packages = () => {
                       <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
                         <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="id">ID</SelectItem>
                           <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="type">Type</SelectItem>
                           <SelectItem value="price">Price</SelectItem>
@@ -714,6 +719,7 @@ const Packages = () => {
                       <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
                         <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="id">ID</SelectItem>
                           <SelectItem value="name">Name</SelectItem>
                           <SelectItem value="type">Type</SelectItem>
                           <SelectItem value="price">Price</SelectItem>

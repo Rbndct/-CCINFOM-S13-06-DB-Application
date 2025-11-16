@@ -25,6 +25,25 @@ const upload = multer({
   }
 });
 
+// GET /api/database/config - Get database configuration (without sensitive data)
+router.get('/config', async (req, res) => {
+  try {
+    const dbConfig = {
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      database: process.env.DB_NAME || 'wedding_management_db'
+    };
+    res.json({success: true, data: dbConfig});
+  } catch (error) {
+    console.error('Error getting database config:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get database config',
+      message: error.message
+    });
+  }
+});
+
 // GET /api/database/status - Get database status
 router.get('/status', async (req, res) => {
   try {

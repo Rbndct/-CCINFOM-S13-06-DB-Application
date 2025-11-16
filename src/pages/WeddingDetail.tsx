@@ -27,7 +27,9 @@ import {
   Heart,
   X,
   Search,
-  AlertTriangle
+  AlertTriangle,
+  Eye,
+  Lock
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -68,32 +70,76 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, menuItemsAPI, packagesAPI, inventoryAPI, inventoryAllocationAPI } from '@/api';
-import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
-
-// Helper function to safely parse and format dates
-const safeFormatDate = (dateValue: any): string => {
-  if (!dateValue) return 'N/A';
-  try {
-    const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
-    if (isNaN(date.getTime())) {
-      // If invalid date, try to parse as YYYY-MM-DD
-      if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
-        return dateValue.split('T')[0];
-      }
-      return 'N/A';
-    }
-    return date.toLocaleDateString();
-  } catch (e) {
-    // If date parsing fails, return the original value or N/A
-    return typeof dateValue === 'string' ? dateValue.split('T')[0] : 'N/A';
-  }
-};
+import { useDateFormat } from '@/context/DateFormatContext';
+import { useTimeFormat } from '@/context/TimeFormatContext';
 
 const WeddingDetail = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { formatDate } = useDateFormat();
+  const { formatTime } = useTimeFormat();
+  
+  // Helper function to safely parse and format dates
+  const safeFormatDate = (dateValue: any): string => {
+    if (!dateValue) return 'N/A';
+    try {
+      const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+      if (isNaN(date.getTime())) {
+        // If invalid date, try to parse as YYYY-MM-DD
+        if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+          return dateValue.split('T')[0];
+        }
+        return 'N/A';
+      }
+      return formatDate(date);
+    } catch (e) {
+      // If date parsing fails, return the original value or N/A
+      return typeof dateValue === 'string' ? dateValue.split('T')[0] : 'N/A';
+    }
+  };
+
+  // Helper function to convert date to YYYY-MM-DD format in local timezone for date inputs
+  const dateToInputValue = (dateValue: any): string => {
+    if (!dateValue) return '';
+    try {
+      const date = typeof dateValue === 'string' ? new Date(dateValue) : dateValue;
+      if (isNaN(date.getTime())) {
+        // If invalid date, try to parse as YYYY-MM-DD
+        if (typeof dateValue === 'string' && dateValue.match(/^\d{4}-\d{2}-\d{2}/)) {
+          return dateValue.split('T')[0];
+        }
+        return '';
+      }
+      // Get local date components to avoid timezone issues
+      const year = date.getFullYear();
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const day = date.getDate().toString().padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    } catch (e) {
+      // Fallback to splitting if parsing fails
+      return typeof dateValue === 'string' ? dateValue.split('T')[0] : '';
+    }
+  };
+  
+  // Helper function to safely format times
+  const safeFormatTime = (timeValue: any): string => {
+    if (!timeValue) return 'N/A';
+    try {
+      if (typeof timeValue === 'string' && timeValue.match(/^\d{2}:\d{2}/)) {
+        const [hours, minutes] = timeValue.split(':');
+        const date = new Date();
+        date.setHours(parseInt(hours), parseInt(minutes));
+        return formatTime(date);
+      }
+      return timeValue;
+    } catch (e) {
+      return timeValue;
+    }
+  };
+  
   const [wedding, setWedding] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,6 +150,7 @@ const WeddingDetail = () => {
   const [lastName, setLastName] = useState('');
   const [guestRestrictionIds, setGuestRestrictionIds] = useState<number[]>([]);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<any[]>([]);
+  const [noneRestrictionId, setNoneRestrictionId] = useState<number | null>(null);
   const [rsvpStatus, setRsvpStatus] = useState('pending');
   const [guestFormErrors, setGuestFormErrors] = useState<Record<string, string>>({});
   const [guestFormLoading, setGuestFormLoading] = useState(false);
@@ -157,6 +204,11 @@ const WeddingDetail = () => {
   const [selectedGuestIds, setSelectedGuestIds] = useState<number[]>([]);
   const [bulkTableId, setBulkTableId] = useState('');
   const [bulkAssignmentLoading, setBulkAssignmentLoading] = useState(false);
+  const [bulkAssignFilter, setBulkAssignFilter] = useState<'all' | 'accepted' | 'pending' | 'declined' | 'unassigned'>('all');
+  
+  // View table dialog state
+  const [viewTableOpen, setViewTableOpen] = useState(false);
+  const [selectedTableForView, setSelectedTableForView] = useState<any>(null);
   
   // Table packages state
   const [tablePackageAssignments, setTablePackageAssignments] = useState<any[]>([]);
@@ -194,8 +246,14 @@ const WeddingDetail = () => {
   const [guestFilterRsvp, setGuestFilterRsvp] = useState('');
   const [guestFilterRestriction, setGuestFilterRestriction] = useState('');
   const [showGuestFilters, setShowGuestFilters] = useState(false);
-  const [guestSortBy, setGuestSortBy] = useState<'name' | 'rsvp' | 'table'>('name');
-  const [guestSortOrder, setGuestSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [guestSortBy, setGuestSortBy] = useState<'id' | 'name' | 'rsvp' | 'table'>(() => {
+    const stored = localStorage.getItem('default_table_sort_by');
+    return (stored as 'id' | 'name' | 'rsvp' | 'table') || 'id';
+  });
+  const [guestSortOrder, setGuestSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
+  });
   const [guestCurrentPage, setGuestCurrentPage] = useState(1);
   const guestsPerPage = 10;
 
@@ -255,7 +313,7 @@ const WeddingDetail = () => {
           // Initialize edit form with wedding data (safely handle date parsing)
           try {
             const weddingDate = weddingData.weddingDate || weddingData.wedding_date;
-            const dateStr = weddingDate ? (typeof weddingDate === 'string' ? weddingDate.split('T')[0] : '') : '';
+            const dateStr = dateToInputValue(weddingDate);
             
             setEditWeddingForm({
               wedding_date: dateStr,
@@ -371,7 +429,13 @@ const WeddingDetail = () => {
         try {
           const restrictionsResponse = await dietaryRestrictionsAPI.getAll();
           if (restrictionsResponse && restrictionsResponse.data) {
-            setDietaryRestrictions(restrictionsResponse.data);
+            // Get and store "None" restriction ID
+            const noneId = getNoneRestrictionId(restrictionsResponse.data);
+            setNoneRestrictionId(noneId);
+            
+            // Filter out "None" from the display (it's a system restriction)
+            const displayableRestrictions = filterNoneFromDisplay(restrictionsResponse.data);
+            setDietaryRestrictions(displayableRestrictions);
           }
         } catch (e) {
           console.error('Error fetching dietary restrictions:', e);
@@ -681,7 +745,7 @@ const WeddingDetail = () => {
   useEffect(() => {
     if (editWeddingOpen && wedding) {
       const weddingDate = wedding.weddingDate || wedding.wedding_date;
-      const dateStr = weddingDate ? (typeof weddingDate === 'string' ? weddingDate.split('T')[0] : '') : '';
+      const dateStr = dateToInputValue(weddingDate);
       setEditWeddingForm({
         wedding_date: dateStr,
         wedding_time: wedding.weddingTime || wedding.wedding_time || '',
@@ -818,9 +882,7 @@ const WeddingDetail = () => {
         wedding_date: editWeddingForm.wedding_date,
         wedding_time: editWeddingForm.wedding_time,
         venue: editWeddingForm.venue,
-        guest_count: parseInt(editWeddingForm.guest_count) || 0,
-        total_cost: parseFloat(editWeddingForm.total_cost) || 0,
-        production_cost: parseFloat(editWeddingForm.production_cost) || 0,
+        // guest_count, total_cost, and production_cost are derived fields - not sent in update
         payment_status: editWeddingForm.payment_status,
         preference_id: editWeddingForm.preference_id ? parseInt(editWeddingForm.preference_id) : null
       });
@@ -854,7 +916,7 @@ const WeddingDetail = () => {
           
           // Update edit form
           const weddingDate = weddingData.weddingDate || weddingData.wedding_date;
-          const dateStr = weddingDate ? (typeof weddingDate === 'string' ? weddingDate.split('T')[0] : '') : '';
+          const dateStr = dateToInputValue(weddingDate);
           setEditWeddingForm({
             wedding_date: dateStr,
             wedding_time: weddingData.weddingTime || weddingData.wedding_time || '',
@@ -890,7 +952,7 @@ const WeddingDetail = () => {
     
     if (!firstName.trim()) newErrors.firstName = 'First name is required';
     if (!lastName.trim()) newErrors.lastName = 'Last name is required';
-    if (guestRestrictionIds.length === 0) newErrors.dietaryRestriction = 'At least one dietary restriction is required';
+    // Removed validation requiring at least one restriction - will auto-assign "None" if empty
     
     setGuestFormErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
@@ -905,13 +967,16 @@ const WeddingDetail = () => {
     setGuestFormLoading(true);
     
     try {
+      // Auto-assign "None" if no restrictions selected
+      const finalRestrictionIds = ensureNoneRestriction(guestRestrictionIds, noneRestrictionId);
+      
       // Create guest via API
       const fullName = `${firstName.trim()} ${lastName.trim()}`;
       const response = await guestsAPI.create({
         guest_name: fullName,
         wedding_id: parseInt(id || '1'),
         rsvp_status: rsvpStatus,
-        restriction_ids: guestRestrictionIds // Send array of restriction IDs
+        restriction_ids: finalRestrictionIds // Send array of restriction IDs (will include "None" if empty)
       });
       
       if (response && response.success) {
@@ -990,9 +1055,11 @@ const WeddingDetail = () => {
     setEditingGuest(guest);
     setEditGuestFirstName(guest.firstName || guest.name?.split(' ')[0] || '');
     setEditGuestLastName(guest.lastName || guest.name?.split(' ').slice(1).join(' ') || '');
-    setEditGuestRsvpStatus(guest.rsvpStatus || 'pending');
+    setEditGuestRsvpStatus(guest.rsvpStatus || guest.rsvp_status || 'pending');
     const restrictionIds = (guest.dietaryRestrictions || []).map((r: any) => r.restriction_id || r.id).filter(Boolean);
-    setEditGuestRestrictionIds(restrictionIds);
+    // Filter out "None" from edit form display (user can still leave empty, it will auto-assign "None")
+    const displayableIds = noneRestrictionId ? restrictionIds.filter(id => id !== noneRestrictionId) : restrictionIds;
+    setEditGuestRestrictionIds(displayableIds);
     setEditGuestOpen(true);
   };
   
@@ -1011,11 +1078,14 @@ const WeddingDetail = () => {
     
     setEditGuestLoading(true);
     try {
+      // Auto-assign "None" if no restrictions selected
+      const finalRestrictionIds = ensureNoneRestriction(editGuestRestrictionIds, noneRestrictionId);
+      
       const fullName = `${editGuestFirstName.trim()} ${editGuestLastName.trim()}`;
       await guestsAPI.update(editingGuest.id, {
         guest_name: fullName,
         rsvp_status: editGuestRsvpStatus,
-        restriction_ids: editGuestRestrictionIds
+        restriction_ids: finalRestrictionIds
       });
       
       // Refresh guests list
@@ -1271,24 +1341,37 @@ const WeddingDetail = () => {
     }
     
     // Check table capacity (count guests that will remain after reassignment)
+    // For couple tables, always count the 2 partners as assigned
+    const isCoupleTable = (table.category || table.table_category || '').toLowerCase() === 'couple';
+    const partnerCount = isCoupleTable ? 2 : 0;
     const guestsStayingOnTable = guests.filter(g => g.table_id === tableId && g.id !== guestId).length;
-    const totalAfterAssignment = guestsStayingOnTable + 1;
-    const available = (table.capacity || 0) - guestsStayingOnTable;
+    const totalAfterAssignment = guestsStayingOnTable + partnerCount + 1; // +1 for the guest being assigned
+    const capacity = table.capacity || 0;
+    const available = capacity - guestsStayingOnTable - partnerCount;
     
-    if (totalAfterAssignment > (table.capacity || 0)) {
+    if (totalAfterAssignment > capacity) {
       toast({
-        title: 'Error',
-        description: `Table ${table.tableNumber || table.table_number} is at full capacity (${table.capacity || 0})`,
-        variant: 'destructive',
+        title: 'Warning',
+        description: `Table ${table.tableNumber || table.table_number} capacity will be exceeded (${capacity} max, ${totalAfterAssignment} after assignment). Do you want to continue?`,
+        variant: 'default',
       });
-      return;
+      // Still allow assignment - backend will handle validation
     }
     
     setAllocationLoading(true);
     
     try {
-      // Use backend API to assign guest
-      await tablesAPI.assignGuests(id, tableId, [guestId]);
+      // Use backend API to assign guest - ensure guestId is a number
+      const numericGuestId = Number(guestId);
+      if (isNaN(numericGuestId)) {
+        toast({
+          title: 'Error',
+          description: 'Invalid guest ID',
+          variant: 'destructive',
+        });
+        return;
+      }
+      await tablesAPI.assignGuests(id, Number(tableId), [numericGuestId]);
       
       // Refresh guests to get updated table_id
       const guestsResp = await guestsAPI.getByWedding(id);
@@ -1614,6 +1697,14 @@ const WeddingDetail = () => {
     return guests.filter(g => !g.table_id);
   };
 
+  // Helper to get unseated accepted guests (for RSVP warning)
+  const getUnseatedAcceptedGuests = () => {
+    return guests.filter(g => 
+      (g.rsvpStatus === 'accepted' || g.rsvp_status === 'accepted') && 
+      !g.table_id
+    );
+  };
+
   // Helper to get table package
   const getTablePackage = (tableId: number) => {
     return tablePackageAssignments.find(a => a.tableId === tableId);
@@ -1715,9 +1806,14 @@ const WeddingDetail = () => {
     
     setAllocationFormLoading(true);
     try {
-      const rentalCost = allocationFormData.rental_cost 
+      const rentalCostValue = allocationFormData.rental_cost 
         ? parseFloat(allocationFormData.rental_cost) 
         : selectedItem.rental_cost;
+      
+      // Ensure rental_cost is a valid number
+      const rentalCost = (rentalCostValue && !isNaN(rentalCostValue)) 
+        ? rentalCostValue 
+        : (selectedItem.rental_cost || 0);
       
       await inventoryAllocationAPI.create({
         wedding_id: parseInt(id || '0'),
@@ -2220,6 +2316,10 @@ const WeddingDetail = () => {
       let aVal: any, bVal: any;
       
       switch (guestSortBy) {
+        case 'id':
+          aVal = a.guest_id || a.id || 0;
+          bVal = b.guest_id || b.id || 0;
+          break;
         case 'name':
           aVal = `${a.firstName || a.name?.split(' ')[0] || ''} ${a.lastName || a.name?.split(' ').slice(1).join(' ') || ''}`.toLowerCase();
           bVal = `${b.firstName || b.name?.split(' ')[0] || ''} ${b.lastName || b.name?.split(' ').slice(1).join(' ') || ''}`.toLowerCase();
@@ -2374,7 +2474,7 @@ const WeddingDetail = () => {
               <div className="text-2xl font-bold">
                 {safeFormatDate(wedding?.weddingDate || wedding?.wedding_date)}
               </div>
-              <p className="text-xs text-muted-foreground">{wedding?.weddingTime || wedding?.wedding_time || 'N/A'}</p>
+              <p className="text-xs text-muted-foreground">{safeFormatTime(wedding?.weddingTime || wedding?.wedding_time)}</p>
             </CardContent>
           </Card>
 
@@ -2615,6 +2715,7 @@ const WeddingDetail = () => {
                             <SelectValue placeholder="Sort by" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="id">ID</SelectItem>
                             <SelectItem value="name">Name</SelectItem>
                             <SelectItem value="rsvp">RSVP Status</SelectItem>
                             <SelectItem value="table">Table</SelectItem>
@@ -2670,36 +2771,45 @@ const WeddingDetail = () => {
                               {guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}
                             </TableCell>
                             <TableCell>
-              {restrictions.length > 0 ? (
-                <div className="flex flex-col gap-1">
-                  {restrictions.map((r: any, idx: number) => {
-                    const restrictionName = r.restriction_name || r.name || r;
-                    const restrictionType = r.restriction_type || '';
-                    const restrictionId = r.restriction_id || r.id;
-                    return (
-                      <Badge 
-                        key={restrictionId || restrictionName || `restriction-${idx}`} 
-                        variant="outline" 
-                        className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1 w-fit`}
-                      >
-                        {getTypeIcon(restrictionType)}
-                        <span className="max-w-[150px] truncate" title={restrictionName}>
-                          {restrictionName}
-                        </span>
+              {(() => {
+                const validRestrictions = restrictions.filter((r: any) => (r.restriction_name || r.name || r) && (r.restriction_name || r.name || r) !== 'None');
+                if (validRestrictions.length === 0) {
+                  return <span className="text-muted-foreground">None</span>;
+                }
+                return (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {validRestrictions.slice(0, 2).map((r: any, idx: number) => {
+                      const restrictionName = r.restriction_name || r.name || r;
+                      const restrictionType = r.restriction_type || '';
+                      const restrictionId = r.restriction_id || r.id;
+                      return (
+                        <Badge 
+                          key={restrictionId || restrictionName || `restriction-${idx}`} 
+                          variant="outline" 
+                          className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1 w-fit`}
+                        >
+                          {getTypeIcon(restrictionType)}
+                          <span className="max-w-[120px] truncate" title={restrictionName}>
+                            {restrictionName}
+                          </span>
+                        </Badge>
+                      );
+                    })}
+                    {validRestrictions.length > 2 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{validRestrictions.length - 2} more
                       </Badge>
-                    );
-                  })}
-                </div>
-              ) : (
-                <span className="text-muted-foreground">None</span>
-              )}
+                    )}
+                  </div>
+                );
+              })()}
                             </TableCell>
                             <TableCell>{getRsvpStatusBadge(guest.rsvpStatus)}</TableCell>
                             <TableCell>
                               {assignedTable ? (
-                                <Badge variant="outline">{assignedTable}</Badge>
+                                <Badge variant="outline" className="font-mono text-xs">{assignedTable}</Badge>
                               ) : (
-                                <span className="text-muted-foreground">Not assigned</span>
+                                <span className="text-muted-foreground text-sm">Not assigned</span>
                               )}
                             </TableCell>
                             <TableCell onClick={(e) => e.stopPropagation()}>
@@ -2916,36 +3026,83 @@ const WeddingDetail = () => {
               </CardContent>
             </Card>
 
-            {/* Tables Grid View */}
-            <div className="flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-semibold">Tables</h3>
-                <p className="text-sm text-muted-foreground">
-                  Total Tables: {tables.length} | Manage table assignments and seating
-                </p>
-              </div>
-              <Button 
-                onClick={() => setBulkAssignmentOpen(true)}
-                disabled={getUnassignedGuests().length === 0 || tables.length === 0}
-              >
-                <Users className="w-4 h-4 mr-2" />
-                Bulk Assign Guests
-              </Button>
-            </div>
+            {/* RSVP Warning Banner */}
+            {(() => {
+              const unseatedAccepted = getUnseatedAcceptedGuests();
+              if (unseatedAccepted.length === 0) return null;
+              return (
+                <Card className="border-amber-200 bg-amber-50 dark:bg-amber-950 dark:border-amber-800">
+                  <CardContent className="pt-6">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                        <div>
+                          <p className="font-semibold text-amber-900 dark:text-amber-100">
+                            Warning: {unseatedAccepted.length} accepted guest{unseatedAccepted.length !== 1 ? 's' : ''} have not been assigned to a table
+                          </p>
+                          <p className="text-sm text-amber-800 dark:text-amber-200 mt-1">
+                            These guests have accepted their RSVP but are not yet seated.
+                          </p>
+                        </div>
+                      </div>
+                      <Button
+                        variant="outline"
+                        className="border-amber-300 text-amber-900 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-100 dark:hover:bg-amber-900"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          const guestIds = unseatedAccepted.map(g => g.id);
+                          setSelectedGuestIds(guestIds);
+                          setBulkAssignFilter('accepted');
+                          setBulkAssignmentOpen(true);
+                        }}
+                      >
+                        <Users className="w-4 h-4 mr-2" />
+                        Bulk Assign Accepted Guests
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              );
+            })()}
 
-            {!tables || tables.length === 0 ? (
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="text-center space-y-2">
+            {/* Tables Grid View */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Wedding Table Directory</CardTitle>
+                    <CardDescription>
+                      Tables ({tables.length}) - Manage table assignments and seating
+                    </CardDescription>
+                  </div>
+                  <Button 
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setSelectedGuestIds([]);
+                      setBulkAssignFilter('all');
+                      setBulkTableId('');
+                      setBulkAssignmentOpen(true);
+                    }}
+                    disabled={getUnassignedGuests().length === 0 || tables.length === 0}
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    Bulk Assign Guests
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+
+                {!tables || tables.length === 0 ? (
+                  <div className="text-center space-y-2 py-8">
                     <p className="text-muted-foreground">No tables added yet</p>
                     <p className="text-sm text-amber-600 font-medium">
                       ⚠️ Warning: You need at least one table for guest seating. Please add a table to continue.
                     </p>
                   </div>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {tables.map((table) => {
                   if (!table) return null;
                   try {
@@ -2955,9 +3112,12 @@ const WeddingDetail = () => {
                       if (!g) return false;
                       return g.table_id === tableId;
                     });
-                    const assignedCount = assignedGuestsList.length;
+                    // For couple tables, always count the 2 partners as assigned
+                    const isCoupleTableForCount = (table.category || table.table_category || '').toLowerCase() === 'couple';
+                    const partnerCount = isCoupleTableForCount ? 2 : 0;
+                    const assignedCount = assignedGuestsList.length + partnerCount;
                     const capacity = table.capacity || 0;
-                    const available = capacity - assignedCount;
+                    const available = Math.max(0, capacity - assignedCount);
                     const isFull = available <= 0 && capacity > 0;
                     const tablePackage = getTablePackage(table.id || table.table_id);
                     const tableCategory = table.category || table.table_category || '';
@@ -2973,6 +3133,18 @@ const WeddingDetail = () => {
                           </div>
                           <div className="flex items-center gap-2">
                             {getTableCategoryBadge(tableCategory)}
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs"
+                              onClick={() => {
+                                setSelectedTableForView(table);
+                                setViewTableOpen(true);
+                              }}
+                            >
+                              <Eye className="h-3 w-3 mr-1" />
+                              View Details
+                            </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
@@ -3071,140 +3243,242 @@ const WeddingDetail = () => {
                         <div>
                           {categoryLower === 'couple' ? (
                             <>
-                              <p className="text-sm font-medium mb-2">Seated Couple / Partners at This Table:</p>
-                              {assignedGuestsList.length === 0 ? (
-                                <p className="text-sm text-muted-foreground">No partners assigned</p>
-                              ) : (
-                                <div className="space-y-2">
-                                  {(() => {
-                                    // Get partner names from wedding data
-                                    const partner1Name = wedding?.partner1 || wedding?.partner1_name || '';
-                                    const partner2Name = wedding?.partner2 || wedding?.partner2_name || '';
-                                    
-                                    // Find partners in assigned guests
-                                    const partner1 = assignedGuestsList.find(g => {
-                                      const guestName = (g.firstName || g.name?.split(' ')[0] || '') + ' ' + (g.lastName || g.name?.split(' ').slice(1).join(' ') || '');
-                                      return guestName.trim().includes(partner1Name) || partner1Name.includes(guestName.trim());
-                                    });
-                                    const partner2 = assignedGuestsList.find(g => {
-                                      const guestName = (g.firstName || g.name?.split(' ')[0] || '') + ' ' + (g.lastName || g.name?.split(' ').slice(1).join(' ') || '');
-                                      return guestName.trim().includes(partner2Name) || partner2Name.includes(guestName.trim());
-                                    });
-                                    
-                                    // Get restrictions from couple preferences
-                                    const coupleRestrictions: any[] = [];
-                                    if (coupleData && coupleData.preferences) {
-                                      coupleData.preferences.forEach((pref: any) => {
-                                        if (pref.dietaryRestrictions && Array.isArray(pref.dietaryRestrictions)) {
-                                          pref.dietaryRestrictions.forEach((r: any) => {
-                                            if (r && r.restriction_name && r.restriction_name !== 'None') {
-                                              if (!coupleRestrictions.find(cr => cr.restriction_name === r.restriction_name)) {
-                                                coupleRestrictions.push(r);
-                                              }
+                              {/* Seated Partners Section */}
+                              <div className="mb-4">
+                                <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                                  <Heart className="h-4 w-4 text-pink-500" />
+                                  Seated Partners at this Table
+                                </p>
+                                {(() => {
+                                  // Get partner names from wedding data (always show, even if not guests)
+                                  const partner1Name = wedding?.partner1 || wedding?.partner1_name || '';
+                                  const partner2Name = wedding?.partner2 || wedding?.partner2_name || '';
+                                  
+                                  // Find partners in assigned guests (if they exist as guests)
+                                  const partner1 = assignedGuestsList.find(g => {
+                                    const guestName = (g.firstName || g.name?.split(' ')[0] || '') + ' ' + (g.lastName || g.name?.split(' ').slice(1).join(' ') || '');
+                                    return guestName.trim().includes(partner1Name) || partner1Name.includes(guestName.trim());
+                                  });
+                                  const partner2 = assignedGuestsList.find(g => {
+                                    const guestName = (g.firstName || g.name?.split(' ')[0] || '') + ' ' + (g.lastName || g.name?.split(' ').slice(1).join(' ') || '');
+                                    return guestName.trim().includes(partner2Name) || partner2Name.includes(guestName.trim());
+                                  });
+                                  
+                                  // Get restrictions from couple preferences
+                                  const coupleRestrictions: any[] = [];
+                                  if (coupleData && coupleData.preferences) {
+                                    coupleData.preferences.forEach((pref: any) => {
+                                      if (pref.dietaryRestrictions && Array.isArray(pref.dietaryRestrictions)) {
+                                        pref.dietaryRestrictions.forEach((r: any) => {
+                                          if (r && r.restriction_name && r.restriction_name !== 'None') {
+                                            if (!coupleRestrictions.find(cr => cr.restriction_name === r.restriction_name)) {
+                                              coupleRestrictions.push(r);
                                             }
-                                          });
-                                        }
-                                      });
-                                    }
-                                    
-                                    return (
-                                      <>
-                                        {partner1 && (
-                                          <div className="text-sm p-2 rounded bg-muted/50">
-                                            <p className="font-medium">Partner 1: {partner1.firstName || partner1.name?.split(' ')[0] || partner1Name} {partner1.lastName || partner1.name?.split(' ').slice(1).join(' ') || ''}</p>
-                                          </div>
-                                        )}
-                                        {partner2 && (
-                                          <div className="text-sm p-2 rounded bg-muted/50">
-                                            <p className="font-medium">Partner 2: {partner2.firstName || partner2.name?.split(' ')[0] || partner2Name} {partner2.lastName || partner2.name?.split(' ').slice(1).join(' ') || ''}</p>
-                                          </div>
-                                        )}
-                                        {coupleRestrictions.length > 0 && (
-                                          <div className="mt-2 pt-2 border-t">
-                                            <p className="text-xs font-medium mb-1 text-muted-foreground">Dietary Restrictions:</p>
-                                            <div className="flex flex-wrap gap-1">
-                                              {coupleRestrictions.map((r, idx) => (
+                                          }
+                                        });
+                                      }
+                                    });
+                                  }
+                                  
+                                  // Get partner 1 and partner 2 restrictions if they exist as guests
+                                  const partner1Restrictions = partner1?.dietaryRestrictions || [];
+                                  const partner2Restrictions = partner2?.dietaryRestrictions || [];
+                                  const partner1ValidRestrictions = Array.isArray(partner1Restrictions) 
+                                    ? partner1Restrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None')
+                                    : [];
+                                  const partner2ValidRestrictions = Array.isArray(partner2Restrictions) 
+                                    ? partner2Restrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None')
+                                    : [];
+                                  
+                                  return (
+                                    <div className="space-y-2">
+                                      {/* Partner 1 - Always show */}
+                                      <div className="text-sm p-2 rounded bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 flex items-center justify-between">
+                                        <div className="flex items-center gap-2 flex-1 flex-wrap">
+                                          <Heart className="h-3 w-3 text-pink-500 dark:text-pink-400 flex-shrink-0" />
+                                          <span className="font-medium dark:text-blue-100">
+                                            {partner1 ? (partner1.firstName || partner1.name?.split(' ')[0] || partner1Name) + ' ' + (partner1.lastName || partner1.name?.split(' ').slice(1).join(' ') || '') : partner1Name || 'Partner 1'}
+                                          </span>
+                                          {partner1ValidRestrictions.length > 0 && (
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              {partner1ValidRestrictions.slice(0, 1).map((r: any, idx: number) => (
                                                 <Badge 
-                                                  key={idx} 
-                                                  variant="outline" 
+                                                  key={r.restriction_id || r.restriction_name || `restriction-${idx}`} 
+                                                  variant="outline"
                                                   className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                                                 >
                                                   {getTypeIcon(r.restriction_type || '')}
-                                                  {r.restriction_name}
+                                                  {r.restriction_name || r}
                                                 </Badge>
                                               ))}
+                                              {partner1ValidRestrictions.length > 1 && (
+                                                <Badge variant="outline" className="text-xs">
+                                                  +{partner1ValidRestrictions.length - 1} more
+                                                </Badge>
+                                              )}
                                             </div>
+                                          )}
+                                          <Lock className="h-3 w-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Partner 2 - Always show */}
+                                      <div className="text-sm p-2 rounded bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 flex items-center justify-between">
+                                        <div className="flex items-center gap-2 flex-1 flex-wrap">
+                                          <Heart className="h-3 w-3 text-pink-500 dark:text-pink-400 flex-shrink-0" />
+                                          <span className="font-medium dark:text-blue-100">
+                                            {partner2 ? (partner2.firstName || partner2.name?.split(' ')[0] || partner2Name) + ' ' + (partner2.lastName || partner2.name?.split(' ').slice(1).join(' ') || '') : partner2Name || 'Partner 2'}
+                                          </span>
+                                          {partner2ValidRestrictions.length > 0 && (
+                                            <div className="flex items-center gap-1 flex-wrap">
+                                              {partner2ValidRestrictions.slice(0, 1).map((r: any, idx: number) => (
+                                                <Badge 
+                                                  key={r.restriction_id || r.restriction_name || `restriction-${idx}`} 
+                                                  variant="outline"
+                                                  className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                                >
+                                                  {getTypeIcon(r.restriction_type || '')}
+                                                  {r.restriction_name || r}
+                                                </Badge>
+                                              ))}
+                                              {partner2ValidRestrictions.length > 1 && (
+                                                <Badge variant="outline" className="text-xs">
+                                                  +{partner2ValidRestrictions.length - 1} more
+                                                </Badge>
+                                              )}
+                                            </div>
+                                          )}
+                                          <Lock className="h-3 w-3 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                                        </div>
+                                      </div>
+                                      
+                                      {/* Couple Preferences Restrictions (if any) */}
+                                      {coupleRestrictions.length > 0 && (
+                                        <div className="mt-2 pt-2 border-t border-blue-200 dark:border-blue-800">
+                                          <p className="text-xs font-medium mb-1 text-muted-foreground dark:text-muted-foreground">Couple Preferences:</p>
+                                          <div className="flex flex-wrap gap-1">
+                                            {coupleRestrictions.map((r, idx) => (
+                                              <Badge 
+                                                key={idx} 
+                                                variant="outline" 
+                                                className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                              >
+                                                {getTypeIcon(r.restriction_type || '')}
+                                                {r.restriction_name}
+                                              </Badge>
+                                            ))}
                                           </div>
-                                        )}
-                                        {/* Show other guests if any */}
-                                        {assignedGuestsList.filter(g => g.id !== partner1?.id && g.id !== partner2?.id).length > 0 && (
-                                          <div className="mt-2 pt-2 border-t">
-                                            <p className="text-xs font-medium mb-1 text-muted-foreground">Other Guests:</p>
-                                            <ul className="space-y-1">
-                                              {assignedGuestsList.filter(g => g.id !== partner1?.id && g.id !== partner2?.id).map((guest) => {
-                                                const restrictions = Array.isArray(guest.dietaryRestrictions) 
-                                                  ? guest.dietaryRestrictions 
-                                                  : guest.dietaryRestriction 
-                                                    ? [{ restriction_name: guest.dietaryRestriction }] 
-                                                    : [];
-                                                return (
-                                                  <li key={guest.id} className="flex items-center justify-between gap-2 text-sm p-1 rounded hover:bg-muted/50">
-                                                    <div className="flex items-center gap-2 flex-1">
-                                                      <span>{guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}</span>
-                                                      {restrictions.length > 0 && restrictions.some((r: any) => r.restriction_name && r.restriction_name !== 'None') && (
-                                                        <div className="flex flex-wrap gap-1">
-                                                          {restrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').map((r: any, idx: number) => (
-                                                            <Badge key={r.restriction_id || r.restriction_name || `restriction-${idx}`} variant="secondary" className="text-xs">
-                                                              {r.restriction_name || r}
-                                                            </Badge>
-                                                          ))}
-                                                        </div>
-                                                      )}
-                                                    </div>
-                                                    <Button
-                                                      variant="ghost"
-                                                      size="sm"
-                                                      className="h-6 w-6 p-0 text-destructive hover:text-destructive"
-                                                      onClick={() => handleRemoveGuestFromTable(guest.id, tableId)}
-                                                    >
-                                                      <X className="h-3 w-3" />
-                                                    </Button>
-                                                  </li>
-                                                );
-                                              })}
-                                            </ul>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                              </div>
+                              
+                              
+                              {/* Assigned Guests Section - Show all guests including partners if they exist as guests */}
+                              {assignedGuestsList.length > 0 && (
+                                <div className="mt-4 pt-4 border-t">
+                                  <p className="text-sm font-medium mb-2">Assigned Guests at this Table:</p>
+                                  <ul className="space-y-1">
+                                    {assignedGuestsList.map((guest) => {
+                                      const partner1Name = wedding?.partner1 || wedding?.partner1_name || '';
+                                      const partner2Name = wedding?.partner2 || wedding?.partner2_name || '';
+                                      const guestName = (guest.firstName || guest.name?.split(' ')[0] || '') + ' ' + (guest.lastName || guest.name?.split(' ').slice(1).join(' ') || '');
+                                      const isPartner = (isCoupleTableForCount && (
+                                        guestName.trim().includes(partner1Name) || guestName.trim().includes(partner2Name) ||
+                                        partner1Name.includes(guestName.trim()) || partner2Name.includes(guestName.trim())
+                                      ));
+                                      const restrictions = Array.isArray(guest.dietaryRestrictions) 
+                                        ? guest.dietaryRestrictions 
+                                        : guest.dietaryRestriction 
+                                          ? [{ restriction_name: guest.dietaryRestriction }] 
+                                          : [];
+                                      const validRestrictions = restrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None');
+                                      const rsvpStatus = guest.rsvpStatus || guest.rsvp_status || 'pending';
+                                      const rsvpIcon = rsvpStatus === 'accepted' ? <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" /> : 
+                                                       rsvpStatus === 'declined' ? <X className="h-3 w-3 text-red-600 dark:text-red-400" /> : 
+                                                       <Clock className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />;
+                                      return (
+                                        <li key={guest.id} className={`flex items-center justify-between gap-2 text-sm p-2 rounded border ${isPartner ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800' : 'border-border hover:bg-muted/50'}`}>
+                                          <div className="flex items-center gap-2 flex-1 flex-wrap">
+                                            {rsvpIcon}
+                                            <span className="font-medium">{guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}</span>
+                                            {isPartner && (
+                                              <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700">
+                                                <Heart className="h-2 w-2 mr-1 text-pink-500 dark:text-pink-400" />
+                                                Partner
+                                              </Badge>
+                                            )}
+                                            {validRestrictions.length > 0 && (
+                                              <div className="flex items-center gap-1">
+                                                {validRestrictions.slice(0, 1).map((r: any, idx: number) => (
+                                                  <Badge key={r.restriction_id || r.restriction_name || `restriction-${idx}`} variant="secondary" className="text-xs">
+                                                    {r.restriction_name || r}
+                                                  </Badge>
+                                                ))}
+                                                {validRestrictions.length > 1 && (
+                                                  <Badge variant="outline" className="text-xs">
+                                                    +{validRestrictions.length - 1} more
+                                                  </Badge>
+                                                )}
+                                              </div>
+                                            )}
                                           </div>
-                                        )}
-                                      </>
-                                    );
-                                  })()}
+                                          {!isPartner && (
+                                            <Button
+                                              variant="ghost"
+                                              size="sm"
+                                              className="h-6 w-6 p-0 text-destructive hover:text-destructive"
+                                              onClick={() => handleRemoveGuestFromTable(guest.id, tableId)}
+                                            >
+                                              <X className="h-3 w-3" />
+                                            </Button>
+                                          )}
+                                        </li>
+                                      );
+                                    })}
+                                  </ul>
                                 </div>
                               )}
                             </>
                           ) : (
                             <>
-                          <p className="text-sm font-medium mb-2">Assigned Guests:</p>
-                          {assignedGuestsList.length === 0 ? (
-                            <p className="text-sm text-muted-foreground">No guests assigned</p>
-                          ) : (
-                            <ul className="space-y-1">
+                              <div className="mb-2">
+                                <p className="text-sm font-medium">Assigned Guests:</p>
+                              </div>
+                              {assignedGuestsList.length === 0 ? (
+                                <p className="text-sm text-muted-foreground">No guests assigned</p>
+                              ) : (
+                                <ul className="space-y-1">
                                   {assignedGuestsList.map((guest) => {
                                     const restrictions = Array.isArray(guest.dietaryRestrictions) 
                                       ? guest.dietaryRestrictions 
                                       : guest.dietaryRestriction 
                                         ? [{ restriction_name: guest.dietaryRestriction }] 
                                         : [];
+                                    const validRestrictions = restrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None');
+                                    const rsvpStatus = guest.rsvpStatus || guest.rsvp_status || 'pending';
+                                    const rsvpIcon = rsvpStatus === 'accepted' ? <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" /> : 
+                                                     rsvpStatus === 'declined' ? <X className="h-3 w-3 text-red-600 dark:text-red-400" /> : 
+                                                     <Clock className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />;
                                     return (
-                                      <li key={guest.id} className="flex items-center justify-between gap-2 text-sm p-1 rounded hover:bg-muted/50">
-                                        <div className="flex items-center gap-2 flex-1">
-                                          <span>{guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}</span>
-                                          {restrictions.length > 0 && restrictions.some((r: any) => r.restriction_name && r.restriction_name !== 'None') && (
-                                            <div className="flex flex-wrap gap-1">
-                                              {restrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').map((r: any, idx: number) => (
+                                      <li key={guest.id} className="flex items-center justify-between gap-2 text-sm p-2 rounded border border-border hover:bg-muted/50">
+                                        <div className="flex items-center gap-2 flex-1 flex-wrap">
+                                          {rsvpIcon}
+                                          <span className="font-medium">{guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}</span>
+                                          {validRestrictions.length > 0 && (
+                                            <div className="flex items-center gap-1">
+                                              {validRestrictions.slice(0, 1).map((r: any, idx: number) => (
                                                 <Badge key={r.restriction_id || r.restriction_name || `restriction-${idx}`} variant="secondary" className="text-xs">
                                                   {r.restriction_name || r}
-                                    </Badge>
+                                                </Badge>
                                               ))}
+                                              {validRestrictions.length > 1 && (
+                                                <Badge variant="outline" className="text-xs">
+                                                  +{validRestrictions.length - 1} more
+                                                </Badge>
+                                              )}
                                             </div>
                                           )}
                                         </div>
@@ -3216,10 +3490,10 @@ const WeddingDetail = () => {
                                         >
                                           <X className="h-3 w-3" />
                                         </Button>
-                                </li>
+                                      </li>
                                     );
                                   })}
-                            </ul>
+                                </ul>
                               )}
                             </>
                           )}
@@ -3232,95 +3506,7 @@ const WeddingDetail = () => {
                     return null;
                   }
                 }).filter(Boolean)}
-              </div>
-            )}
-
-            {/* Tables List */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Wedding Table Directory</CardTitle>
-                <CardDescription>Overview of all tables for this wedding</CardDescription>
-              </CardHeader>
-              <CardContent>
-                {tables.length === 0 ? (
-                  <div className="text-center py-4 space-y-2">
-                    <p className="text-muted-foreground">No tables added yet</p>
-                    <p className="text-sm text-amber-600 font-medium">
-                      ⚠️ Warning: No tables available. Please add tables to manage seating.
-                    </p>
                   </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Table ID</TableHead>
-                        <TableHead>Table Number</TableHead>
-                        <TableHead>Category</TableHead>
-                        <TableHead>Capacity</TableHead>
-                        <TableHead>Assigned Guests</TableHead>
-                        <TableHead>Available Seats</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="w-[50px]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {tables.map((table) => {
-                        if (!table) return null;
-                        const tableId = table.id || table.table_id;
-                        const assignedGuestsList = (guests || []).filter(g => g && g.table_id === tableId);
-                        const assignedCount = assignedGuestsList.length;
-                        const capacity = table.capacity || 0;
-                        const available = capacity - assignedCount;
-                        const tableNum = table.tableNumber || table.table_number || 'Unknown';
-                        const category = table.category || table.table_category || 'General';
-                        const isFull = available <= 0 && capacity > 0;
-                        
-                        return (
-                          <TableRow key={table.id || table.table_id || `table-${tableNum}`}>
-                            <TableCell className="font-medium text-xs text-muted-foreground">{tableId || 'N/A'}</TableCell>
-                            <TableCell className="font-medium">{tableNum}</TableCell>
-                            <TableCell>{getTableCategoryBadge(category)}</TableCell>
-                            <TableCell>{capacity || 'N/A'}</TableCell>
-                            <TableCell>{assignedCount}</TableCell>
-                            <TableCell>
-                              <Badge variant={isFull ? "destructive" : "outline"}>
-                                {available}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              {isFull ? (
-                                <Badge variant="destructive">Full</Badge>
-                              ) : (
-                                <Badge variant="secondary">Available</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" className="h-8 w-8 p-0">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem onClick={() => handleEditTable(table)}>
-                                    <Edit className="mr-2 h-4 w-4" />
-                                    Edit
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="text-red-600"
-                                    onClick={() => handleDeleteTable(tableId)}
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
                 )}
               </CardContent>
             </Card>
@@ -3343,10 +3529,18 @@ const WeddingDetail = () => {
                         <SelectContent>
                           {tables.map((table) => {
                             if (!table) return null;
-                            const assignedGuests = table.assignedGuests || table.assigned_guests || [];
-                            const assignedCount = Array.isArray(assignedGuests) ? assignedGuests.length : 0;
-                            const available = (table.capacity || 0) - assignedCount;
                             const tableId = table.id || table.table_id;
+                            // Get assigned guests by checking table_id in guest data (same logic as table cards)
+                            const assignedGuestsList = (guests || []).filter(g => {
+                              if (!g) return false;
+                              return g.table_id === tableId;
+                            });
+                            // For couple tables, always count the 2 partners as assigned
+                            const isCoupleTableForCount = (table.category || table.table_category || '').toLowerCase() === 'couple';
+                            const partnerCount = isCoupleTableForCount ? 2 : 0;
+                            const assignedCount = assignedGuestsList.length + partnerCount;
+                            const capacity = table.capacity || 0;
+                            const available = Math.max(0, capacity - assignedCount);
                             const tableNum = table.tableNumber || table.table_number || 'Unknown';
                             const category = table.category || table.table_category || 'General';
                             return (
@@ -3367,12 +3561,23 @@ const WeddingDetail = () => {
                         <SelectContent>
                           {guests
                             .filter(guest => !guest.table_id) // Only show unassigned guests
-                            .map((guest) => (
-                            <SelectItem key={guest.id || guest.guest_id || `guest-${guest.name}`} value={(guest.id ?? guest.guest_id ?? `guest-${guest.name || 'unknown'}`).toString()}>
-                              {guest.firstName || guest.name?.split(' ')[0] || 'Unknown'} {guest.lastName || guest.name?.split(' ').slice(1).join(' ') || ''}
-                              {guest.table_id && <span className="text-xs text-muted-foreground ml-2">(Assigned)</span>}
-                            </SelectItem>
-                          ))}
+                            .map((guest) => {
+                              const rsvpStatus = guest.rsvpStatus || guest.rsvp_status || 'pending';
+                              return (
+                                <SelectItem key={guest.id || guest.guest_id || `guest-${guest.name}`} value={(guest.id ?? guest.guest_id ?? `guest-${guest.name || 'unknown'}`).toString()}>
+                                  <div className="flex items-center gap-2">
+                                    <span>{guest.firstName || guest.name?.split(' ')[0] || 'Unknown'} {guest.lastName || guest.name?.split(' ').slice(1).join(' ') || ''}</span>
+                                    <Badge variant="outline" className={`text-xs ${
+                                      rsvpStatus === 'accepted' ? 'bg-green-100 text-green-800 border-green-300' : 
+                                      rsvpStatus === 'declined' ? 'bg-red-100 text-red-800 border-red-300' : 
+                                      'bg-yellow-100 text-yellow-800 border-yellow-300'
+                                    }`}>
+                                      RSVP: {rsvpStatus.charAt(0).toUpperCase() + rsvpStatus.slice(1)}
+                                    </Badge>
+                                  </div>
+                                </SelectItem>
+                              );
+                            })}
                           {guests.filter(guest => !guest.table_id).length === 0 && (
                             <SelectItem value="placeholder-no-guests" disabled>No unassigned guests available</SelectItem>
                           )}
@@ -3440,23 +3645,27 @@ const WeddingDetail = () => {
                         if (!table) return null;
                         try {
                           const tableId = table.id || table.table_id;
-                          const assignedCount = guests.filter(g => g && g.table_id === tableId).length;
+                          const assignedGuestsList = guests.filter(g => g && g.table_id === tableId);
+                          // For couple tables, always count the 2 partners as assigned
+                          const isCoupleTableForSeats = (table.category || table.table_category || '').toLowerCase() === 'couple';
+                          const partnerCountForSeats = isCoupleTableForSeats ? 2 : 0;
+                          const assignedCount = assignedGuestsList.length + partnerCountForSeats;
                           const capacity = table.capacity || 0;
-                          const available = capacity - assignedCount;
+                          const available = Math.max(0, capacity - assignedCount);
                         const categoryColors: Record<string, string> = {
-                          'VIP': 'bg-purple-200 border-purple-400',
-                            'kids': 'bg-blue-200 border-blue-400',
-                            'elderly': 'bg-orange-200 border-orange-400',
-                            'family': 'bg-green-200 border-green-400',
-                            'entourage': 'bg-indigo-200 border-indigo-400',
-                            'friends': 'bg-cyan-200 border-cyan-400',
-                            'vendor': 'bg-yellow-200 border-yellow-400',
-                            'staff': 'bg-gray-200 border-gray-400',
-                            'reserved': 'bg-amber-200 border-amber-400',
-                            'special_needs': 'bg-red-200 border-red-400',
-                            'couple': 'bg-pink-200 border-pink-400',
-                            'guest': 'bg-blue-200 border-blue-400',
-                          'General': 'bg-gray-200 border-gray-400'
+                          'VIP': 'bg-purple-200 dark:bg-purple-900 border-purple-400 dark:border-purple-600',
+                            'kids': 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-600',
+                            'elderly': 'bg-orange-200 dark:bg-orange-900 border-orange-400 dark:border-orange-600',
+                            'family': 'bg-green-200 dark:bg-green-900 border-green-400 dark:border-green-600',
+                            'entourage': 'bg-indigo-200 dark:bg-indigo-900 border-indigo-400 dark:border-indigo-600',
+                            'friends': 'bg-cyan-200 dark:bg-cyan-900 border-cyan-400 dark:border-cyan-600',
+                            'vendor': 'bg-yellow-200 dark:bg-yellow-900 border-yellow-400 dark:border-yellow-600',
+                            'staff': 'bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-500',
+                            'reserved': 'bg-amber-200 dark:bg-amber-900 border-amber-400 dark:border-amber-600',
+                            'special_needs': 'bg-red-200 dark:bg-red-900 border-red-400 dark:border-red-600',
+                            'couple': 'bg-pink-200 dark:bg-pink-900 border-pink-400 dark:border-pink-600',
+                            'guest': 'bg-blue-200 dark:bg-blue-900 border-blue-400 dark:border-blue-600',
+                          'General': 'bg-gray-200 dark:bg-gray-700 border-gray-400 dark:border-gray-500'
                         };
                           const tableCategory = table.category || table.table_category || 'General';
                           const tableNum = table.tableNumber || table.table_number || 'Unknown';
@@ -3471,6 +3680,9 @@ const WeddingDetail = () => {
                           const defaultX = 10 + ((tableId || 0) % 6) * 15;
                           const defaultY = 10 + Math.floor((tableId || 0) / 6) * 20;
                           const position = tablePositions[tableId] || { x: defaultX, y: defaultY };
+                          
+                          // Calculate assigned count including partners for couple tables (for display)
+                          const actualAssignedCount = assignedCount; // Already includes partners from line 3648
                           
                         return (
                           <div
@@ -3495,44 +3707,48 @@ const WeddingDetail = () => {
                             >
                               {/* Table with chairs */}
                               <div className="relative">
-                                {/* Calculate table size based on capacity (min 2 seats = 60px, max 15 seats = 120px) */}
+                                {/* Calculate table size based on capacity (min 1 seat = 50px, max 15 seats = 120px) */}
                                 {(() => {
-                                  const minSize = 60;
+                                  const minSize = 50;
                                   const maxSize = 120;
-                                  const sizeStep = (maxSize - minSize) / 13; // 13 steps from 2 to 15
-                                  const tableSize = Math.max(minSize, Math.min(maxSize, minSize + (capacity - 2) * sizeStep));
-                                  const chairRadius = tableSize * 0.35; // Scale chair radius with table size
+                                  const sizeStep = (maxSize - minSize) / 14; // 14 steps from 1 to 15
+                                  const tableSize = Math.max(minSize, Math.min(maxSize, minSize + (capacity - 1) * sizeStep));
+                                  // Always show chairs for all capacity levels
+                                  const chairRadius = capacity === 1 ? tableSize * 0.25 : tableSize * 0.35; // Smaller radius for capacity 1
                                   
                                   return (
                                     <>
                                       {/* Chairs arranged around table in a circle */}
-                                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 1 }}>
                                         {Array.from({ length: capacity }, (_, i) => {
-                                          const angle = (i * 360) / capacity;
+                                          const angle = capacity === 1 ? 0 : (i * 360) / capacity; // For capacity 1, place at top
                                           const radian = (angle * Math.PI) / 180;
                                           const chairX = Math.cos(radian) * chairRadius;
                                           const chairY = Math.sin(radian) * chairRadius;
-                                          const isOccupied = i < assignedCount;
+                                          // For couple tables, first 2 seats are always occupied by partners
+                                          const isCoupleTableForSeats = (table.category || table.table_category || '').toLowerCase() === 'couple';
+                                          const partnerSeats = isCoupleTableForSeats ? 2 : 0;
+                                          const actualAssignedCount = assignedGuestsList.length + partnerSeats;
+                                          const isOccupied = i < actualAssignedCount;
                                           
                                           return (
                                             <div
                                               key={i}
-                                              className="absolute rounded-full border-2 transition-all cursor-pointer"
+                                              className={`absolute rounded-full border-2 transition-all cursor-pointer ${
+                                                isOccupied 
+                                                  ? 'bg-red-500 dark:bg-red-600 border-red-600 dark:border-red-700' 
+                                                  : 'bg-green-500 dark:bg-green-600 border-green-600 dark:border-green-700'
+                                              }`}
                                               style={{
-                                                width: '10px',
-                                                height: '10px',
+                                                width: capacity === 1 ? '8px' : '10px',
+                                                height: capacity === 1 ? '8px' : '10px',
                                                 left: `calc(50% + ${chairX}px)`,
                                                 top: `calc(50% + ${chairY}px)`,
                                                 transform: 'translate(-50%, -50%)',
-                                                backgroundColor: isOccupied 
-                                                  ? '#ef4444' // red-500 for occupied
-                                                  : '#22c55e', // green-500 for available
-                                                borderColor: isOccupied 
-                                                  ? '#dc2626' // red-600 border
-                                                  : '#16a34a', // green-600 border
+                                                zIndex: 1,
                                                 boxShadow: isOccupied 
-                                                  ? '0 0 0 1px rgba(220, 38, 38, 0.2)' 
-                                                  : '0 0 0 1px rgba(34, 197, 94, 0.2)'
+                                                  ? '0 0 0 1px rgba(220, 38, 38, 0.3), 0 0 0 2px rgba(239, 68, 68, 0.2) inset' 
+                                                  : '0 0 0 1px rgba(34, 197, 94, 0.3), 0 0 0 2px rgba(22, 163, 74, 0.2) inset'
                                               }}
                                               title={`Seat ${i + 1}: ${isOccupied ? 'Occupied' : 'Available'}`}
                                             />
@@ -3540,20 +3756,25 @@ const WeddingDetail = () => {
                                         })}
                                       </div>
                                       
-                                      {/* Table center - dynamic size */}
+                                      {/* Table center - dynamic size - higher z-index to show above chairs */}
                                       <div
-                                        className={`rounded-lg border-2 p-2 flex flex-col items-center justify-center text-xs transition-all hover:shadow-lg hover:scale-105 ${categoryColors[tableCategory] || categoryColors[tableCategory.toLowerCase()] || 'bg-gray-200 border-gray-400'}`}
+                                        className={`rounded-lg border-2 p-1.5 flex flex-col items-center justify-center text-xs transition-all hover:shadow-lg hover:scale-105 relative dark:border-gray-600 ${categoryColors[tableCategory] || categoryColors[tableCategory.toLowerCase()] || 'bg-gray-200 dark:bg-gray-800 border-gray-400'}`}
                                         style={{
                                           width: `${tableSize}px`,
-                                          height: `${tableSize}px`
+                                          height: `${tableSize}px`,
+                                          zIndex: 2,
+                                          minWidth: '50px',
+                                          minHeight: '50px'
                                         }}
-                                        title={`${displayTableNum} - ${assignedCount}/${capacity} guests`}
+                                        title={`${displayTableNum} - ${actualAssignedCount}/${capacity} guests`}
                                       >
-                                        <div className="font-semibold text-[11px] leading-tight">{displayTableNum}</div>
-                                        <div className="text-[8px] text-muted-foreground mt-0.5">ID: {tableId}</div>
-                                        <div className="text-[10px] mt-1 font-medium">{assignedCount}/{capacity}</div>
-                                        {available === 0 && (
-                                          <div className="text-[8px] text-red-600 mt-0.5 font-bold">Full</div>
+                                        <div className="font-semibold text-[10px] leading-tight relative z-10 text-gray-900 dark:text-gray-100 truncate max-w-full px-0.5">{displayTableNum}</div>
+                                        {capacity > 1 && (
+                                          <div className="text-[7px] text-gray-600 dark:text-gray-400 mt-0.5 relative z-10">ID: {tableId}</div>
+                                        )}
+                                        <div className="text-[9px] mt-0.5 font-medium relative z-10 text-gray-800 dark:text-gray-200">{actualAssignedCount}/{capacity}</div>
+                                        {(capacity - actualAssignedCount) === 0 && (
+                                          <div className="text-[7px] text-red-600 dark:text-red-400 mt-0.5 font-bold relative z-10">Full</div>
                                         )}
                                       </div>
                                     </>
@@ -3576,13 +3797,24 @@ const WeddingDetail = () => {
               </CardContent>
             </Card>
 
-            {/* Bulk Assignment Modal */}
-            <Dialog open={bulkAssignmentOpen} onOpenChange={setBulkAssignmentOpen}>
-              <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          </TabsContent>
+
+          {/* Bulk Assignment Modal - Outside TabsContent */}
+          <Dialog open={bulkAssignmentOpen} onOpenChange={(open) => {
+              setBulkAssignmentOpen(open);
+              if (!open) {
+                setSelectedGuestIds([]);
+                setBulkTableId('');
+                setBulkAssignFilter('all');
+              }
+            }}>
+              <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Bulk Assign Guests to Table</DialogTitle>
                   <DialogDescription>
-                    Select multiple guests and assign them to a table at once
+                    Select multiple guests and assign them to a table at once. {selectedGuestIds.length > 0 && (
+                      <span className="font-semibold text-foreground">{selectedGuestIds.length} guest{selectedGuestIds.length !== 1 ? 's' : ''} selected</span>
+                    )}
                   </DialogDescription>
                 </DialogHeader>
                 <div className="grid grid-cols-2 gap-6 py-4">
@@ -3594,61 +3826,134 @@ const WeddingDetail = () => {
                         Unassigned: {getUnassignedGuests().length}
                       </Badge>
                     </div>
+                    
+                    {/* Filter and Quick Actions */}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Select value={bulkAssignFilter} onValueChange={(value: any) => setBulkAssignFilter(value)}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All Guests</SelectItem>
+                            <SelectItem value="accepted">Accepted RSVP</SelectItem>
+                            <SelectItem value="pending">Pending RSVP</SelectItem>
+                            <SelectItem value="declined">Declined RSVP</SelectItem>
+                            <SelectItem value="unassigned">Unassigned Only</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <div className="flex gap-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => {
+                              const unassigned = getUnassignedGuests();
+                              setSelectedGuestIds(unassigned.map(g => g.id));
+                            }}
+                          >
+                            Select All Unassigned
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs"
+                            onClick={() => {
+                              const accepted = guests.filter(g => (g.rsvpStatus === 'accepted' || g.rsvp_status === 'accepted') && !g.table_id);
+                              setSelectedGuestIds(accepted.map(g => g.id));
+                            }}
+                          >
+                            Select All Accepted
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                    
                     <div className="border rounded-lg p-4 max-h-[400px] overflow-y-auto">
-                      {guests.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-4">
-                          No guests available
-                        </p>
-                      ) : (
-                        <div className="space-y-2">
-                          {guests.map((guest) => {
-                            const isAssigned = guest.table_id !== null && guest.table_id !== undefined;
-                            const assignedTable = isAssigned ? tables.find(t => (t.id || t.table_id) === guest.table_id) : null;
-                            return (
-                            <div key={guest.id} className="flex items-center space-x-2 p-2 rounded hover:bg-muted">
-                              <Checkbox
-                                checked={selectedGuestIds.includes(guest.id)}
-                                onCheckedChange={(checked) => {
-                                  if (checked) {
-                                    setSelectedGuestIds([...selectedGuestIds, guest.id]);
-                                  } else {
-                                    setSelectedGuestIds(selectedGuestIds.filter(id => id !== guest.id));
-                                  }
-                                }}
-                              />
-                              <div className="flex-1">
-                                  <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium">
-                                      {guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}
-                                    </p>
-                                    {isAssigned && (
-                                      <Badge variant="secondary" className="text-xs">
-                                        {assignedTable?.tableNumber || assignedTable?.table_number || 'Table'} assigned
+                      {(() => {
+                        let filteredGuests = guests;
+                        if (bulkAssignFilter === 'accepted') {
+                          filteredGuests = guests.filter(g => g.rsvpStatus === 'accepted' || g.rsvp_status === 'accepted');
+                        } else if (bulkAssignFilter === 'pending') {
+                          filteredGuests = guests.filter(g => (g.rsvpStatus === 'pending' || g.rsvp_status === 'pending') || (!g.rsvpStatus && !g.rsvp_status));
+                        } else if (bulkAssignFilter === 'declined') {
+                          filteredGuests = guests.filter(g => g.rsvpStatus === 'declined' || g.rsvp_status === 'declined');
+                        } else if (bulkAssignFilter === 'unassigned') {
+                          filteredGuests = getUnassignedGuests();
+                        }
+                        
+                        if (filteredGuests.length === 0) {
+                          return (
+                            <p className="text-sm text-muted-foreground text-center py-4">
+                              No guests match the selected filter
+                            </p>
+                          );
+                        }
+                        
+                        return (
+                          <div className="space-y-2">
+                            {filteredGuests.map((guest) => {
+                              const isAssigned = guest.table_id !== null && guest.table_id !== undefined;
+                              const assignedTable = isAssigned ? tables.find(t => (t.id || t.table_id) === guest.table_id) : null;
+                              const rsvpStatus = guest.rsvpStatus || guest.rsvp_status || 'pending';
+                              const rsvpBadgeColor = rsvpStatus === 'accepted' ? 'bg-green-100 text-green-800 border-green-300' : 
+                                                     rsvpStatus === 'declined' ? 'bg-red-100 text-red-800 border-red-300' : 
+                                                     'bg-yellow-100 text-yellow-800 border-yellow-300';
+                              return (
+                                <div key={guest.id} className={`flex items-center space-x-2 p-2 rounded hover:bg-muted ${isAssigned ? 'opacity-60' : ''}`}>
+                                  <Checkbox
+                                    checked={selectedGuestIds.includes(guest.id)}
+                                    onCheckedChange={(checked) => {
+                                      if (checked) {
+                                        setSelectedGuestIds([...selectedGuestIds, guest.id]);
+                                      } else {
+                                        setSelectedGuestIds(selectedGuestIds.filter(id => id !== guest.id));
+                                      }
+                                    }}
+                                    disabled={isAssigned && bulkAssignFilter === 'unassigned'}
+                                  />
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <p className="text-sm font-medium">
+                                        {guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}
+                                      </p>
+                                      <Badge variant="outline" className={`text-xs ${rsvpBadgeColor}`}>
+                                        RSVP: {rsvpStatus.charAt(0).toUpperCase() + rsvpStatus.slice(1)}
                                       </Badge>
+                                      {isAssigned && (
+                                        <Badge variant="secondary" className="text-xs">
+                                          {assignedTable?.tableNumber || assignedTable?.table_number || 'Table'} assigned
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    {((guest.dietaryRestriction && guest.dietaryRestriction !== 'None') || (guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions) && guest.dietaryRestrictions.length > 0)) && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions) && guest.dietaryRestrictions.length > 0
+                                          ? guest.dietaryRestrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').slice(0, 3).map((r: any, idx: number) => (
+                                              <Badge key={r.restriction_id || idx} variant="secondary" className="text-xs">
+                                                {r.restriction_name}
+                                              </Badge>
+                                            ))
+                                          : guest.dietaryRestriction && guest.dietaryRestriction !== 'None' && (
+                                              <Badge variant="secondary" className="text-xs">
+                                                {guest.dietaryRestriction}
+                                              </Badge>
+                                            )
+                                        }
+                                        {guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions) && guest.dietaryRestrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').length > 3 && (
+                                          <Badge variant="outline" className="text-xs">
+                                            +{guest.dietaryRestrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').length - 3} more
+                                          </Badge>
+                                        )}
+                                      </div>
                                     )}
                                   </div>
-                                  {((guest.dietaryRestriction && guest.dietaryRestriction !== 'None') || (guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions) && guest.dietaryRestrictions.length > 0)) && (
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                      {guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions) && guest.dietaryRestrictions.length > 0
-                                        ? guest.dietaryRestrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').map((r: any, idx: number) => (
-                                            <Badge key={r.restriction_id || idx} variant="secondary" className="text-xs">
-                                              {r.restriction_name}
-                                            </Badge>
-                                          ))
-                                        : guest.dietaryRestriction && guest.dietaryRestriction !== 'None' && (
-                                            <Badge variant="secondary" className="text-xs">
-                                    {guest.dietaryRestriction}
-                                  </Badge>
-                                          )
-                                      }
-                                    </div>
-                                )}
-                              </div>
-                            </div>
-                            );
-                          })}
-                        </div>
-                      )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
 
@@ -3681,7 +3986,14 @@ const WeddingDetail = () => {
                         </SelectContent>
                       </Select>
                       {bulkTableId && (
-                        <div className="border rounded-lg p-3 mt-2">
+                        <div className={`border rounded-lg p-3 mt-2 ${selectedGuestIds.length > 0 ? (() => {
+                          const selectedTable = tables.find(t => (t.id ?? t.table_id)?.toString() === bulkTableId);
+                          if (!selectedTable) return '';
+                          const tableId = selectedTable.id || selectedTable.table_id;
+                          const assignedCount = guests.filter(g => g && g.table_id === tableId).length;
+                          const available = (selectedTable.capacity || 0) - assignedCount;
+                          return selectedGuestIds.length > available ? 'border-red-300 bg-red-50' : 'border-green-300 bg-green-50';
+                        })() : ''}`}>
                           {(() => {
                             const selectedTable = tables.find(t => (t.id ?? t.table_id)?.toString() === bulkTableId);
                             if (!selectedTable) return null;
@@ -3696,10 +4008,23 @@ const WeddingDetail = () => {
                                   Assigned: {assignedCount} | 
                                   Available: {available}
                                 </p>
-                                {selectedGuestIds.length > available && (
-                                  <p className="text-xs text-red-500 mt-1">
-                                    Warning: {selectedGuestIds.length} guests selected, only {available} seats available
-                                  </p>
+                                {selectedGuestIds.length > 0 && (
+                                  <div className="mt-2 pt-2 border-t">
+                                    <p className="text-xs font-medium">
+                                      {selectedGuestIds.length} guest{selectedGuestIds.length !== 1 ? 's' : ''} selected
+                                    </p>
+                                    {selectedGuestIds.length > available ? (
+                                      <p className="text-xs text-red-600 font-semibold mt-1 flex items-center gap-1">
+                                        <AlertTriangle className="h-3 w-3" />
+                                        Warning: Only {available} seat{available !== 1 ? 's' : ''} available
+                                      </p>
+                                    ) : (
+                                      <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                        <CheckCircle className="h-3 w-3" />
+                                        {available - selectedGuestIds.length} seat{available - selectedGuestIds.length !== 1 ? 's' : ''} remaining
+                                      </p>
+                                    )}
+                                  </div>
                                 )}
                               </>
                             );
@@ -3739,8 +4064,7 @@ const WeddingDetail = () => {
                   </Button>
                 </DialogFooter>
               </DialogContent>
-            </Dialog>
-          </TabsContent>
+          </Dialog>
 
           {/* Edit Table Dialog */}
           <Dialog open={editTableOpen} onOpenChange={setEditTableOpen}>
@@ -4271,9 +4595,9 @@ const WeddingDetail = () => {
                               <Badge variant="secondary">{allocation.item_condition}</Badge>
                             </TableCell>
                             <TableCell>{allocation.quantity_used}</TableCell>
-                            <TableCell>${(allocation.rental_cost || 0).toFixed(2)}</TableCell>
+                            <TableCell>${(typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0).toFixed(2)}</TableCell>
                             <TableCell className="font-semibold">
-                              ${((allocation.quantity_used || 0) * (allocation.rental_cost || 0)).toFixed(2)}
+                              ${((allocation.quantity_used || 0) * (typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0)).toFixed(2)}
                             </TableCell>
                             <TableCell>
                               <div className="flex items-center gap-1">
@@ -4320,6 +4644,251 @@ const WeddingDetail = () => {
             </Card>
           </TabsContent>
         </Tabs>
+
+        {/* View Individual Table Dialog - Outside Tabs for proper rendering */}
+        <Dialog open={viewTableOpen} onOpenChange={setViewTableOpen}>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>
+                {selectedTableForView ? `${selectedTableForView.tableNumber || selectedTableForView.table_number || 'Table'} - Details` : 'Table Details'}
+              </DialogTitle>
+              <DialogDescription>
+                Complete information about this table including all guests, dietary restrictions, and seating information
+              </DialogDescription>
+            </DialogHeader>
+            {selectedTableForView && (() => {
+              const table = selectedTableForView;
+              const tableId = table.id || table.table_id;
+              const tableGuests = guests.filter(g => g && g.table_id === tableId);
+              const isCoupleTable = (table.category || table.table_category || '').toLowerCase() === 'couple';
+              const partnerCount = isCoupleTable ? 2 : 0;
+              const assignedCount = tableGuests.length;
+              const actualAssignedCount = assignedCount + partnerCount;
+              const capacity = table.capacity || 0;
+              const available = Math.max(0, capacity - actualAssignedCount);
+              const partner1Name = wedding?.partner1 || wedding?.partner1_name || '';
+              const partner2Name = wedding?.partner2 || wedding?.partner2_name || '';
+              
+              // Get all restrictions
+              const allRestrictions = new Set<string>();
+              const restrictionDetails: any[] = [];
+              
+              // From couple preferences if couple table
+              if (isCoupleTable && coupleData && coupleData.preferences) {
+                coupleData.preferences.forEach((pref: any) => {
+                  if (pref.dietaryRestrictions && Array.isArray(pref.dietaryRestrictions)) {
+                    pref.dietaryRestrictions.forEach((r: any) => {
+                      if (r && r.restriction_name && r.restriction_name !== 'None') {
+                        if (!allRestrictions.has(r.restriction_name)) {
+                          allRestrictions.add(r.restriction_name);
+                          restrictionDetails.push(r);
+                        }
+                      }
+                    });
+                  }
+                });
+              }
+              
+              // From all assigned guests
+              tableGuests.forEach((guest: any) => {
+                const restrictions = Array.isArray(guest.dietaryRestrictions) 
+                  ? guest.dietaryRestrictions 
+                  : guest.dietaryRestriction 
+                    ? [{ restriction_name: guest.dietaryRestriction }] 
+                    : [];
+                restrictions.forEach((r: any) => {
+                  if (r.restriction_name && r.restriction_name !== 'None') {
+                    if (!allRestrictions.has(r.restriction_name)) {
+                      allRestrictions.add(r.restriction_name);
+                      restrictionDetails.push(r);
+                    }
+                  }
+                });
+              });
+              
+              return (
+                <div className="space-y-6 py-4">
+                  {/* Table Basic Info */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Table Number</Label>
+                      <p className="font-semibold">{table.tableNumber || table.table_number || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Table ID</Label>
+                      <p className="font-semibold">{tableId || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Category</Label>
+                      <div className="mt-1">{getTableCategoryBadge(table.category || table.table_category || '')}</div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Capacity</Label>
+                      <p className="font-semibold">{capacity}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Assigned Guests</Label>
+                      <p className="font-semibold">{assignedCount}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Available Seats</Label>
+                      <p className="font-semibold">{available}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Package Info */}
+                  {getTablePackage(tableId) && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Assigned Package</Label>
+                      <div className="mt-1">
+                        <Badge variant="outline" className="gap-1">
+                          <Package className="w-3 h-3" />
+                          {getTablePackage(tableId).packageName}
+                        </Badge>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Dietary Restrictions */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">Total Dietary Restrictions ({restrictionDetails.length})</Label>
+                    {restrictionDetails.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {restrictionDetails.map((r, idx) => (
+                          <Badge 
+                            key={idx} 
+                            variant="outline" 
+                            className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                          >
+                            {getTypeIcon(r.restriction_type || '')}
+                            {r.restriction_name}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No dietary restrictions</p>
+                    )}
+                  </div>
+                  
+                  {/* Partners (if couple table) */}
+                  {isCoupleTable && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-2 block flex items-center gap-2">
+                        <Heart className="h-3 w-3 text-pink-500 dark:text-pink-400" />
+                        Seated Partners
+                      </Label>
+                      <div className="space-y-2">
+                        <div className="p-2 rounded bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                          <p className="text-sm font-medium dark:text-blue-100">Partner 1: {partner1Name || 'N/A'}</p>
+                        </div>
+                        <div className="p-2 rounded bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800">
+                          <p className="text-sm font-medium dark:text-blue-100">Partner 2: {partner2Name || 'N/A'}</p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* All Guests */}
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">All Guests at This Table ({tableGuests.length})</Label>
+                    {tableGuests.length > 0 ? (
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto border rounded-lg p-3">
+                        {tableGuests.map((guest: any) => {
+                          const restrictions = Array.isArray(guest.dietaryRestrictions) 
+                            ? guest.dietaryRestrictions 
+                            : guest.dietaryRestriction 
+                              ? [{ restriction_name: guest.dietaryRestriction }] 
+                              : [];
+                          const validRestrictions = restrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None');
+                          const rsvpStatus = guest.rsvpStatus || guest.rsvp_status || 'pending';
+                          const rsvpIcon = rsvpStatus === 'accepted' ? <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" /> : 
+                                           rsvpStatus === 'declined' ? <X className="h-3 w-3 text-red-600 dark:text-red-400" /> : 
+                                           <Clock className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />;
+                          const guestName = (guest.firstName || guest.name?.split(' ')[0] || '') + ' ' + (guest.lastName || guest.name?.split(' ').slice(1).join(' ') || '');
+                          const guestId = guest.guest_id || guest.id;
+                          const isPartner = (isCoupleTable && (
+                            guestName.trim().includes(partner1Name) || guestName.trim().includes(partner2Name) ||
+                            partner1Name.includes(guestName.trim()) || partner2Name.includes(guestName.trim())
+                          ));
+                          
+                          return (
+                            <div key={guest.id} className={`p-2 rounded border ${isPartner ? 'bg-blue-50 dark:bg-blue-950 border-blue-200 dark:border-blue-800' : 'bg-muted/30 border-border'}`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {rsvpIcon}
+                                  <div className="flex flex-col">
+                                    <span className="text-sm font-medium">{guestName}</span>
+                                    <span className="text-xs text-muted-foreground font-mono">Guest ID: #{guestId}</span>
+                                  </div>
+                                  {isPartner && (
+                                    <Badge variant="outline" className="text-xs bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700">
+                                      <Heart className="h-2 w-2 mr-1 text-pink-500 dark:text-pink-400" />
+                                      Partner
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                              {validRestrictions.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2">
+                                  {validRestrictions.map((r: any, idx: number) => {
+                                    const restrictionType = r.restriction_type || '';
+                                    return (
+                                      <Badge 
+                                        key={r.restriction_id || r.restriction_name || `restriction-${idx}`} 
+                                        variant="outline" 
+                                        className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                      >
+                                        {getTypeIcon(restrictionType)}
+                                        {r.restriction_name || r}
+                                      </Badge>
+                                    );
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No guests assigned</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            <DialogFooter className="flex items-center justify-between sm:justify-between">
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  if (selectedTableForView && window.confirm(`Are you sure you want to delete ${selectedTableForView.tableNumber || selectedTableForView.table_number || 'this table'}? This action cannot be undone.`)) {
+                    handleDeleteTable(selectedTableForView.id || selectedTableForView.table_id);
+                    setViewTableOpen(false);
+                  }
+                }}
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete Table
+              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    if (selectedTableForView) {
+                      handleEditTable(selectedTableForView);
+                      setViewTableOpen(false);
+                    }
+                  }}
+                >
+                  <Edit className="h-4 w-4 mr-2" />
+                  Edit
+                </Button>
+                <Button variant="outline" onClick={() => setViewTableOpen(false)}>
+                  Close
+                </Button>
+              </div>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Couple Preferences */}
         {wedding?.all_restrictions && wedding.all_restrictions.length > 0 && (
@@ -4424,38 +4993,38 @@ const WeddingDetail = () => {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit_guest_count">Guest Count</Label>
+                  <Label htmlFor="edit_guest_count">Guest Count <span className="text-xs text-muted-foreground">(derived from guests)</span></Label>
                   <Input
                     id="edit_guest_count"
                     type="number"
                     value={editWeddingForm.guest_count}
-                    onChange={(e) => setEditWeddingForm({ ...editWeddingForm, guest_count: e.target.value })}
-                    disabled={editWeddingLoading}
-                    min="0"
+                    disabled={true}
+                    className="bg-muted cursor-not-allowed"
+                    readOnly
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit_total_cost">Total Cost</Label>
+                  <Label htmlFor="edit_total_cost">Total Cost <span className="text-xs text-muted-foreground">(derived from packages & inventory)</span></Label>
                   <Input
                     id="edit_total_cost"
                     type="number"
                     step="0.01"
                     value={editWeddingForm.total_cost}
-                    onChange={(e) => setEditWeddingForm({ ...editWeddingForm, total_cost: e.target.value })}
-                    disabled={editWeddingLoading}
-                    min="0"
+                    disabled={true}
+                    className="bg-muted cursor-not-allowed"
+                    readOnly
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit_production_cost">Production Cost</Label>
+                  <Label htmlFor="edit_production_cost">Production Cost <span className="text-xs text-muted-foreground">(derived from packages & inventory)</span></Label>
                   <Input
                     id="edit_production_cost"
                     type="number"
                     step="0.01"
                     value={editWeddingForm.production_cost}
-                    onChange={(e) => setEditWeddingForm({ ...editWeddingForm, production_cost: e.target.value })}
-                    disabled={editWeddingLoading}
-                    min="0"
+                    disabled={true}
+                    className="bg-muted cursor-not-allowed"
+                    readOnly
                   />
                 </div>
               </div>
@@ -4480,8 +5049,8 @@ const WeddingDetail = () => {
                 <div className="space-y-2">
                   <Label htmlFor="edit_preference_id">Couple Preference</Label>
                   <Select
-                    value={editWeddingForm.preference_id || "none"}
-                    onValueChange={(value) => setEditWeddingForm({ ...editWeddingForm, preference_id: value === "none" ? "" : value })}
+                    value={editWeddingForm.preference_id || "preference-none"}
+                    onValueChange={(value) => setEditWeddingForm({ ...editWeddingForm, preference_id: value === "preference-none" ? "" : value })}
                     disabled={editWeddingLoading}
                   >
                     <SelectTrigger id="edit_preference_id">
@@ -4632,13 +5201,17 @@ const WeddingDetail = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_guest_restrictions">Dietary Restrictions *</Label>
-                <MultiSelectRestrictions
-                  restrictions={dietaryRestrictions}
-                  selectedIds={editGuestRestrictionIds}
-                  onSelectionChange={setEditGuestRestrictionIds}
-                  disabled={editGuestLoading}
-                />
+                <Label htmlFor="edit_guest_restrictions">Dietary Restrictions</Label>
+                <div className="max-h-[200px] overflow-y-auto border rounded-md p-2">
+                  <MultiSelectRestrictions
+                    restrictions={dietaryRestrictions}
+                    selectedIds={editGuestRestrictionIds}
+                    onSelectionChange={setEditGuestRestrictionIds}
+                    disabled={editGuestLoading}
+                    placeholder="Select dietary restrictions"
+                  />
+                </div>
+                <p className="text-xs text-muted-foreground">If no restrictions are selected, "None" will be automatically assigned</p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit_guest_rsvp">RSVP Status *</Label>
@@ -4647,18 +5220,47 @@ const WeddingDetail = () => {
                     <SelectValue placeholder="Select RSVP status" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pending">Pending</SelectItem>
-                    <SelectItem value="accepted">Accepted</SelectItem>
-                    <SelectItem value="declined">Declined</SelectItem>
+                    <SelectItem value="pending">
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-4 w-4 text-yellow-600 dark:text-yellow-400" />
+                        <span>Pending</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="accepted">
+                      <div className="flex items-center gap-2">
+                        <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        <span>Accepted</span>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="declined">
+                      <div className="flex items-center gap-2">
+                        <X className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        <span>Declined</span>
+                      </div>
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
+              {editingGuest && editingGuest.table_id && (() => {
+                const assignedTable = tables.find(t => (t.id || t.table_id) === editingGuest.table_id);
+                return assignedTable ? (
+                  <div className="space-y-2">
+                    <Label>Assigned Table</Label>
+                    <div className="p-2 rounded border bg-muted/30">
+                      <Badge variant="outline" className="font-mono text-sm">
+                        {assignedTable.tableNumber || assignedTable.table_number || `Table #${editingGuest.table_id}`}
+                      </Badge>
+                      <p className="text-xs text-muted-foreground mt-1">To change table assignment, use the Assign Guest feature in the Tables tab</p>
+                    </div>
+                  </div>
+                ) : null;
+              })()}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setEditGuestOpen(false)} disabled={editGuestLoading}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveEditGuest} disabled={editGuestLoading || !editGuestFirstName.trim() || !editGuestLastName.trim() || editGuestRestrictionIds.length === 0}>
+              <Button onClick={handleSaveEditGuest} disabled={editGuestLoading || !editGuestFirstName.trim() || !editGuestLastName.trim()}>
                 {editGuestLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -4723,7 +5325,7 @@ const WeddingDetail = () => {
                     <div className="p-3 bg-muted rounded-lg text-sm">
                       <p><strong>Available:</strong> {selectedItem.quantity_available}</p>
                       <p><strong>Condition:</strong> {selectedItem.item_condition}</p>
-                      <p><strong>Default Rental Cost:</strong> ${(selectedItem.rental_cost || 0).toFixed(2)} per unit</p>
+                      <p><strong>Default Rental Cost:</strong> ${(typeof selectedItem.rental_cost === 'number' ? selectedItem.rental_cost : parseFloat(selectedItem.rental_cost || '0') || 0).toFixed(2)} per unit</p>
                     </div>
                   ) : null;
                 })()}
@@ -4916,7 +5518,7 @@ const WeddingDetail = () => {
                 <p className="font-medium">{selectedAllocation.item_name}</p>
                 <p className="text-sm text-muted-foreground">
                   Quantity: {selectedAllocation.quantity_used} • 
-                  Total Cost: ${((selectedAllocation.quantity_used || 0) * (selectedAllocation.rental_cost || 0)).toFixed(2)}
+                  Total Cost: ${((selectedAllocation.quantity_used || 0) * (typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0)).toFixed(2)}
                 </p>
               </div>
             )}

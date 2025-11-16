@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Plus, 
@@ -44,18 +44,22 @@ import {
 import { Label } from '@/components/ui/label';
 import { Loader2 } from 'lucide-react';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { couplesAPI } from '@/api';
+import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
-import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, filterNoneFromDisplay } from '@/utils/restrictionUtils';
+import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
+import { useDateFormat } from '@/context/DateFormatContext';
 
 const Couples = () => {
   const navigate = useNavigate();
+  const { formatDate } = useDateFormat();
   const [couples, setCouples] = useState([]);
+  const [dietaryRestrictions, setDietaryRestrictions] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [ceremonyType, setCeremonyType] = useState<string | undefined>();
-  const [restrictionType, setRestrictionType] = useState<string | undefined>();
+  const [restrictionIds, setRestrictionIds] = useState<number[]>([]);
   const [plannerEmail, setPlannerEmail] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
@@ -71,11 +75,12 @@ const Couples = () => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
+  const itemsPerPage = 5;
   const { toast } = useToast();
 
   useEffect(() => {
     fetchCouples();
+    fetchDietaryRestrictions();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -83,14 +88,26 @@ const Couples = () => {
   useEffect(() => {
     fetchCouples();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ceremonyType, restrictionType, plannerEmail]);
+  }, [ceremonyType, restrictionIds, plannerEmail]);
+
+  const fetchDietaryRestrictions = async () => {
+    try {
+      const response = await dietaryRestrictionsAPI.getAll();
+      const allRestrictions = response.data || [];
+      // Filter out "None" from the display using utility function
+      const displayableRestrictions = filterNoneFromDisplay(allRestrictions);
+      setDietaryRestrictions(displayableRestrictions);
+    } catch (error: any) {
+      console.error('Error fetching dietary restrictions:', error);
+    }
+  };
 
   const fetchCouples = async () => {
     setLoading(true);
     try {
       const response = await couplesAPI.getAll({
         ceremony_type: ceremonyType,
-        restriction_type: restrictionType,
+        restriction_ids: restrictionIds.length > 0 ? restrictionIds.join(',') : undefined,
         planner_contact: plannerEmail || undefined,
       });
       // Transform couple_id to id for frontend compatibility
@@ -111,13 +128,27 @@ const Couples = () => {
     }
   };
 
-  const filteredCouples = couples.filter(couple => {
-    const searchLower = searchTerm.toLowerCase();
-    return couple.partner1_name.toLowerCase().includes(searchLower) ||
-           couple.partner2_name.toLowerCase().includes(searchLower) ||
-           couple.partner1_email.toLowerCase().includes(searchLower) ||
-           couple.partner2_email.toLowerCase().includes(searchLower);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
   });
+
+  const filteredCouples = useMemo(() => {
+    const filtered = couples.filter(couple => {
+      const searchLower = searchTerm.toLowerCase();
+      return couple.partner1_name.toLowerCase().includes(searchLower) ||
+             couple.partner2_name.toLowerCase().includes(searchLower) ||
+             couple.partner1_email.toLowerCase().includes(searchLower) ||
+             couple.partner2_email.toLowerCase().includes(searchLower);
+    });
+    
+    // Sort by couple ID using default sort order
+    return filtered.sort((a, b) => {
+      const aId = a.couple_id || a.id || 0;
+      const bId = b.couple_id || b.id || 0;
+      return sortOrder === 'asc' ? aId - bId : bId - aId;
+    });
+  }, [couples, searchTerm, sortOrder]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredCouples.length / itemsPerPage);
@@ -128,7 +159,7 @@ const Couples = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, ceremonyType, restrictionType, plannerEmail]);
+  }, [searchTerm, ceremonyType, restrictionIds, plannerEmail]);
 
   const validateForm = () => {
     const errors: Record<string, string> = {};
@@ -190,9 +221,9 @@ const Couples = () => {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Couples Overview</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Couples Directory</h1>
             <p className="text-muted-foreground">
-              Manage couple information and contact details
+              Manage couple information, contact details, and wedding preferences
             </p>
           </div>
           <Button onClick={() => setCreateDialogOpen(true)}>
@@ -315,9 +346,9 @@ const Couples = () => {
         {/* Couples List */}
         <Card>
           <CardHeader>
-            <CardTitle>Couples Directory</CardTitle>
+            <CardTitle>All Couples</CardTitle>
             <CardDescription>
-              View and manage all couple information
+              View and manage couple information and their wedding preferences
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -339,7 +370,7 @@ const Couples = () => {
                 variant="outline" 
                 onClick={() => {
                   setCeremonyType(undefined);
-                  setRestrictionType(undefined);
+                  setRestrictionIds([]);
                   setPlannerEmail('');
                   setSearchTerm('');
                 }}
@@ -352,26 +383,27 @@ const Couples = () => {
               <div className="grid md:grid-cols-3 gap-3 mb-4">
                 <div>
                   <label className="text-sm text-muted-foreground">Ceremony Type</label>
-                  <Select value={ceremonyType} onValueChange={setCeremonyType}>
+                  <Select value={ceremonyType || 'all'} onValueChange={(value) => setCeremonyType(value === 'all' ? undefined : value)}>
                     <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="civil">Civil</SelectItem>
-                      <SelectItem value="religious">Religious</SelectItem>
-                      <SelectItem value="garden">Garden</SelectItem>
+                      <SelectItem value="all">Any</SelectItem>
+                      <SelectItem value="Civil">Civil</SelectItem>
+                      <SelectItem value="Church">Church</SelectItem>
+                      <SelectItem value="Garden">Garden</SelectItem>
+                      <SelectItem value="Beach">Beach</SelectItem>
+                      <SelectItem value="Outdoor">Outdoor</SelectItem>
+                      <SelectItem value="Indoor">Indoor</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
-                  <label className="text-sm text-muted-foreground">Restriction Type</label>
-                  <Select value={restrictionType} onValueChange={setRestrictionType}>
-                    <SelectTrigger><SelectValue placeholder="Any" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="vegan">Vegan</SelectItem>
-                      <SelectItem value="vegetarian">Vegetarian</SelectItem>
-                      <SelectItem value="gluten-free">Gluten-free</SelectItem>
-                      <SelectItem value="allergy">Allergy</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <label className="text-sm text-muted-foreground mb-2 block">Dietary Restrictions</label>
+                  <MultiSelectRestrictions
+                    restrictions={dietaryRestrictions}
+                    selectedIds={restrictionIds}
+                    onSelectionChange={setRestrictionIds}
+                    placeholder="Select restrictions..."
+                  />
                 </div>
                 <div>
                   <label className="text-sm text-muted-foreground">Planner Email</label>
@@ -383,7 +415,7 @@ const Couples = () => {
             {filteredCouples.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <p className="text-lg">No couples found.</p>
-                {searchTerm || ceremonyType || restrictionType || plannerEmail ? (
+                {searchTerm || ceremonyType || restrictionIds.length > 0 || plannerEmail ? (
                   <p className="text-sm mt-2">Try adjusting your filters or search terms.</p>
                 ) : null}
               </div>
@@ -395,7 +427,7 @@ const Couples = () => {
                       <TableHead>Couple ID</TableHead>
                       <TableHead>Couple</TableHead>
                       <TableHead>Contact Information</TableHead>
-                      <TableHead>Preferences</TableHead>
+                      <TableHead>Wedding Preferences</TableHead>
                       <TableHead>Planner Email</TableHead>
                       <TableHead>Weddings</TableHead>
                       <TableHead>Last Wedding</TableHead>
@@ -407,15 +439,14 @@ const Couples = () => {
                     <TableRow 
                       key={couple.id}
                       className="cursor-pointer hover:bg-muted/50"
-                      onDoubleClick={() => navigate(`/dashboard/couples/${couple.id}`)}
+                      onClick={() => navigate(`/dashboard/couples/${couple.id}`)}
                     >
                       <TableCell className="font-mono text-sm text-muted-foreground">
                         #{couple.couple_id || couple.id}
                       </TableCell>
                       <TableCell className="font-medium">
                         <div
-                          className="flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
-                          onClick={() => navigate(`/dashboard/couples/${couple.id}`)}
+                          className="flex items-center gap-2"
                         >
                           <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
                             <Heart className="h-4 w-4 text-primary" />
@@ -451,13 +482,18 @@ const Couples = () => {
                         <div className="space-y-1.5 min-w-[200px]">
                           {couple.preference_id ? (
                             <>
-                              {couple.ceremony_type && (
-                                <div className="mb-1.5">
+                              <div className="mb-1.5 flex items-center gap-2">
+                                {couple.ceremony_type && (
                                   <Badge variant="outline" className="text-xs font-medium">
                                     {couple.ceremony_type}
                                   </Badge>
-                                </div>
-                              )}
+                                )}
+                                {couple.preference_count > 1 && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {couple.preference_count} preferences
+                                  </Badge>
+                                )}
+                              </div>
                               {(() => {
                                 const restrictions = couple.all_restrictions || [];
                                 if (restrictions.length === 0) {
@@ -466,7 +502,7 @@ const Couples = () => {
                                   );
                                 }
                                 return (
-                                  <div className="flex flex-wrap gap-1 items-start">
+                                  <div className="space-y-0.5">
                                     {restrictions.slice(0, 2).map((r: any, idx: number) => {
                                       const restrictionName = r.restriction_name || r.restriction_type || 'Unknown';
                                       const restrictionType = r.restriction_type || '';
@@ -474,7 +510,7 @@ const Couples = () => {
                                         <Badge 
                                           key={idx} 
                                           variant="outline"
-                                          className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                          className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1 w-fit`}
                                         >
                                           {getTypeIcon(restrictionType)}
                                           {restrictionName}
@@ -482,7 +518,7 @@ const Couples = () => {
                                       );
                                     })}
                                     {restrictions.length > 2 && (
-                                      <Badge variant="outline" className="text-xs font-medium">
+                                      <Badge variant="outline" className="text-xs font-medium w-fit">
                                         +{restrictions.length - 2} more
                                       </Badge>
                                     )}
@@ -513,7 +549,7 @@ const Couples = () => {
                         <div className="text-sm">
                           {!couple.last_wedding || couple.last_wedding === '1970-01-01' || new Date(couple.last_wedding).getTime() === new Date('1970-01-01').getTime()
                             ? 'No Wedding'
-                            : new Date(couple.last_wedding).toLocaleDateString()}
+                            : formatDate(new Date(couple.last_wedding))}
                         </div>
                       </TableCell>
                       <TableCell onClick={(e) => e.stopPropagation()}>

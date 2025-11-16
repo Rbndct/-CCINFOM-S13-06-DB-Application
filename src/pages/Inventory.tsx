@@ -15,7 +15,14 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
-  Loader2
+  Loader2,
+  Sofa,
+  Bed,
+  Lightbulb,
+  Tv,
+  Sparkles,
+  Package,
+  Wrench
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -63,8 +70,14 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterCategory, setFilterCategory] = useState('all');
   const [filterCondition, setFilterCondition] = useState('all');
-  const [sortBy, setSortBy] = useState<'name' | 'category' | 'condition' | 'quantity' | 'cost'>('name');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc');
+  const [sortBy, setSortBy] = useState<'id' | 'name' | 'category' | 'condition' | 'quantity' | 'cost'>(() => {
+    const stored = localStorage.getItem('default_table_sort_by');
+    return (stored as 'id' | 'name' | 'category' | 'condition' | 'quantity' | 'cost') || 'id';
+  });
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>(() => {
+    const stored = localStorage.getItem('default_table_sort_order');
+    return (stored as 'asc' | 'desc') || 'desc';
+  });
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -76,6 +89,7 @@ const Inventory = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
+  const [isEditingInView, setIsEditingInView] = useState(false);
   
   // Form states
   const [formData, setFormData] = useState({
@@ -139,7 +153,14 @@ const Inventory = () => {
       quantity_available: (item.quantity_available || 0).toString(),
       rental_cost: (item.rental_cost || 0).toString()
     });
-    setEditDialogOpen(true);
+    setIsEditingInView(true);
+    setViewDialogOpen(true);
+  };
+  
+  const handleViewItem = (item: any) => {
+    setSelectedItem(item);
+    setIsEditingInView(false);
+    setViewDialogOpen(true);
   };
 
   const handleDeleteItem = (item: any) => {
@@ -167,7 +188,7 @@ const Inventory = () => {
         rental_cost: parseFloat(formData.rental_cost)
       };
 
-      if (selectedItem) {
+      if (selectedItem && editDialogOpen) {
         await inventoryAPI.update(selectedItem.inventory_id, data);
         toast({ title: 'Success', description: 'Inventory item updated successfully' });
         setEditDialogOpen(false);
@@ -178,6 +199,9 @@ const Inventory = () => {
       }
 
       fetchInventoryItems();
+      if (editDialogOpen) {
+        setSelectedItem(null);
+      }
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -213,44 +237,61 @@ const Inventory = () => {
     setSearchTerm('');
     setFilterCategory('all');
     setFilterCondition('all');
-    setSortBy('name');
-    setSortOrder('asc');
+    setSortBy('id');
+    setSortOrder('desc');
     setCurrentPage(1);
   };
 
   const getConditionBadge = (condition: string) => {
     switch (condition) {
       case 'Excellent':
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Excellent</Badge>;
+        return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700"><CheckCircle className="w-3 h-3 mr-1" />Excellent</Badge>;
       case 'Good':
-        return <Badge variant="secondary" className="bg-blue-100 text-blue-800"><Clock className="w-3 h-3 mr-1" />Good</Badge>;
+        return <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700"><Clock className="w-3 h-3 mr-1" />Good</Badge>;
       case 'Fair':
-        return <Badge variant="outline" className="bg-yellow-100 text-yellow-800"><AlertTriangle className="w-3 h-3 mr-1" />Fair</Badge>;
+        return <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700"><AlertTriangle className="w-3 h-3 mr-1" />Fair</Badge>;
       case 'Poor':
-        return <Badge variant="destructive" className="bg-red-100 text-red-800"><AlertTriangle className="w-3 h-3 mr-1" />Poor</Badge>;
+        return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700"><Wrench className="w-3 h-3 mr-1" />Poor</Badge>;
       default:
         return <Badge variant="outline">{condition || 'Unknown'}</Badge>;
     }
   };
 
+  const getCategoryIcon = (category: string) => {
+    const iconMap: Record<string, any> = {
+      'Furniture': Sofa,
+      'Linens': Bed,
+      'Lighting': Lightbulb,
+      'Audio/Visual': Tv,
+      'Decorations': Sparkles
+    };
+    return iconMap[category] || Package;
+  };
+
   const getCategoryBadge = (category: string) => {
     const colors: Record<string, string> = {
-      'Furniture': 'bg-blue-100 text-blue-800',
-      'Linens': 'bg-pink-100 text-pink-800',
-      'Lighting': 'bg-yellow-100 text-yellow-800',
-      'Audio/Visual': 'bg-purple-100 text-purple-800',
-      'Decorations': 'bg-green-100 text-green-800'
+      'Furniture': 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700',
+      'Linens': 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700',
+      'Lighting': 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700',
+      'Audio/Visual': 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700',
+      'Decorations': 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700'
     };
-    return <Badge className={colors[category] || 'bg-gray-100 text-gray-800'}>{category}</Badge>;
+    const Icon = getCategoryIcon(category);
+    return (
+      <Badge className={`${colors[category] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'} border`}>
+        <Icon className="w-3 h-3 mr-1" />
+        {category}
+      </Badge>
+    );
   };
 
   const getStockStatus = (quantity: number) => {
     if (quantity === 0) {
-      return <Badge variant="destructive" className="bg-red-100 text-red-800">Out of Stock</Badge>;
+      return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border">Out of Stock</Badge>;
     } else if (quantity < 5) {
-      return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Low Stock</Badge>;
+      return <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border">Low Stock</Badge>;
     } else {
-      return <Badge className="bg-green-100 text-green-800">In Stock</Badge>;
+      return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border">In Stock</Badge>;
     }
   };
 
@@ -267,6 +308,10 @@ const Inventory = () => {
       .sort((a, b) => {
         let aVal: any, bVal: any;
         switch (sortBy) {
+          case 'id':
+            aVal = a.inventory_id || 0;
+            bVal = b.inventory_id || 0;
+            break;
           case 'name':
             aVal = a.item_name?.toLowerCase() || '';
             bVal = b.item_name?.toLowerCase() || '';
@@ -436,6 +481,7 @@ const Inventory = () => {
                   <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
                     <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="id">ID</SelectItem>
                       <SelectItem value="name">Name</SelectItem>
                       <SelectItem value="category">Category</SelectItem>
                       <SelectItem value="condition">Condition</SelectItem>
@@ -473,27 +519,30 @@ const Inventory = () => {
                       <TableHead>Condition</TableHead>
                       <TableHead>Quantity Available</TableHead>
                       <TableHead>Rental Cost</TableHead>
-                      <TableHead>Status</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {paginatedItems.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                           {inventoryItems.length === 0 ? 'No inventory items found' : 'No items match the filters'}
                         </TableCell>
                       </TableRow>
                     ) : (
                       paginatedItems.map((item) => (
-                        <TableRow key={item.inventory_id}>
-                          <TableCell className="font-mono text-sm text-muted-foreground">
+                        <TableRow 
+                          key={item.inventory_id}
+                          className="cursor-pointer hover:bg-muted/50 transition-colors"
+                          onClick={() => handleViewItem(item)}
+                        >
+                          <TableCell className="font-mono text-sm text-muted-foreground dark:text-muted-foreground">
                             #{item.inventory_id}
                           </TableCell>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                <Warehouse className="h-4 w-4 text-primary" />
+                              <div className="w-8 h-8 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
+                                <Warehouse className="h-4 w-4 text-primary dark:text-primary" />
                               </div>
                               {item.item_name}
                             </div>
@@ -515,23 +564,20 @@ const Inventory = () => {
                               {formatCurrency(item.rental_cost || 0)}
                             </div>
                           </TableCell>
-                          <TableCell>
-                            {getStockStatus(item.quantity_available || 0)}
-                          </TableCell>
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
+                                <Button variant="ghost" className="h-8 w-8 p-0 dark:hover:bg-muted">
+                                  <MoreHorizontal className="h-4 w-4 dark:text-muted-foreground" />
                                 </Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleEditItem(item)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
+                                <DropdownMenuItem onClick={() => handleViewItem(item)}>
+                                  <Eye className="mr-2 h-4 w-4 dark:text-muted-foreground" />
+                                  View
                                 </DropdownMenuItem>
                                 <DropdownMenuItem 
-                                  className="text-red-600"
+                                  className="text-red-600 dark:text-red-400"
                                   onClick={() => handleDeleteItem(item)}
                                 >
                                   <Trash2 className="mr-2 h-4 w-4" />
@@ -705,6 +751,215 @@ const Inventory = () => {
                 )}
               </Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* View/Edit Dialog */}
+        <Dialog open={viewDialogOpen} onOpenChange={(open) => {
+          setViewDialogOpen(open);
+          if (!open) {
+            setIsEditingInView(false);
+          }
+        }}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <DialogTitle>{isEditingInView ? 'Edit Inventory Item' : 'View Inventory Item'}</DialogTitle>
+                  <DialogDescription>
+                    {isEditingInView ? 'Update inventory item details' : 'View complete inventory item information'}
+                  </DialogDescription>
+                </div>
+                {!isEditingInView && selectedItem && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setFormData({
+                        item_name: selectedItem.item_name || '',
+                        category: selectedItem.category || '',
+                        item_condition: selectedItem.item_condition || '',
+                        quantity_available: (selectedItem.quantity_available || 0).toString(),
+                        rental_cost: (selectedItem.rental_cost || 0).toString()
+                      });
+                      setIsEditingInView(true);
+                    }}
+                  >
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit
+                  </Button>
+                )}
+              </div>
+            </DialogHeader>
+            {selectedItem && (
+              <div className="space-y-4 py-4">
+                {isEditingInView ? (
+                  <>
+                    <div className="space-y-2">
+                      <Label htmlFor="view_item_name">Item Name *</Label>
+                      <Input
+                        id="view_item_name"
+                        value={formData.item_name}
+                        onChange={(e) => setFormData({ ...formData, item_name: e.target.value })}
+                        placeholder="e.g., Round Tables (8-person)"
+                        disabled={formLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="view_category">Category *</Label>
+                      <Select value={formData.category} onValueChange={(value) => setFormData({ ...formData, category: value })}>
+                        <SelectTrigger id="view_category">
+                          <SelectValue placeholder="Select category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Furniture">Furniture</SelectItem>
+                          <SelectItem value="Linens">Linens</SelectItem>
+                          <SelectItem value="Lighting">Lighting</SelectItem>
+                          <SelectItem value="Audio/Visual">Audio/Visual</SelectItem>
+                          <SelectItem value="Decorations">Decorations</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="view_item_condition">Condition *</Label>
+                      <Select value={formData.item_condition} onValueChange={(value) => setFormData({ ...formData, item_condition: value })}>
+                        <SelectTrigger id="view_item_condition">
+                          <SelectValue placeholder="Select condition" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Excellent">Excellent</SelectItem>
+                          <SelectItem value="Good">Good</SelectItem>
+                          <SelectItem value="Fair">Fair</SelectItem>
+                          <SelectItem value="Poor">Poor</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="view_quantity_available">Quantity Available *</Label>
+                      <Input
+                        id="view_quantity_available"
+                        type="number"
+                        min="0"
+                        value={formData.quantity_available}
+                        onChange={(e) => setFormData({ ...formData, quantity_available: e.target.value })}
+                        placeholder="0"
+                        disabled={formLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="view_rental_cost">Rental Cost (PHP) *</Label>
+                      <Input
+                        id="view_rental_cost"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={formData.rental_cost}
+                        onChange={(e) => setFormData({ ...formData, rental_cost: e.target.value })}
+                        placeholder="0.00"
+                        disabled={formLoading}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Display: {formData.rental_cost ? formatCurrency(parseFloat(formData.rental_cost) || 0) : formatCurrency(0)}
+                      </p>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => {
+                        setIsEditingInView(false);
+                        setFormData({
+                          item_name: selectedItem.item_name || '',
+                          category: selectedItem.category || '',
+                          item_condition: selectedItem.item_condition || '',
+                          quantity_available: (selectedItem.quantity_available || 0).toString(),
+                          rental_cost: (selectedItem.rental_cost || 0).toString()
+                        });
+                      }} disabled={formLoading}>
+                        Cancel
+                      </Button>
+                      <Button onClick={async () => {
+                        if (!formData.item_name || !formData.category || !formData.item_condition || !formData.quantity_available || !formData.rental_cost) {
+                          toast({
+                            title: 'Validation Error',
+                            description: 'Please fill in all required fields',
+                            variant: 'destructive'
+                          });
+                          return;
+                        }
+                        setFormLoading(true);
+                        try {
+                          const data = {
+                            item_name: formData.item_name,
+                            category: formData.category,
+                            item_condition: formData.item_condition,
+                            quantity_available: parseInt(formData.quantity_available),
+                            rental_cost: parseFloat(formData.rental_cost)
+                          };
+                          await inventoryAPI.update(selectedItem.inventory_id, data);
+                          toast({ title: 'Success', description: 'Inventory item updated successfully' });
+                          setIsEditingInView(false);
+                          fetchInventoryItems();
+                          // Update selectedItem with new data
+                          setSelectedItem({ ...selectedItem, ...data });
+                        } catch (error: any) {
+                          toast({
+                            title: 'Error',
+                            description: error.response?.data?.error || 'Failed to save inventory item',
+                            variant: 'destructive'
+                          });
+                        } finally {
+                          setFormLoading(false);
+                        }
+                      }} disabled={formLoading}>
+                        {formLoading ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          'Save Changes'
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Inventory ID</Label>
+                        <p className="font-mono text-sm font-semibold mt-1">#{selectedItem.inventory_id}</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Item Name</Label>
+                        <p className="font-semibold mt-1">{selectedItem.item_name}</p>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Category</Label>
+                        <div className="mt-1">{getCategoryBadge(selectedItem.category)}</div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Condition</Label>
+                        <div className="mt-1">{getConditionBadge(selectedItem.item_condition)}</div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Quantity Available</Label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <p className="font-semibold">{selectedItem.quantity_available || 0}</p>
+                          {getStockStatus(selectedItem.quantity_available || 0)}
+                        </div>
+                      </div>
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Rental Cost (per unit)</Label>
+                        <p className="font-semibold mt-1">{formatCurrency(selectedItem.rental_cost || 0)}</p>
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setViewDialogOpen(false)}>
+                        Close
+                      </Button>
+                    </DialogFooter>
+                  </>
+                )}
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 

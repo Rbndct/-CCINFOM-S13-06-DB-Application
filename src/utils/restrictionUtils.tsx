@@ -114,3 +114,31 @@ export const getRestrictionCountText = (count: number): string => {
   return `${count} restrictions`;
 };
 
+// Type definition for dietary restrictions
+export type DietaryRestriction = {
+  restriction_id: number;
+  restriction_name: string;
+  restriction_type?: string;
+  severity_level?: string;
+};
+
+// Get the "None" restriction ID from a list of restrictions
+export const getNoneRestrictionId = (restrictions: DietaryRestriction[]): number | null => {
+  const noneRestriction = restrictions.find(r => r.restriction_name === 'None');
+  return noneRestriction?.restriction_id || null;
+};
+
+// Ensure "None" restriction is added if restriction array is empty
+export const ensureNoneRestriction = (restrictionIds: number[], noneId: number | null): number[] => {
+  if (restrictionIds.length === 0 && noneId !== null) {
+    return [noneId];
+  }
+  // If there are other restrictions, ensure "None" is not included
+  return restrictionIds.filter(id => id !== noneId);
+};
+
+// Filter "None" from display lists (for dropdowns, tables, etc.)
+export const filterNoneFromDisplay = (restrictions: DietaryRestriction[]): DietaryRestriction[] => {
+  return restrictions.filter(r => r.restriction_name !== 'None');
+};
+

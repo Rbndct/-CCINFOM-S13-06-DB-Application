@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const {promisePool} = require('../config/database');
 
-// GET all restrictions with metadata
+// GET all restrictions with metadata (excluding "None" from display)
 router.get('/', async (req, res) => {
   try {
     const [rows] = await promisePool.query(`SELECT 
@@ -12,12 +12,19 @@ router.get('/', async (req, res) => {
           dr.restriction_type,
           COALESCE(guest_counts.guest_count, 0) as affected_guests,
           COALESCE(menu_counts.menu_count, 0) as menu_items_count,
-          COALESCE(pref_counts.preference_count, 0) as couple_preferences_count
+          COALESCE(pref_counts.preference_count, 0) as couple_preferences_count,
+          COALESCE(couple_counts.couple_count, 0) as affected_couples
         FROM dietary_restriction dr
         LEFT JOIN (
-          SELECT restriction_id, COUNT(*) as guest_count
-          FROM guest
-          WHERE restriction_id IS NOT NULL
+          SELECT restriction_id, COUNT(DISTINCT guest_id) as guest_count
+          FROM (
+            SELECT restriction_id, guest_id
+            FROM guest
+            WHERE restriction_id IS NOT NULL
+            UNION
+            SELECT restriction_id, guest_id
+            FROM guest_restrictions
+          ) combined_guests
           GROUP BY restriction_id
         ) guest_counts ON dr.restriction_id = guest_counts.restriction_id
         LEFT JOIN (
@@ -31,6 +38,13 @@ router.get('/', async (req, res) => {
           FROM couple_preference_restrictions
           GROUP BY restriction_id
         ) pref_counts ON dr.restriction_id = pref_counts.restriction_id
+        LEFT JOIN (
+          SELECT cpr.restriction_id, COUNT(DISTINCT cp.couple_id) as couple_count
+          FROM couple_preference_restrictions cpr
+          INNER JOIN couple_preferences cp ON cpr.preference_id = cp.preference_id
+          GROUP BY cpr.restriction_id
+        ) couple_counts ON dr.restriction_id = couple_counts.restriction_id
+        WHERE dr.restriction_name != 'None'
         ORDER BY dr.restriction_id DESC`);
     res.json({success: true, data: rows, count: rows.length});
   } catch (error) {
@@ -46,6 +60,7 @@ router.get('/', async (req, res) => {
 // GET restriction by id with metadata and details
 router.get('/:restriction_id', async (req, res) => {
   try {
+    const restrictionId = req.params.restriction_id;
     const [rows] = await promisePool.query(
         `SELECT 
           dr.restriction_id,
@@ -54,12 +69,20 @@ router.get('/:restriction_id', async (req, res) => {
           dr.restriction_type,
           COALESCE(guest_counts.guest_count, 0) as affected_guests,
           COALESCE(menu_counts.menu_count, 0) as menu_items_count,
-          COALESCE(pref_counts.preference_count, 0) as couple_preferences_count
+          COALESCE(pref_counts.preference_count, 0) as couple_preferences_count,
+          COALESCE(couple_counts.couple_count, 0) as affected_couples
         FROM dietary_restriction dr
         LEFT JOIN (
-          SELECT restriction_id, COUNT(*) as guest_count
-          FROM guest
-          WHERE restriction_id = ?
+          SELECT restriction_id, COUNT(DISTINCT guest_id) as guest_count
+          FROM (
+            SELECT restriction_id, guest_id
+            FROM guest
+            WHERE restriction_id = ?
+            UNION
+            SELECT restriction_id, guest_id
+            FROM guest_restrictions
+            WHERE restriction_id = ?
+          ) combined_guests
           GROUP BY restriction_id
         ) guest_counts ON dr.restriction_id = guest_counts.restriction_id
         LEFT JOIN (
@@ -74,10 +97,17 @@ router.get('/:restriction_id', async (req, res) => {
           WHERE restriction_id = ?
           GROUP BY restriction_id
         ) pref_counts ON dr.restriction_id = pref_counts.restriction_id
+        LEFT JOIN (
+          SELECT cpr.restriction_id, COUNT(DISTINCT cp.couple_id) as couple_count
+          FROM couple_preference_restrictions cpr
+          INNER JOIN couple_preferences cp ON cpr.preference_id = cp.preference_id
+          WHERE cpr.restriction_id = ?
+          GROUP BY cpr.restriction_id
+        ) couple_counts ON dr.restriction_id = couple_counts.restriction_id
         WHERE dr.restriction_id = ?`,
         [
-          req.params.restriction_id, req.params.restriction_id,
-          req.params.restriction_id, req.params.restriction_id
+          restrictionId, restrictionId, restrictionId, restrictionId,
+          restrictionId, restrictionId
         ]);
 
     if (rows.length === 0) {
@@ -85,30 +115,51 @@ router.get('/:restriction_id', async (req, res) => {
           {success: false, error: 'Dietary restriction not found'});
     }
 
-    // Get affected guest names
+    // Get affected guest names (from both sources)
     const [guestRows] = await promisePool.query(
-        `SELECT g.guest_id, g.guest_name, w.wedding_id, w.wedding_date, c.partner1_name, c.partner2_name
-         FROM guest g
+        `SELECT DISTINCT g.guest_id, g.guest_name, w.wedding_id, w.wedding_date, c.partner1_name, c.partner2_name
+         FROM (
+           SELECT guest_id, restriction_id
+           FROM guest
+           WHERE restriction_id = ?
+           UNION
+           SELECT guest_id, restriction_id
+           FROM guest_restrictions
+           WHERE restriction_id = ?
+         ) combined
+         INNER JOIN guest g ON combined.guest_id = g.guest_id
          INNER JOIN wedding w ON g.wedding_id = w.wedding_id
          INNER JOIN couple c ON w.couple_id = c.couple_id
-         WHERE g.restriction_id = ?
          ORDER BY w.wedding_date DESC, g.guest_name`,
-        [req.params.restriction_id]);
+        [restrictionId, restrictionId]);
 
     // Get affected menu items
     const [menuRows] = await promisePool.query(
-        `SELECT menu_item_id, item_name, category, price
+        `SELECT menu_item_id, menu_name as item_name, menu_type as category, menu_price as price
          FROM menu_item
          WHERE restriction_id = ?
-         ORDER BY category, item_name`,
-        [req.params.restriction_id]);
+         ORDER BY menu_type, menu_name`,
+        [restrictionId]);
+
+    // Get affected couples list
+    const [coupleRows] = await promisePool.query(
+        `SELECT DISTINCT c.couple_id, c.partner1_name, c.partner2_name, 
+                COUNT(DISTINCT cp.preference_id) as preference_count
+         FROM couple_preference_restrictions cpr
+         INNER JOIN couple_preferences cp ON cpr.preference_id = cp.preference_id
+         INNER JOIN couple c ON cp.couple_id = c.couple_id
+         WHERE cpr.restriction_id = ?
+         GROUP BY c.couple_id, c.partner1_name, c.partner2_name
+         ORDER BY c.partner1_name, c.partner2_name`,
+        [restrictionId]);
 
     res.json({
       success: true,
       data: {
         ...rows[0],
         affected_guests_list: guestRows,
-        affected_menu_items: menuRows
+        affected_menu_items: menuRows,
+        affected_couples_list: coupleRows
       }
     });
   } catch (error) {
