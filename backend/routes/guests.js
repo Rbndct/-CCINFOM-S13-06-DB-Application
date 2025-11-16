@@ -190,8 +190,21 @@ router.post('/', async (req, res) => {
 
     // Insert multiple dietary restrictions via junction table if
     // restriction_ids array is provided
-    const restrictionIdsArray =
+    let restrictionIdsArray =
         restriction_ids || (restriction_id ? [restriction_id] : []);
+    
+    // Auto-assign "None" if no restrictions provided
+    if (restrictionIdsArray.length === 0) {
+      // Get "None" restriction ID
+      const [noneRows] = await connection.query(
+          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+          ['None']
+      );
+      if (noneRows.length > 0) {
+        restrictionIdsArray = [noneRows[0].restriction_id];
+      }
+    }
+    
     if (restrictionIdsArray.length > 0) {
       // Check if guest_restrictions table exists
       const [tableCheck] = await connection.query(`
@@ -241,31 +254,96 @@ router.post('/', async (req, res) => {
 
 // PUT update guest
 router.put('/:id', async (req, res) => {
+  const connection = await promisePool.getConnection();
   try {
-    const {name, guest_name, rsvp_status, table_id, restriction_id} = req.body;
+    await connection.beginTransaction();
+    
+    const {name, guest_name, rsvp_status, table_id, restriction_id, restriction_ids} = req.body;
 
     // Use guest_name if provided, otherwise use name
     const finalGuestName = guest_name || name;
 
-    const [result] = await promisePool.query(
+    // Use first restriction_id for backward compatibility
+    let restrictionIdForGuest = null;
+    if (restriction_ids && restriction_ids.length > 0) {
+      restrictionIdForGuest = restriction_ids[0];
+    } else if (restriction_id) {
+      restrictionIdForGuest = restriction_id;
+    } else {
+      // Auto-assign "None" if no restrictions provided
+      const [noneRows] = await connection.query(
+          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+          ['None']
+      );
+      if (noneRows.length > 0) {
+        restrictionIdForGuest = noneRows[0].restriction_id;
+      }
+    }
+
+    const [result] = await connection.query(
         'UPDATE guest SET guest_name = ?, rsvp_status = ?, table_id = ?, restriction_id = ? WHERE guest_id = ?',
         [
-          finalGuestName, rsvp_status, table_id || null, restriction_id || null,
+          finalGuestName, rsvp_status, table_id || null, restrictionIdForGuest,
           req.params.id
         ]);
 
     if (result.affectedRows === 0) {
+      await connection.rollback();
       return res.status(404).json({success: false, error: 'Guest not found'});
     }
 
+    // Update junction table if restriction_ids array is provided
+    const restrictionIdsArray = restriction_ids || (restriction_id ? [restriction_id] : []);
+    
+    // Auto-assign "None" if no restrictions provided
+    let finalRestrictionIds = restrictionIdsArray;
+    if (finalRestrictionIds.length === 0) {
+      const [noneRows] = await connection.query(
+          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+          ['None']
+      );
+      if (noneRows.length > 0) {
+        finalRestrictionIds = [noneRows[0].restriction_id];
+      }
+    }
+
+    // Check if guest_restrictions table exists and update it
+    const [tableCheck] = await connection.query(`
+      SELECT COUNT(*) as cnt 
+      FROM information_schema.TABLES 
+      WHERE TABLE_SCHEMA = DATABASE() 
+      AND TABLE_NAME = 'guest_restrictions'
+    `);
+
+    if (tableCheck[0]?.cnt > 0 && finalRestrictionIds.length > 0) {
+      // Delete existing restrictions
+      await connection.query(
+          'DELETE FROM guest_restrictions WHERE guest_id = ?',
+          [req.params.id]
+      );
+      
+      // Insert new restrictions
+      const values = finalRestrictionIds.map((rid) => [req.params.id, rid]);
+      if (values.length > 0) {
+        await connection.query(
+            'INSERT INTO guest_restrictions (guest_id, restriction_id) VALUES ?',
+            [values]
+        );
+      }
+    }
+
+    await connection.commit();
     res.json({success: true, message: 'Guest updated successfully'});
   } catch (error) {
+    await connection.rollback();
     console.error('Error updating guest:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to update guest',
       message: error.message
     });
+  } finally {
+    connection.release();
   }
 });
 

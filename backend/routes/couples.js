@@ -224,9 +224,21 @@ router.post('/preferences', async (req, res) => {
 
     try {
       // Remove duplicates from restriction IDs
-      const uniqueRestrictionIds = normalizedRestrictionIds.length > 0 ?
+      let uniqueRestrictionIds = normalizedRestrictionIds.length > 0 ?
           [...new Set(normalizedRestrictionIds)] :
           [];
+
+      // Auto-assign "None" if no restrictions provided
+      if (uniqueRestrictionIds.length === 0) {
+        // Get "None" restriction ID
+        const [noneRows] = await connection.query(
+            'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+            ['None']
+        );
+        if (noneRows.length > 0) {
+          uniqueRestrictionIds = [noneRows[0].restriction_id];
+        }
+      }
 
       // Step 1: Insert into couple_preferences (couple_id and ceremony_type
       // only)

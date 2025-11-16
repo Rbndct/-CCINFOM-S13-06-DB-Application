@@ -259,7 +259,17 @@ router.post('/allocations', async (req, res) => {
     }
 
     // Use provided rental_cost or fallback to item's rental_cost
-    const finalRentalCost = rental_cost || itemRows[0].rental_cost;
+    // Handle both null/undefined and 0 values properly
+    const finalRentalCost = (rental_cost !== undefined && rental_cost !== null && rental_cost !== '') 
+      ? parseFloat(rental_cost) 
+      : itemRows[0].rental_cost;
+    
+    if (isNaN(finalRentalCost) || finalRentalCost < 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid rental cost value'
+      });
+    }
 
     const [result] = await promisePool.query(
       `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, rental_cost)
