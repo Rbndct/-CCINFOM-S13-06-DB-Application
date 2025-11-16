@@ -13,7 +13,6 @@ import {
   Trash2,
   MoreHorizontal,
   Users,
-  Lock,
   ArrowUpDown,
   X,
   ChevronLeft,
@@ -25,7 +24,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Table, 
   TableBody, 
@@ -61,10 +60,10 @@ import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
+import { PackageTypeBadge, getPackageTypeIcon } from '@/utils/packageTypeUtils';
 
 const Packages = () => {
   const { formatCurrency } = useCurrencyFormat();
-  const [activeTab, setActiveTab] = useState('templates');
   const [packages, setPackages] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -88,7 +87,8 @@ const Packages = () => {
   const [formData, setFormData] = useState({
     package_name: '',
     package_type: '',
-    package_price: '',
+    selling_price: '',
+    package_price: '', // Keep for backward compatibility
     menu_item_ids: [] as number[]
   });
   const [formLoading, setFormLoading] = useState(false);
@@ -126,8 +126,15 @@ const Packages = () => {
             package_id: pkg.package_id,
             package_name: pkg.package_name,
             package_type: pkg.package_type,
+            selling_price: parseFloat(pkg.selling_price || pkg.package_price) || 0,
             package_price: parseFloat(pkg.package_price) || 0,
-            menu_items: pkg.menu_items || [],
+            menu_items: (pkg.menu_items || []).map((item: any) => ({
+              ...item,
+              unit_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+              selling_price: parseFloat(item.selling_price || item.menu_price || 0),
+              menu_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+              menu_price: parseFloat(item.selling_price || item.menu_price || 0)
+            })),
             total_items: pkg.total_items || (pkg.menu_items ? pkg.menu_items.length : 0),
             usage_count: pkg.usage_count || 0,
             is_template: true // All packages are templates (shared across weddings)
@@ -157,17 +164,46 @@ const Packages = () => {
     try {
       // Fetch full package details from API to get menu items with cost/price
       const response = await packagesAPI.getById(pkg.package_id || pkg.id);
+      let packageData = null;
+      
       if (response && response.success && response.data) {
-        setSelectedPackage(response.data);
+        packageData = response.data;
       } else if (response && response.data) {
-        setSelectedPackage(response.data);
+        packageData = response.data;
       } else {
-        setSelectedPackage(pkg);
+        packageData = pkg;
       }
+      
+      // Ensure package has unit_cost and menu items have both old and new field names
+      if (packageData) {
+        packageData.unit_cost = parseFloat(packageData.unit_cost || 0);
+        packageData.selling_price = parseFloat(packageData.selling_price || packageData.package_price || 0);
+        
+        if (packageData.menu_items) {
+          packageData.menu_items = packageData.menu_items.map((item: any) => ({
+            ...item,
+            unit_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+            selling_price: parseFloat(item.selling_price || item.menu_price || 0),
+            menu_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+            menu_price: parseFloat(item.selling_price || item.menu_price || 0)
+          }));
+        }
+      }
+      
+      setSelectedPackage(packageData);
       setViewDialogOpen(true);
     } catch (error: any) {
       console.error('Error fetching package details:', error);
       // Fallback to using the package data we already have
+      if (pkg && pkg.menu_items) {
+        pkg.menu_items = pkg.menu_items.map((item: any) => ({
+          ...item,
+          unit_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+          selling_price: parseFloat(item.selling_price || item.menu_price || 0),
+          menu_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+          menu_price: parseFloat(item.selling_price || item.menu_price || 0)
+        }));
+      }
       setSelectedPackage(pkg);
       setViewDialogOpen(true);
     }
@@ -179,6 +215,7 @@ const Packages = () => {
     setFormData({
       package_name: pkg.package_name || '',
       package_type: pkg.package_type || '',
+      selling_price: (pkg.selling_price || pkg.package_price || 0).toString(),
       package_price: (pkg.package_price || 0).toString(),
       menu_item_ids: (pkg.menu_items || []).map((item: any) => item.menu_item_id || item.id)
     });
@@ -201,7 +238,7 @@ const Packages = () => {
     
     // Sum of menu item costs
     const totalCost = selectedItems.reduce((sum: number, item: any) => {
-      const cost = parseFloat(item.menu_cost) || 0;
+      const cost = parseFloat(item.unit_cost || item.menu_cost) || 0;
       const quantity = 1; // Default quantity per package
       return sum + (cost * quantity);
     }, 0);
@@ -219,7 +256,8 @@ const Packages = () => {
     setFormData({
       package_name: '',
       package_type: '',
-      package_price: '',
+      selling_price: '',
+      package_price: '', // Keep for backward compatibility
       menu_item_ids: []
     });
     setSelectedPackage(null);
@@ -228,7 +266,7 @@ const Packages = () => {
   
   // Save package
   const handleSavePackage = async () => {
-    if (!formData.package_name || !formData.package_type || !formData.package_price) {
+    if (!formData.package_name || !formData.package_type || (!formData.selling_price && !formData.package_price)) {
       toast({
         title: 'Validation Error',
         description: 'Please fill in all required fields',
@@ -239,10 +277,12 @@ const Packages = () => {
     
     setFormLoading(true);
     try {
+      const price = parseFloat(formData.selling_price || formData.package_price);
       const data = {
         package_name: formData.package_name,
         package_type: formData.package_type,
-        package_price: parseFloat(formData.package_price),
+        selling_price: price,
+        package_price: price, // Keep for backward compatibility
         menu_item_ids: formData.menu_item_ids
       };
       
@@ -266,14 +306,31 @@ const Packages = () => {
           package_id: pkg.package_id,
           package_name: pkg.package_name,
           package_type: pkg.package_type,
+          unit_cost: parseFloat(pkg.unit_cost || 0),
+          selling_price: parseFloat(pkg.selling_price || pkg.package_price) || 0,
           package_price: parseFloat(pkg.package_price) || 0,
-          menu_items: pkg.menu_items || [],
+          menu_items: (pkg.menu_items || []).map((item: any) => ({
+            ...item,
+            unit_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+            selling_price: parseFloat(item.selling_price || item.menu_price || 0),
+            menu_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+            menu_price: parseFloat(item.selling_price || item.menu_price || 0)
+          })),
           total_items: pkg.total_items || (pkg.menu_items ? pkg.menu_items.length : 0),
           usage_count: pkg.usage_count || 0,
           is_template: true
         }));
         setPackages(packagesData);
       }
+      // Reset form
+      setFormData({
+        package_name: '',
+        package_type: '',
+        selling_price: '',
+        package_price: '',
+        menu_item_ids: []
+      });
+      setSelectedPackage(null);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -306,7 +363,13 @@ const Packages = () => {
           package_name: pkg.package_name,
           package_type: pkg.package_type,
           package_price: parseFloat(pkg.package_price) || 0,
-          menu_items: pkg.menu_items || [],
+          menu_items: (pkg.menu_items || []).map((item: any) => ({
+            ...item,
+            unit_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+            selling_price: parseFloat(item.selling_price || item.menu_price || 0),
+            menu_cost: parseFloat(item.unit_cost || item.menu_cost || 0),
+            menu_price: parseFloat(item.selling_price || item.menu_price || 0)
+          })),
           total_items: pkg.total_items || (pkg.menu_items ? pkg.menu_items.length : 0),
           usage_count: pkg.usage_count || 0,
           is_template: true
@@ -334,19 +397,10 @@ const Packages = () => {
   };
 
   const getTypeBadge = (type: string) => {
-    const colors = {
-      'Full Service': 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700',
-      'Basic': 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700',
-      'Premium': 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700',
-      'Specialty': 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700'
-    };
-    return <Badge className={`${colors[type] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'} border`}>{type}</Badge>;
+    return <PackageTypeBadge type={type} />;
   };
 
-  const templatePackages = packages.filter(pkg => pkg.is_template);
-  const weddingPackages = packages.filter(pkg => !pkg.is_template);
-
-  const currentPackages = activeTab === 'templates' ? templatePackages : weddingPackages;
+  const currentPackages = packages;
 
   // Filter and sort packages (only for current tab)
   const filteredAndSortedPackages = useMemo(() => {
@@ -403,14 +457,14 @@ const Packages = () => {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, filterType, sortBy, sortOrder, activeTab]);
+  }, [searchTerm, filterType, sortBy, sortOrder]);
   
   // Updated statistics - more relevant to packages
   const totalPackages = currentPackages.length;
   const averagePrice = currentPackages.length > 0 
-    ? currentPackages.reduce((sum, pkg) => sum + (pkg.package_price || 0), 0) / currentPackages.length 
+    ? currentPackages.reduce((sum, pkg) => sum + (pkg.selling_price || pkg.package_price || 0), 0) / currentPackages.length 
     : 0;
-  const totalRevenue = currentPackages.reduce((sum, pkg) => sum + ((pkg.package_price || 0) * (pkg.usage_count || 0)), 0);
+  const totalRevenue = currentPackages.reduce((sum, pkg) => sum + ((pkg.selling_price || pkg.package_price || 0) * (pkg.usage_count || 0)), 0);
   const totalMenuItems = currentPackages.reduce((sum, pkg) => sum + (pkg.total_items || 0), 0);
 
   return (
@@ -477,30 +531,16 @@ const Packages = () => {
           </Card>
         </div>
 
-        {/* Packages List with Tabs */}
+        {/* Packages List */}
         <Card>
           <CardHeader>
             <CardTitle>Packages Directory</CardTitle>
             <CardDescription>
-              {activeTab === 'templates' 
-                ? 'Template library - Default packages available to all weddings'
-                : 'Wedding-specific packages'}
+              Template library - Default packages available to all weddings
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-              <TabsList className="grid w-full max-w-md grid-cols-2 mb-6">
-                <TabsTrigger value="templates" className="gap-2">
-                  <Package className="w-4 h-4" />
-                  Templates ({templatePackages.length})
-                </TabsTrigger>
-                <TabsTrigger value="wedding-specific" className="gap-2">
-                  <Utensils className="w-4 h-4" />
-                  Wedding-Specific ({weddingPackages.length})
-                </TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="templates" className="space-y-4">
+            <div className="space-y-4">
                 <div className="flex items-center space-x-2 mb-4">
                   <div className="relative flex-1">
                     <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -528,10 +568,17 @@ const Packages = () => {
                         <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
                         <SelectContent>
                           <SelectItem value="all">All Types</SelectItem>
-                          <SelectItem value="Full Service">Full Service</SelectItem>
-                          <SelectItem value="Basic">Basic</SelectItem>
-                          <SelectItem value="Premium">Premium</SelectItem>
-                          <SelectItem value="Specialty">Specialty</SelectItem>
+                          {['Full Service', 'Basic', 'Premium', 'Specialty'].map((type) => {
+                            const Icon = getPackageTypeIcon(type);
+                            return (
+                              <SelectItem key={type} value={type}>
+                                <div className="flex items-center gap-2">
+                                  <Icon className="h-4 w-4" />
+                                  <span>{type}</span>
+                                </div>
+                              </SelectItem>
+                            );
+                          })}
                         </SelectContent>
                       </Select>
                     </div>
@@ -564,6 +611,7 @@ const Packages = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Package ID</TableHead>
                       <TableHead>Package Name</TableHead>
                       <TableHead>Type</TableHead>
                       <TableHead>Price</TableHead>
@@ -576,14 +624,14 @@ const Packages = () => {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
+                        <TableCell colSpan={8} className="text-center py-8">
                           <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                           <p className="text-sm text-muted-foreground mt-2">Loading packages...</p>
                         </TableCell>
                       </TableRow>
                     ) : filteredAndSortedPackages.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
+                        <TableCell colSpan={8} className="text-center py-8">
                           <p className="text-sm text-muted-foreground">No packages found</p>
                         </TableCell>
                       </TableRow>
@@ -592,31 +640,23 @@ const Packages = () => {
                         <TableRow 
                           key={pkg.id || pkg.package_id} 
                           className={pkg.is_template ? 'bg-muted/30' : ''}
-                          onDoubleClick={() => handleViewPackage(pkg)}
+                          onClick={() => handleViewPackage(pkg)}
                           style={{ cursor: 'pointer' }}
                         >
+                          <TableCell>
+                            <Badge variant="outline" className="font-mono text-xs">
+                              #{pkg.package_id || pkg.id}
+                            </Badge>
+                          </TableCell>
                           <TableCell className="font-medium">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                <Package className="h-4 w-4 text-primary" />
-                              </div>
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                {pkg.is_template && (
-                                  <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-blue-700 flex-shrink-0">
-                                    <Lock className="w-3 h-3 mr-1 dark:text-blue-300" />
-                                    Template
-                                  </Badge>
-                                )}
-                                <span className="truncate">{pkg.package_name}</span>
-                              </div>
-                            </div>
+                            <span className="truncate">{pkg.package_name}</span>
                           </TableCell>
                           <TableCell>
                             {getTypeBadge(pkg.package_type)}
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">
-                              {formatCurrency(pkg.package_price || 0)}
+                              {formatCurrency(pkg.selling_price || pkg.package_price || 0)}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -639,7 +679,7 @@ const Packages = () => {
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium text-green-600">
-                              {formatCurrency((pkg.package_price || 0) * (pkg.usage_count || 0))}
+                              {formatCurrency((pkg.selling_price || pkg.package_price || 0) * (pkg.usage_count || 0))}
                             </div>
                           </TableCell>
                           <TableCell>
@@ -720,215 +760,7 @@ const Packages = () => {
                     </div>
                   </div>
                 )}
-              </TabsContent>
-
-              <TabsContent value="wedding-specific" className="space-y-4">
-                <div className="flex items-center space-x-2 mb-4">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Search packages..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-8"
-                    />
-                  </div>
-                  <Button variant="outline" onClick={() => setShowFilters(s => !s)}>
-                    <Filter className="w-4 h-4 mr-2" />
-                    Filters
-                  </Button>
-                  <Button variant="outline" onClick={handleResetFilters}>
-                    Reset Filters
-                  </Button>
-                </div>
-                
-                {showFilters && (
-                  <div className="grid md:grid-cols-4 gap-3 mb-4">
-                    <div>
-                      <label className="text-sm text-muted-foreground">Type</label>
-                      <Select value={filterType} onValueChange={setFilterType}>
-                        <SelectTrigger><SelectValue placeholder="All Types" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="all">All Types</SelectItem>
-                          <SelectItem value="Full Service">Full Service</SelectItem>
-                          <SelectItem value="Basic">Basic</SelectItem>
-                          <SelectItem value="Premium">Premium</SelectItem>
-                          <SelectItem value="Specialty">Specialty</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">Sort By</label>
-                      <Select value={sortBy} onValueChange={(val: any) => setSortBy(val)}>
-                        <SelectTrigger><SelectValue placeholder="Sort by" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="id">ID</SelectItem>
-                          <SelectItem value="name">Name</SelectItem>
-                          <SelectItem value="type">Type</SelectItem>
-                          <SelectItem value="price">Price</SelectItem>
-                          <SelectItem value="usage">Usage</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <label className="text-sm text-muted-foreground">Order</label>
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
-                      >
-                        <ArrowUpDown className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Package Name</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Menu Items</TableHead>
-                      <TableHead>Used in Weddings</TableHead>
-                      <TableHead>Wedding</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
-                          <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-                          <p className="text-sm text-muted-foreground mt-2">Loading packages...</p>
-                        </TableCell>
-                      </TableRow>
-                    ) : filteredAndSortedPackages.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={7} className="text-center py-8">
-                          <p className="text-sm text-muted-foreground">No packages found</p>
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      paginatedPackages.map((pkg) => (
-                        <TableRow 
-                          key={pkg.id || pkg.package_id}
-                          onDoubleClick={() => handleViewPackage(pkg)}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          <TableCell className="font-medium">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                                <Package className="h-4 w-4 text-primary" />
-                              </div>
-                              {pkg.package_name}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            {getTypeBadge(pkg.package_type)}
-                          </TableCell>
-                          <TableCell>
-                            <div className="text-sm font-medium">
-                              {formatCurrency(pkg.package_price || 0)}
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Utensils className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm">{pkg.total_items || 0} items</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-1">
-                              <Users className="h-4 w-4 text-muted-foreground dark:text-muted-foreground" />
-                              <span className="text-sm font-medium">{pkg.usage_count || 0}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <span className="text-sm text-muted-foreground">
-                              N/A
-                            </span>
-                          </TableCell>
-                          <TableCell>
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" className="h-8 w-8 p-0">
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => handleViewPackage(pkg)}>
-                                  <Eye className="mr-2 h-4 w-4 dark:text-muted-foreground" />
-                                  View Details
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600 dark:text-red-400" onClick={() => handleDeletePackage(pkg)}>
-                                  <Trash2 className="mr-2 h-4 w-4" />
-                                  Delete
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-                
-                {/* Pagination */}
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between mt-4">
-                    <div className="text-sm text-muted-foreground">
-                      Showing {startIndex + 1} to {Math.min(endIndex, filteredAndSortedPackages.length)} of {filteredAndSortedPackages.length} packages
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4 mr-1" />
-                        Previous
-                      </Button>
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                          let pageNum;
-                          if (totalPages <= 5) {
-                            pageNum = i + 1;
-                          } else if (currentPage <= 3) {
-                            pageNum = i + 1;
-                          } else if (currentPage >= totalPages - 2) {
-                            pageNum = totalPages - 4 + i;
-                          } else {
-                            pageNum = currentPage - 2 + i;
-                          }
-                          return (
-                            <Button
-                              key={pageNum}
-                              variant={currentPage === pageNum ? "default" : "outline"}
-                              size="sm"
-                              onClick={() => setCurrentPage(pageNum)}
-                              className="w-8 h-8 p-0"
-                            >
-                              {pageNum}
-                            </Button>
-                          );
-                        })}
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        Next
-                        <ChevronRight className="h-4 w-4 ml-1" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </TabsContent>
-            </Tabs>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -956,7 +788,7 @@ const Packages = () => {
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Price</Label>
-                  <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedPackage.package_price || 0)}</div>
+                  <div className="mt-1 text-lg font-semibold">{formatCurrency(selectedPackage.selling_price || selectedPackage.package_price || 0)}</div>
                 </div>
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Used in Weddings</Label>
@@ -968,7 +800,7 @@ const Packages = () => {
                 <div>
                   <Label className="text-sm font-medium text-muted-foreground">Total Revenue</Label>
                   <div className="mt-1 text-lg font-semibold text-green-600">
-                    {formatCurrency((selectedPackage.package_price || 0) * (selectedPackage.usage_count || 0))}
+                    {formatCurrency((selectedPackage.selling_price || selectedPackage.package_price || 0) * (selectedPackage.usage_count || 0))}
                   </div>
                 </div>
               </div>
@@ -987,6 +819,7 @@ const Packages = () => {
                           <TableHead>ID</TableHead>
                           <TableHead>Item Name</TableHead>
                           <TableHead>Type</TableHead>
+                          <TableHead>Quantity</TableHead>
                           <TableHead>Cost</TableHead>
                           <TableHead>Price</TableHead>
                         </TableRow>
@@ -995,6 +828,7 @@ const Packages = () => {
                         {selectedPackage.menu_items.map((item: any) => {
                           const itemId = item.menu_item_id || item.id;
                           const menuType = item.menu_type || 'N/A';
+                          const quantity = item.quantity || 1;
                           const typeLower = menuType.toLowerCase();
                           let icon, colorClass;
                           if (typeLower.includes('appetizer') || typeLower.includes('starter')) {
@@ -1029,8 +863,13 @@ const Packages = () => {
                                   {menuType}
                                 </Badge>
                               </TableCell>
-                              <TableCell>{formatCurrency(item.menu_cost || 0)}</TableCell>
-                              <TableCell>{formatCurrency(item.menu_price || 0)}</TableCell>
+                              <TableCell>
+                                <Badge variant="outline" className="font-medium">
+                                  {quantity}x
+                                </Badge>
+                              </TableCell>
+                              <TableCell>{formatCurrency(item.unit_cost || item.menu_cost || 0)}</TableCell>
+                              <TableCell>{formatCurrency(item.selling_price || item.menu_price || 0)}</TableCell>
                             </TableRow>
                           );
                         })}
@@ -1096,15 +935,17 @@ const Packages = () => {
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Package Price:</span>
-                    <span className="font-semibold">{formatCurrency(selectedPackage.package_price || 0)}</span>
+                    <span className="font-semibold">{formatCurrency(selectedPackage.selling_price || selectedPackage.package_price || 0)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-sm text-muted-foreground">Total Menu Items Cost:</span>
                     <span className="font-semibold">
                       {formatCurrency(
-                        selectedPackage.menu_items?.reduce((sum: number, item: any) => 
-                          sum + (item.menu_cost || 0), 0
-                        ) || 0
+                        selectedPackage.unit_cost || selectedPackage.menu_items?.reduce((sum: number, item: any) => {
+                          const itemCost = item.unit_cost || item.menu_cost || 0;
+                          const quantity = item.quantity || 1;
+                          return sum + (itemCost * quantity);
+                        }, 0) || 0
                       )}
                     </span>
                   </div>
@@ -1112,10 +953,12 @@ const Packages = () => {
                     <span className="text-sm font-medium">Estimated Profit Margin:</span>
                     <span className="font-semibold text-green-600">
                       {formatCurrency(
-                        (selectedPackage.package_price || 0) - 
-                        (selectedPackage.menu_items?.reduce((sum: number, item: any) => 
-                          sum + (item.menu_cost || 0), 0
-                        ) || 0)
+                        (selectedPackage.selling_price || selectedPackage.package_price || 0) - 
+                        (selectedPackage.unit_cost || selectedPackage.menu_items?.reduce((sum: number, item: any) => {
+                          const itemCost = item.unit_cost || item.menu_cost || 0;
+                          const quantity = item.quantity || 1;
+                          return sum + (itemCost * quantity);
+                        }, 0) || 0)
                       )}
                     </span>
                   </div>
@@ -1145,6 +988,195 @@ const Packages = () => {
             }}>
               <Edit className="w-4 h-4 mr-2" />
               Edit Package
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add/Edit Package Dialog */}
+      <Dialog open={addDialogOpen || editDialogOpen} onOpenChange={(open) => {
+        setAddDialogOpen(open);
+        setEditDialogOpen(open);
+      }}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{selectedPackage ? 'Edit Package' : 'Add New Package'}</DialogTitle>
+            <DialogDescription>
+              {selectedPackage ? 'Update package information' : 'Create a new package for the library'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="package_name">Package Name *</Label>
+              <Input
+                id="package_name"
+                value={formData.package_name}
+                onChange={(e) => setFormData({...formData, package_name: e.target.value})}
+                placeholder="e.g., Premium Wedding Package"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="package_type">Package Type *</Label>
+              <Select value={formData.package_type} onValueChange={(val) => setFormData({...formData, package_type: val})}>
+                <SelectTrigger id="package_type">
+                  <SelectValue placeholder="Select package type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {['Full Service', 'Basic', 'Premium', 'Specialty'].map((type) => {
+                    const Icon = getPackageTypeIcon(type);
+                    return (
+                      <SelectItem key={type} value={type}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          <span>{type}</span>
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="selling_price">Selling Price (PHP) *</Label>
+              <Input
+                id="selling_price"
+                type="number"
+                step="0.01"
+                value={formData.selling_price}
+                onChange={(e) => setFormData({...formData, selling_price: e.target.value})}
+                placeholder="0.00"
+              />
+              {formData.menu_item_ids.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Suggested price: {formatCurrency(calculateSuggestedPrice(formData.menu_item_ids))}
+                </p>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label>Menu Items *</Label>
+              <div className="border rounded-lg p-4 max-h-[300px] overflow-y-auto">
+                {availableMenuItems.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">No menu items available</p>
+                ) : (
+                  <div className="space-y-2">
+                    {(() => {
+                      // Sort items: selected ones first, then unselected
+                      const sortedItems = [...availableMenuItems].sort((a, b) => {
+                        const aId = a.menu_item_id || a.id;
+                        const bId = b.menu_item_id || b.id;
+                        const aSelected = formData.menu_item_ids.includes(aId);
+                        const bSelected = formData.menu_item_ids.includes(bId);
+                        if (aSelected && !bSelected) return -1;
+                        if (!aSelected && bSelected) return 1;
+                        return 0;
+                      });
+                      
+                      return sortedItems.map((item: any) => {
+                        const itemId = item.menu_item_id || item.id;
+                        const isSelected = formData.menu_item_ids.includes(itemId);
+                        const restrictionName = item.restriction_name || item.dietary_restriction || null;
+                        const restrictionType = item.restriction_type || 'Dietary';
+                        return (
+                          <div key={itemId} className={`flex items-start space-x-2 p-2 hover:bg-muted/50 rounded ${isSelected ? 'bg-muted/30' : ''}`}>
+                            <Checkbox
+                              id={`menu-item-${itemId}`}
+                              checked={isSelected}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setFormData({
+                                    ...formData,
+                                    menu_item_ids: [...formData.menu_item_ids, itemId]
+                                  });
+                                } else {
+                                  setFormData({
+                                    ...formData,
+                                    menu_item_ids: formData.menu_item_ids.filter((id: number) => id !== itemId)
+                                  });
+                                }
+                              }}
+                              className="mt-1"
+                            />
+                            <label htmlFor={`menu-item-${itemId}`} className="flex-1 cursor-pointer">
+                              <div className="flex items-center justify-between">
+                                <span className="font-medium">{item.menu_name || item.name}</span>
+                                <span className="text-sm text-muted-foreground">
+                                  {formatCurrency(item.selling_price || item.menu_price || 0)}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                <span className="text-xs text-muted-foreground">
+                                  {item.menu_type || 'N/A'}
+                                </span>
+                                {restrictionName && restrictionName !== 'None' && (
+                                  <Badge 
+                                    variant="outline" 
+                                    className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                  >
+                                    {(() => {
+                                      const Icon = getTypeIcon(restrictionType);
+                                      return <Icon className="h-3 w-3" />;
+                                    })()}
+                                    {restrictionName}
+                                  </Badge>
+                                )}
+                              </div>
+                            </label>
+                          </div>
+                        );
+                      });
+                    })()}
+                  </div>
+                )}
+              </div>
+              {formData.menu_item_ids.length > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  {formData.menu_item_ids.length} menu item{formData.menu_item_ids.length !== 1 ? 's' : ''} selected
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setAddDialogOpen(false);
+              setEditDialogOpen(false);
+            }}>Cancel</Button>
+            <Button onClick={handleSavePackage} disabled={formLoading}>
+              {formLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Saving...
+                </>
+              ) : (
+                'Save'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete Package</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete "{selectedPackage?.package_name}"? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleConfirmDelete} disabled={formLoading}>
+              {formLoading ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Deleting...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -75,6 +75,7 @@ import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, 
 import { getTypeIcon, getTypeColor, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
 import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
 import { TableCategoryBadge, getTableCategoryIcon } from '@/utils/tableCategoryUtils';
+import { PackageTypeBadge } from '@/utils/packageTypeUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 import { useDateFormat } from '@/context/DateFormatContext';
 import { useTimeFormat } from '@/context/TimeFormatContext';
@@ -541,7 +542,7 @@ const WeddingDetail = () => {
         const hasCoupleTable = tablesData.some((t: any) => 
           (t.table_category === 'couple') || (t.category === 'couple')
         );
-        if (!hasCoupleTable && weddingData && weddingData.couple_id) {
+        if (!hasCoupleTable && wedding && wedding.couple_id) {
           try {
             const coupleTableResp = await tablesAPI.createCoupleTable(id, { capacity: 2 });
             const updatedResp = await tablesAPI.getSeating(id);
@@ -1266,19 +1267,9 @@ const WeddingDetail = () => {
     }
     
     const capacity = parseInt(tableCapacity);
-    if (!tableCapacity || isNaN(capacity) || capacity <= 0) {
-      newErrors.tableCapacity = 'Valid capacity is required';
-    } else {
-      const categoryLower = tableCategory.toLowerCase();
-      if (categoryLower === 'couple') {
-        if (capacity < 2 || capacity > 15) {
-          newErrors.tableCapacity = 'Couple table capacity must be between 2 and 15';
-        }
-      } else if (categoryLower) {
-        if (capacity < 1 || capacity > 15) {
-          newErrors.tableCapacity = 'Table capacity must be between 1 and 15';
-        }
-      }
+    const validCapacities = [2, 6, 8, 10];
+    if (!tableCapacity || isNaN(capacity) || !validCapacities.includes(capacity)) {
+      newErrors.tableCapacity = 'Capacity must be 2, 6, 8, or 10 seats (matching available inventory)';
     }
     
     setTableFormErrors(newErrors);
@@ -3869,9 +3860,9 @@ const WeddingDetail = () => {
                           )}
                         </div>
                         {/* Dietary Restrictions - Shown at the very bottom */}
-                        {tableRestrictions.length > 0 && (
-                          <div className="mt-4 pt-4 border-t">
-                            <p className="text-xs font-medium text-muted-foreground mb-2">Dietary Restrictions per Table ({tableRestrictions.length}):</p>
+                        <div className="mt-4 pt-4 border-t">
+                          <p className="text-xs font-medium text-muted-foreground mb-2">Dietary Restrictions per Table ({tableRestrictions.length}):</p>
+                          {tableRestrictions.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {tableRestrictions.map((r: any) => {
                                 const Icon = getTypeIcon(r.restriction_type || '');
@@ -3887,8 +3878,13 @@ const WeddingDetail = () => {
                                 );
                               })}
                             </div>
-                          </div>
-                        )}
+                          ) : (
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
+                              <span>No dietary restrictions</span>
+                            </div>
+                          )}
+                        </div>
                       </CardContent>
                     </Card>
                   );
@@ -4838,7 +4834,7 @@ const WeddingDetail = () => {
                                                 <Package className="h-3 w-3 flex-shrink-0" />
                                                 <span className="font-medium text-xs flex-1">{pkg.package_name || pkg.packageName}</span>
                                                 <Badge variant="outline" className="text-xs">ID: {pkgId}</Badge>
-                                                <Badge variant="outline" className="text-xs">{pkg.package_type || 'Standard'}</Badge>
+                                                <PackageTypeBadge type={pkg.package_type || 'Standard'} className="text-xs" />
                                               </div>
                                               {packageRestrictions.length > 0 && (
                                                 <div className="flex flex-wrap gap-1 mt-1 ml-5">
@@ -5022,9 +5018,7 @@ const WeddingDetail = () => {
                                       {pkg.package_name || pkg.packageName || 'Unknown'}
                                     </span>
                                     <Badge variant="outline" className="text-xs">ID: {pkgId}</Badge>
-                                    <span className="text-xs text-muted-foreground dark:text-[#a0a0a0]">
-                                      ({pkg.package_type || pkg.packageType || 'Standard'})
-                                    </span>
+                                    <PackageTypeBadge type={pkg.package_type || pkg.packageType || 'Standard'} className="text-xs" />
                                   </div>
                                   {packageRestrictions.length > 0 && (
                                     <div className="flex items-center gap-1 flex-wrap ml-9">
@@ -5257,30 +5251,7 @@ const WeddingDetail = () => {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {(() => {
-                                const typeLower = (packageType || '').toLowerCase();
-                                let icon, colorClass;
-                                if (typeLower.includes('premium') || typeLower.includes('deluxe')) {
-                                  icon = Crown;
-                                  colorClass = 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700';
-                                } else if (typeLower.includes('standard') || typeLower.includes('basic')) {
-                                  icon = Package;
-                                  colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
-                                } else if (typeLower.includes('economy') || typeLower.includes('budget')) {
-                                  icon = Package;
-                                  colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
-                                } else {
-                                  icon = Package;
-                                  colorClass = 'bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700';
-                                }
-                                const IconComponent = icon;
-                                return (
-                                  <Badge variant="outline" className={`text-xs ${colorClass} border flex items-center gap-1`}>
-                                    <IconComponent className="h-3 w-3" />
-                                    {packageType || 'Standard'}
-                                  </Badge>
-                                );
-                              })()}
+                              <PackageTypeBadge type={packageType || 'Standard'} className="text-xs" />
                             </TableCell>
                             <TableCell>
                               {compatibility.compatible ? (
@@ -5665,31 +5636,7 @@ const WeddingDetail = () => {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  {(() => {
-                                    const packageType = pkg.package_type || pkg.packageType || 'Standard';
-                                    const typeLower = packageType.toLowerCase();
-                                    let icon, colorClass;
-                                    if (typeLower.includes('premium') || typeLower.includes('deluxe')) {
-                                      icon = Crown;
-                                      colorClass = 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700';
-                                    } else if (typeLower.includes('standard') || typeLower.includes('basic')) {
-                                      icon = Package;
-                                      colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
-                                    } else if (typeLower.includes('economy') || typeLower.includes('budget')) {
-                                      icon = Package;
-                                      colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
-                                    } else {
-                                      icon = Package;
-                                      colorClass = 'bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700';
-                                    }
-                                    const IconComponent = icon;
-                                    return (
-                                      <Badge variant="outline" className={`${colorClass} border flex items-center gap-1`}>
-                                        <IconComponent className="h-3 w-3" />
-                                        {packageType}
-                                      </Badge>
-                                    );
-                                  })()}
+                                  <PackageTypeBadge type={pkg.package_type || pkg.packageType || 'Standard'} />
                                 </TableCell>
                                 <TableCell>{formatCurrency(pkg.package_price || pkg.packagePrice || 0)}</TableCell>
                                 <TableCell>
@@ -6941,31 +6888,7 @@ const WeddingDetail = () => {
                     <div>
                       <Label className="text-xs text-muted-foreground">Package Type</Label>
                       <div className="mt-1">
-                        {(() => {
-                          const packageType = selectedPackage.package_type || selectedPackage.packageType || 'Standard';
-                          const typeLower = packageType.toLowerCase();
-                          let icon, colorClass;
-                          if (typeLower.includes('premium') || typeLower.includes('deluxe')) {
-                            icon = Crown;
-                            colorClass = 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700';
-                          } else if (typeLower.includes('standard') || typeLower.includes('basic')) {
-                            icon = Package;
-                            colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
-                          } else if (typeLower.includes('economy') || typeLower.includes('budget')) {
-                            icon = Package;
-                            colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
-                          } else {
-                            icon = Package;
-                            colorClass = 'bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700';
-                          }
-                          const IconComponent = icon;
-                          return (
-                            <Badge variant="outline" className={`${colorClass} border flex items-center gap-1`}>
-                              <IconComponent className="h-3 w-3" />
-                              {packageType}
-                            </Badge>
-                          );
-                        })()}
+                        <PackageTypeBadge type={selectedPackage.package_type || selectedPackage.packageType || 'Standard'} />
                       </div>
                     </div>
                     <div>
