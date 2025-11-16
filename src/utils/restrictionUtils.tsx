@@ -9,21 +9,21 @@ import {
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
-// Icon mapping for restriction types
+// Icon mapping for restriction types - returns component reference, not JSX
 export const getTypeIcon = (type: string) => {
   switch (type) {
     case 'Dietary':
-      return <Leaf className="h-4 w-4" />;
+      return Leaf;
     case 'Medical':
-      return <Heart className="h-4 w-4" />;
+      return Heart;
     case 'Allergy':
-      return <AlertTriangle className="h-4 w-4" />;
+      return AlertTriangle;
     case 'Religious':
-      return <Shield className="h-4 w-4" />;
+      return Shield;
     case 'Intolerance':
-      return <Wheat className="h-4 w-4" />;
+      return Wheat;
     default:
-      return <UserCheck className="h-4 w-4" />;
+      return UserCheck;
   }
 };
 

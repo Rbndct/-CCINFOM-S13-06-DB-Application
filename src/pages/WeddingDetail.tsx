@@ -29,7 +29,8 @@ import {
   Search,
   AlertTriangle,
   Eye,
-  Lock
+  Lock,
+  Crown
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -71,10 +72,18 @@ import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, menuItemsAPI, packagesAPI, inventoryAPI, inventoryAllocationAPI } from '@/api';
 import { getTypeIcon, getTypeColor, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
+import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
+import { TableCategoryBadge, getTableCategoryIcon } from '@/utils/tableCategoryUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 import { useDateFormat } from '@/context/DateFormatContext';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 import { useCurrencyFormat } from '@/utils/currency';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 
 const WeddingDetail = () => {
   const { id } = useParams();
@@ -234,7 +243,12 @@ const WeddingDetail = () => {
   const [addAllocationOpen, setAddAllocationOpen] = useState(false);
   const [editAllocationOpen, setEditAllocationOpen] = useState(false);
   const [deleteAllocationOpen, setDeleteAllocationOpen] = useState(false);
+  const [viewAllocationOpen, setViewAllocationOpen] = useState(false);
   const [selectedAllocation, setSelectedAllocation] = useState<any>(null);
+  const [viewPackageOpen, setViewPackageOpen] = useState(false);
+  const [selectedPackage, setSelectedPackage] = useState<any>(null);
+  const [deletePackageAssignmentOpen, setDeletePackageAssignmentOpen] = useState(false);
+  const [selectedPackageAssignment, setSelectedPackageAssignment] = useState<any>(null);
   const [allocationFormData, setAllocationFormData] = useState({
     inventory_id: '',
     quantity_used: '',
@@ -658,10 +672,11 @@ const WeddingDetail = () => {
         setMenuItemsLoading(false);
       }
       
-      // Fetch packages for this wedding
+      // Fetch packages for this wedding - fetch ALL packages, not filtered by wedding_id
       try {
         setPackagesLoading(true);
-        const packagesResponse = await packagesAPI.getAll({ wedding_id: id });
+        // Fetch all packages from the database
+        const packagesResponse = await packagesAPI.getAll({});
         if (packagesResponse && packagesResponse.success && packagesResponse.data) {
           const packagesData = packagesResponse.data || [];
           setPackages(packagesData);
@@ -671,8 +686,22 @@ const WeddingDetail = () => {
           setPackages(packagesData);
           setAvailablePackages(packagesData);
         } else {
-          setPackages([]);
-          setAvailablePackages([]);
+          // Fallback: try without parameters
+          try {
+            const fallbackResponse = await packagesAPI.getAll();
+            if (fallbackResponse && fallbackResponse.data) {
+              const packagesData = Array.isArray(fallbackResponse.data) ? fallbackResponse.data : (fallbackResponse.success && fallbackResponse.data ? [fallbackResponse.data] : []);
+              setPackages(packagesData);
+              setAvailablePackages(packagesData);
+            } else {
+              setPackages([]);
+              setAvailablePackages([]);
+            }
+          } catch (fallbackError) {
+            console.error('Error in fallback package fetch:', fallbackError);
+            setPackages([]);
+            setAvailablePackages([]);
+          }
         }
       } catch (e) {
         console.error('Error fetching packages:', e);
@@ -685,10 +714,19 @@ const WeddingDetail = () => {
       // Fetch table-package assignments for this wedding
       try {
         const assignmentsResponse = await packagesAPI.getTableAssignments(id);
-        if (assignmentsResponse && assignmentsResponse.success && assignmentsResponse.data) {
-          setTablePackageAssignments(assignmentsResponse.data || []);
-        } else if (assignmentsResponse && assignmentsResponse.data) {
-          setTablePackageAssignments(assignmentsResponse.data || []);
+        if (assignmentsResponse && (assignmentsResponse.success || assignmentsResponse.data)) {
+          const assignmentsData = assignmentsResponse.data || [];
+          // Ensure all assignment data is properly formatted
+          const formattedAssignments = Array.isArray(assignmentsData) ? assignmentsData.map((a: any) => ({
+            ...a,
+            id: a.id || a.assignment_id || a.table_package_id,
+            tableId: a.tableId || a.table_id,
+            packageId: a.packageId || a.package_id,
+            tableNumber: a.tableNumber || a.table_number,
+            packageName: a.packageName || a.package_name,
+            packageType: a.packageType || a.package_type
+          })) : [];
+          setTablePackageAssignments(formattedAssignments);
         } else {
           setTablePackageAssignments([]);
         }
@@ -1281,6 +1319,24 @@ const WeddingDetail = () => {
       }));
       setTables(tablesData);
       
+      // Refresh inventory allocations to show the auto-created table allocation
+      try {
+        const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
+        if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        } else if (allocationsResponse && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        }
+        
+        // Refresh wedding data to update costs
+        const weddingResponse = await weddingsAPI.getById(id);
+        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+          setWedding(weddingResponse.data);
+        }
+      } catch (allocError) {
+        console.error('Error refreshing inventory allocations:', allocError);
+      }
+      
       // Reset form
       setTableCategory('');
       setTableNumber('');
@@ -1554,18 +1610,22 @@ const WeddingDetail = () => {
     const guestsToReassign: Array<{guestId: number, oldTableId: number}> = [];
     
     selectedGuestIds.forEach(guestId => {
-      const guest = guests.find(g => g.id === guestId);
-      if (!guest) return;
+      const guest = guests.find(g => (g.id || g.guest_id) === guestId);
+      if (!guest) {
+        console.warn('Guest not found for ID:', guestId);
+        return;
+      }
       
-      if (!guest.table_id) {
+      const guestTableId = guest.table_id;
+      if (!guestTableId) {
         // Unassigned guest - add to assign list
         guestsToAssign.push(guestId);
-      } else if (guest.table_id === tableId) {
+      } else if (guestTableId === tableId) {
         // Already assigned to this table - skip
         return;
       } else {
         // Assigned to different table - will need to reassign
-        guestsToReassign.push({guestId, oldTableId: guest.table_id});
+        guestsToReassign.push({guestId, oldTableId: guestTableId});
         guestsToAssign.push(guestId);
       }
     });
@@ -1588,7 +1648,11 @@ const WeddingDetail = () => {
     }
     
     // Check table capacity (count guests that will remain after reassignment)
-    const guestsStayingOnTable = guests.filter(g => g.table_id === tableId && !guestsToAssign.includes(g.id)).length;
+    const guestsStayingOnTable = guests.filter(g => {
+      const gTableId = g.table_id;
+      const gId = g.id || g.guest_id;
+      return gTableId === tableId && !guestsToAssign.includes(gId);
+    }).length;
     const newAssignments = guestsToAssign.length;
     const totalAfterAssignment = guestsStayingOnTable + newAssignments;
     const available = (table.capacity || 0) - guestsStayingOnTable;
@@ -1717,19 +1781,43 @@ const WeddingDetail = () => {
     return tablePackageAssignments.find(a => a.tableId === tableId);
   };
 
-  // Helper to get all restrictions for a table (aggregate from all guests at that table)
+  // Helper to get all restrictions for a table (aggregate from all guests at that table + couple preferences for couple tables)
   const getTableRestrictions = (tableId: number) => {
-    const tableGuests = guests.filter(g => g.table_id === tableId);
+    const table = tables.find(t => (t.id || t.table_id) === tableId);
+    const tableCategory = table?.category || table?.table_category || '';
+    const isCoupleTable = tableCategory.toLowerCase() === 'couple';
+    
     const restrictionSet = new Set<number>();
     const restrictions: any[] = [];
     
+    // For couple tables, get restrictions from couple preferences
+    if (isCoupleTable && coupleData && coupleData.preferences) {
+      coupleData.preferences.forEach((pref: any) => {
+        if (pref.dietaryRestrictions && Array.isArray(pref.dietaryRestrictions)) {
+          pref.dietaryRestrictions.forEach((r: any) => {
+            if (r && r.restriction_name && r.restriction_name !== 'None') {
+              const restrictionId = r.restriction_id || r.id;
+              if (restrictionId && !restrictionSet.has(restrictionId)) {
+                restrictionSet.add(restrictionId);
+                restrictions.push(r);
+              }
+            }
+          });
+        }
+      });
+    }
+    
+    // Get restrictions from all guests seated at the table
+    const tableGuests = guests.filter(g => g.table_id === tableId);
     tableGuests.forEach(guest => {
       if (guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions)) {
         guest.dietaryRestrictions.forEach((r: any) => {
-          const restrictionId = r.restriction_id || r.id;
-          if (restrictionId && !restrictionSet.has(restrictionId)) {
-            restrictionSet.add(restrictionId);
-            restrictions.push(r);
+          if (r && r.restriction_name && r.restriction_name !== 'None') {
+            const restrictionId = r.restriction_id || r.id;
+            if (restrictionId && !restrictionSet.has(restrictionId)) {
+              restrictionSet.add(restrictionId);
+              restrictions.push(r);
+            }
           }
         });
       }
@@ -1781,6 +1869,26 @@ const WeddingDetail = () => {
     };
   };
 
+  // Helper to get recommended packages for a table (compatible packages)
+  const getRecommendedPackages = (tableId: number) => {
+    const tableRestrictions = getTableRestrictions(tableId);
+    const recommended: Array<{ pkg: any; compatibility: any }> = [];
+    
+    packages.forEach(pkg => {
+      const compatibility = checkPackageCompatibility(pkg.package_id || pkg.id, tableId);
+      if (compatibility.compatible) {
+        recommended.push({ pkg, compatibility });
+      }
+    });
+    
+    // Sort by package name
+    return recommended.sort((a, b) => {
+      const nameA = a.pkg.package_name || a.pkg.packageName || '';
+      const nameB = b.pkg.package_name || b.pkg.packageName || '';
+      return nameA.localeCompare(nameB);
+    });
+  };
+
   // Inventory allocation handlers
   const handleAddAllocation = async () => {
     setAllocationFormErrors({});
@@ -1804,9 +1912,14 @@ const WeddingDetail = () => {
     }
     
     const quantity = parseInt(allocationFormData.quantity_used);
-    if (quantity > selectedItem.quantity_available) {
+    // Check stock availability - consider already allocated quantity for this item
+    const existingAllocation = inventoryAllocations.find(a => a.inventory_id === selectedItem.inventory_id);
+    const alreadyAllocated = existingAllocation ? (existingAllocation.quantity_used || 0) : 0;
+    const availableStock = selectedItem.quantity_available + alreadyAllocated; // Add back what's already allocated
+    
+    if (quantity > availableStock) {
       setAllocationFormErrors({ 
-        quantity_used: `Quantity exceeds available (${selectedItem.quantity_available})` 
+        quantity_used: `Quantity exceeds available stock (${availableStock} available, ${alreadyAllocated} already allocated)` 
       });
       return;
     }
@@ -1837,6 +1950,12 @@ const WeddingDetail = () => {
       const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id || '0');
       if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
         setInventoryAllocations(allocationsResponse.data || []);
+      }
+      
+      // Refresh wedding data to update costs
+      const weddingResponse = await weddingsAPI.getById(id || '0');
+      if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+        setWedding(weddingResponse.data);
       }
     } catch (error: any) {
       toast({
@@ -1909,6 +2028,12 @@ const WeddingDetail = () => {
       if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
         setInventoryAllocations(allocationsResponse.data || []);
       }
+      
+      // Refresh wedding data to update costs
+      const weddingResponse = await weddingsAPI.getById(id || '0');
+      if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+        setWedding(weddingResponse.data);
+      }
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -1935,6 +2060,12 @@ const WeddingDetail = () => {
       if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
         setInventoryAllocations(allocationsResponse.data || []);
       }
+      
+      // Refresh wedding data to update costs
+      const weddingResponse = await weddingsAPI.getById(id || '0');
+      if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+        setWedding(weddingResponse.data);
+      }
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -1952,9 +2083,31 @@ const WeddingDetail = () => {
   const [editTableCapacity, setEditTableCapacity] = useState('');
   const [editTableLoading, setEditTableLoading] = useState(false);
   
-  // Table positions for seating layout (drag and drop)
+  // Table positions for seating layout (drag and drop) - saved per wedding
   const [tablePositions, setTablePositions] = useState<Record<number, { x: number; y: number }>>({});
   const [draggedTableId, setDraggedTableId] = useState<number | null>(null);
+  
+  // Load saved table positions for this wedding
+  useEffect(() => {
+    if (id) {
+      const savedPositions = localStorage.getItem(`wedding_${id}_table_positions`);
+      if (savedPositions) {
+        try {
+          const positions = JSON.parse(savedPositions);
+          setTablePositions(positions);
+        } catch (e) {
+          console.error('Error loading saved table positions:', e);
+        }
+      }
+    }
+  }, [id]);
+  
+  // Save table positions when they change
+  useEffect(() => {
+    if (id && Object.keys(tablePositions).length > 0) {
+      localStorage.setItem(`wedding_${id}_table_positions`, JSON.stringify(tablePositions));
+    }
+  }, [tablePositions, id]);
 
   // Edit table handler
   const handleEditTable = (table: any) => {
@@ -2047,6 +2200,24 @@ const WeddingDetail = () => {
       
       setTables(tablesData);
       
+      // Refresh inventory allocations after table update
+      try {
+        const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
+        if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        } else if (allocationsResponse && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        }
+        
+        // Refresh wedding data to update costs
+        const weddingResponse = await weddingsAPI.getById(id);
+        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+          setWedding(weddingResponse.data);
+        }
+      } catch (allocError) {
+        console.error('Error refreshing inventory allocations:', allocError);
+      }
+      
       toast({
         title: 'Table Updated',
         description: `Table capacity updated to ${capacity}`,
@@ -2113,6 +2284,24 @@ const WeddingDetail = () => {
       
       setTables(tablesData);
       
+      // Refresh inventory allocations after table deletion
+      try {
+        const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
+        if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        } else if (allocationsResponse && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        }
+        
+        // Refresh wedding data to update costs
+        const weddingResponse = await weddingsAPI.getById(id);
+        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+          setWedding(weddingResponse.data);
+        }
+      } catch (allocError) {
+        console.error('Error refreshing inventory allocations:', allocError);
+      }
+      
       // Show warning if no tables exist
       if (tablesData.length === 0) {
         toast({
@@ -2138,8 +2327,11 @@ const WeddingDetail = () => {
   };
 
   // Package assignment handler
-  const handleAssignPackage = async () => {
-    if (!packageAssignTableId || !packageAssignPackageId) {
+  const handleAssignPackage = async (tableIdParam?: number, packageIdParam?: number) => {
+    const tableId = tableIdParam || (packageAssignTableId ? parseInt(packageAssignTableId) : null);
+    const packageId = packageIdParam || (packageAssignPackageId ? parseInt(packageAssignPackageId) : null);
+    
+    if (!tableId || !packageId) {
       toast({
         title: 'Validation Error',
         description: 'Please select both a table and a package',
@@ -2147,9 +2339,6 @@ const WeddingDetail = () => {
       });
       return;
     }
-    
-    const tableId = parseInt(packageAssignTableId);
-    const packageId = parseInt(packageAssignPackageId);
     
     // Check for compatibility issues
     const compatibility = checkPackageCompatibility(packageId, tableId);
@@ -2169,8 +2358,8 @@ const WeddingDetail = () => {
     
     try {
       // Use actual API endpoint
-      const table = tables.find(t => (t.id || t.table_id)?.toString() === packageAssignTableId);
-      const pkg = availablePackages.find(p => (p.package_id || p.id)?.toString() === packageAssignPackageId);
+      const table = tables.find(t => (t.id || t.table_id) === tableId);
+      const pkg = availablePackages.find(p => (p.package_id || p.id) === packageId);
       
       if (!table || !pkg) {
         toast({
@@ -2202,10 +2391,21 @@ const WeddingDetail = () => {
         package_id: packageId
       });
       
-      // Refresh assignments
+      // Refresh assignments - always fetch from API to ensure consistency
       const assignmentsResponse = await packagesAPI.getTableAssignments(id || '0');
-      if (assignmentsResponse && assignmentsResponse.data) {
-        setTablePackageAssignments(assignmentsResponse.data || []);
+      if (assignmentsResponse && (assignmentsResponse.success || assignmentsResponse.data)) {
+        const assignmentsData = assignmentsResponse.data || [];
+        // Ensure all assignment data is properly formatted
+        const formattedAssignments = Array.isArray(assignmentsData) ? assignmentsData.map((a: any) => ({
+          ...a,
+          id: a.id || a.assignment_id || a.table_package_id,
+          tableId: a.tableId || a.table_id,
+          packageId: a.packageId || a.package_id,
+          tableNumber: a.tableNumber || a.table_number,
+          packageName: a.packageName || a.package_name,
+          packageType: a.packageType || a.package_type
+        })) : [];
+        setTablePackageAssignments(formattedAssignments);
       } else {
         // Fallback: add to local state
         const newAssignment = {
@@ -2222,6 +2422,16 @@ const WeddingDetail = () => {
         setTablePackageAssignments([...tablePackageAssignments, newAssignment]);
       }
       
+      // Refresh wedding data to update costs
+      try {
+        const weddingResponse = await weddingsAPI.getById(id || '0');
+        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+          setWedding(weddingResponse.data);
+        }
+      } catch (weddingError) {
+        console.error('Error refreshing wedding data:', weddingError);
+      }
+      
       // Reset form
       setPackageAssignTableId('');
       setPackageAssignPackageId('');
@@ -2236,6 +2446,62 @@ const WeddingDetail = () => {
       toast({
         title: 'Error',
         description: error.response?.data?.error || error.message || 'Failed to assign package. Please try again.',
+        variant: 'destructive',
+      });
+    } finally {
+      setPackageFormLoading(false);
+    }
+  };
+  
+  // Handle remove package assignment (for dialog)
+  const handleRemovePackageAssignment = async () => {
+    if (!selectedPackageAssignment || !id) return;
+    
+    setPackageFormLoading(true);
+    try {
+      const tableId = selectedPackageAssignment.tableId || selectedPackageAssignment.table_id;
+      const packageId = selectedPackageAssignment.packageId || selectedPackageAssignment.package_id;
+      
+      await packagesAPI.removeFromTable(tableId, packageId);
+      
+      // Refresh assignments
+      const assignmentsResponse = await packagesAPI.getTableAssignments(id);
+      if (assignmentsResponse && (assignmentsResponse.success || assignmentsResponse.data)) {
+        const assignmentsData = assignmentsResponse.data || [];
+        const formattedAssignments = Array.isArray(assignmentsData) ? assignmentsData.map((a: any) => ({
+          ...a,
+          id: a.id || a.assignment_id || a.table_package_id,
+          tableId: a.tableId || a.table_id,
+          packageId: a.packageId || a.package_id,
+          tableNumber: a.tableNumber || a.table_number,
+          packageName: a.packageName || a.package_name,
+          packageType: a.packageType || a.package_type
+        })) : [];
+        setTablePackageAssignments(formattedAssignments);
+      }
+      
+      // Refresh wedding data to update costs
+      try {
+        const weddingResponse = await weddingsAPI.getById(id);
+        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+          setWedding(weddingResponse.data);
+        }
+      } catch (weddingError) {
+        console.error('Error refreshing wedding data:', weddingError);
+      }
+      
+      setDeletePackageAssignmentOpen(false);
+      setSelectedPackageAssignment(null);
+      
+      toast({
+        title: 'Package Removed',
+        description: 'Package has been removed from the table',
+      });
+    } catch (error: any) {
+      console.error('Error removing package assignment:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.error || error.message || 'Failed to remove package assignment',
         variant: 'destructive',
       });
     } finally {
@@ -2288,21 +2554,27 @@ const WeddingDetail = () => {
   };
 
   const getRsvpStatusBadge = (status: string | undefined | null) => {
-    if (!status) return <Badge variant="secondary" className="flex items-center gap-1 w-fit"><Clock className="w-3 h-3" />Pending</Badge>;
+    if (!status) return <Badge variant="secondary" className="flex items-center gap-1 w-fit dark:bg-gray-800 dark:text-gray-200"><Clock className="w-3 h-3 dark:text-gray-300" />Pending</Badge>;
     switch (status.toLowerCase()) {
       case 'accepted':
       case 'confirmed':
-        return <Badge className="bg-green-100 text-green-800 flex items-center gap-1 w-fit"><CheckCircle className="w-3 h-3" />Accepted</Badge>;
+        return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border flex items-center gap-1 w-fit"><CheckCircle className="w-3 h-3 dark:text-green-300" />Accepted</Badge>;
       case 'declined':
-        return <Badge variant="destructive" className="flex items-center gap-1 w-fit"><X className="w-3 h-3" />Declined</Badge>;
+        return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border flex items-center gap-1 w-fit"><X className="w-3 h-3 dark:text-red-300" />Declined</Badge>;
       case 'pending':
-        return <Badge variant="secondary" className="flex items-center gap-1 w-fit"><Clock className="w-3 h-3" />Pending</Badge>;
+        return <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border flex items-center gap-1 w-fit"><Clock className="w-3 h-3 dark:text-yellow-300" />Pending</Badge>;
       default:
-        return <Badge variant="secondary" className="flex items-center gap-1 w-fit"><Clock className="w-3 h-3" />{status}</Badge>;
+        return <Badge variant="secondary" className="flex items-center gap-1 w-fit dark:bg-gray-800 dark:text-gray-200"><Clock className="w-3 h-3 dark:text-gray-300" />{status}</Badge>;
     }
   };
   
+  // Use TableCategoryBadge utility instead - keeping for backward compatibility
   const getTableCategoryBadge = (category: string | undefined | null) => {
+    if (!category) return <TableCategoryBadge category="General" />;
+    return <TableCategoryBadge category={category} />;
+  };
+  
+  const getTableCategoryBadgeOld = (category: string | undefined | null) => {
     if (!category) return <Badge className="bg-gray-100 text-gray-800">General</Badge>;
     const categoryLower = category.toLowerCase();
     const colors: Record<string, string> = {
@@ -2345,16 +2617,16 @@ const WeddingDetail = () => {
   };
 
   const getPaymentStatusBadge = (status: string | undefined | null) => {
-    if (!status) return <Badge variant="outline">Unknown</Badge>;
+    if (!status) return <Badge variant="outline" className="dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">Unknown</Badge>;
     switch (status.toLowerCase()) {
       case 'paid':
-        return <Badge className="bg-green-100 text-green-800"><CheckCircle className="w-3 h-3 mr-1" />Paid</Badge>;
+        return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border"><CheckCircle className="w-3 h-3 mr-1 dark:text-green-300" />Paid</Badge>;
       case 'pending':
-        return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800"><Clock className="w-3 h-3 mr-1" />Pending</Badge>;
+        return <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border"><Clock className="w-3 h-3 mr-1 dark:text-yellow-300" />Pending</Badge>;
       case 'partial':
-        return <Badge variant="outline" className="bg-blue-100 text-blue-800">Partial</Badge>;
+        return <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700 border">Partial</Badge>;
       default:
-        return <Badge variant="outline">{status}</Badge>;
+        return <Badge variant="outline" className="dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">{status}</Badge>;
     }
   };
 
@@ -2582,7 +2854,7 @@ const WeddingDetail = () => {
             <CardContent>
               <div className="mb-2">{getPaymentStatusBadge(wedding?.paymentStatus || wedding?.payment_status || 'pending')}</div>
               <p className="text-xs text-muted-foreground">
-                Total: ${((wedding?.totalCost || wedding?.total_cost || 0) as number).toLocaleString()}
+                Total: {formatCurrency((wedding?.totalCost || wedding?.total_cost || 0) as number)}
               </p>
             </CardContent>
           </Card>
@@ -2861,7 +3133,10 @@ const WeddingDetail = () => {
                           variant="outline" 
                           className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1 w-fit`}
                         >
-                          {getTypeIcon(restrictionType)}
+                          {(() => {
+                            const Icon = getTypeIcon(restrictionType);
+                            return <Icon className="h-4 w-4" />;
+                          })()}
                           <span className="max-w-[120px] truncate" title={restrictionName}>
                             {restrictionName}
                           </span>
@@ -3005,18 +3280,30 @@ const WeddingDetail = () => {
                         <SelectValue placeholder="Select table category" />
                       </SelectTrigger>
                           <SelectContent className="max-h-[300px] overflow-y-auto">
-                      <SelectItem value="couple">Couple</SelectItem>
-                      <SelectItem value="guest">Guest</SelectItem>
-                            <SelectItem value="family">Family</SelectItem>
-                            <SelectItem value="VIP">VIP</SelectItem>
-                            <SelectItem value="entourage">Entourage</SelectItem>
-                            <SelectItem value="friends">Friends</SelectItem>
-                            <SelectItem value="kids">Kids</SelectItem>
-                            <SelectItem value="elderly">Elderly</SelectItem>
-                            <SelectItem value="vendor">Vendor</SelectItem>
-                            <SelectItem value="staff">Staff</SelectItem>
-                            <SelectItem value="reserved">Reserved</SelectItem>
-                            <SelectItem value="special_needs">Special Needs</SelectItem>
+                      {[
+                        { value: 'couple', label: 'Couple', icon: getTableCategoryIcon('couple') },
+                        { value: 'guest', label: 'Guest', icon: getTableCategoryIcon('guest') },
+                        { value: 'family', label: 'Family', icon: getTableCategoryIcon('family') },
+                        { value: 'VIP', label: 'VIP', icon: getTableCategoryIcon('VIP') },
+                        { value: 'entourage', label: 'Entourage', icon: getTableCategoryIcon('entourage') },
+                        { value: 'friends', label: 'Friends', icon: getTableCategoryIcon('friends') },
+                        { value: 'kids', label: 'Kids', icon: getTableCategoryIcon('kids') },
+                        { value: 'elderly', label: 'Elderly', icon: getTableCategoryIcon('elderly') },
+                        { value: 'vendor', label: 'Vendor', icon: getTableCategoryIcon('vendor') },
+                        { value: 'staff', label: 'Staff', icon: getTableCategoryIcon('staff') },
+                        { value: 'reserved', label: 'Reserved', icon: getTableCategoryIcon('reserved') },
+                        { value: 'special_needs', label: 'Special Needs', icon: getTableCategoryIcon('special_needs') },
+                      ].map((item) => {
+                        const Icon = item.icon;
+                        return (
+                          <SelectItem key={item.value} value={item.value}>
+                            <div className="flex items-center gap-2">
+                              <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                              <span>{item.label}</span>
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                       </SelectContent>
                     </Select>
                     {tableFormErrors.tableCategory && (
@@ -3063,108 +3350,47 @@ const WeddingDetail = () => {
                 </form>
                   </div>
                   
-                  {/* Right side: Quick Add shortcuts */}
-                  <div className="space-y-4">
-                    <div>
-                      <Label className="text-sm font-medium mb-3 block">Quick Add by Category</Label>
-                      <div className="space-y-2">
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => addTableByCategory('VIP', 6)} 
-                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
-                          className="w-full justify-start h-auto py-3 px-4"
-                        >
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">VIP Table</span>
-                            <span className="text-xs text-muted-foreground">Capacity: 6 seats</span>
-                          </div>
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => addTableByCategory('family', 8)} 
-                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
-                          className="w-full justify-start h-auto py-3 px-4"
-                        >
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">Family Table</span>
-                            <span className="text-xs text-muted-foreground">Capacity: 8 seats</span>
-                          </div>
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => addTableByCategory('kids', 6)} 
-                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
-                          className="w-full justify-start h-auto py-3 px-4"
-                        >
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">Kids Table</span>
-                            <span className="text-xs text-muted-foreground">Capacity: 6 seats</span>
-                          </div>
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => addTableByCategory('elderly', 6)} 
-                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
-                          className="w-full justify-start h-auto py-3 px-4"
-                        >
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">Elderly Table</span>
-                            <span className="text-xs text-muted-foreground">Capacity: 6 seats</span>
-                          </div>
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => addTableByCategory('friends', 10)} 
-                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
-                          className="w-full justify-start h-auto py-3 px-4"
-                        >
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">Friends Table</span>
-                            <span className="text-xs text-muted-foreground">Capacity: 10 seats</span>
-                          </div>
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => addTableByCategory('entourage', 8)} 
-                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
-                          className="w-full justify-start h-auto py-3 px-4"
-                        >
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">Entourage Table</span>
-                            <span className="text-xs text-muted-foreground">Capacity: 8 seats</span>
-                          </div>
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => addGuestTable(6)} 
-                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
-                          className="w-full justify-start h-auto py-3 px-4"
-                        >
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">General Guest Table</span>
-                            <span className="text-xs text-muted-foreground">Capacity: 6 seats</span>
-                          </div>
-                        </Button>
-                        <Button 
-                          type="button" 
-                          variant="outline" 
-                          onClick={() => addGuestTable(10)} 
-                          disabled={tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0}
-                          className="w-full justify-start h-auto py-3 px-4"
-                        >
-                          <div className="flex flex-col items-start gap-1">
-                            <span className="font-medium">Large Guest Table</span>
-                            <span className="text-xs text-muted-foreground">Capacity: 10 seats</span>
-                          </div>
-                        </Button>
-                      </div>
+                  {/* Right side: Quick Add shortcuts - Compact Grid */}
+                  <div className="space-y-3">
+                    <Label className="text-sm font-medium block">Quick Add</Label>
+                    <div className="grid grid-cols-2 gap-2 max-h-[400px] overflow-y-auto pr-2">
+                      {[
+                        { category: 'VIP', capacity: 6, icon: getTableCategoryIcon('VIP'), label: 'VIP' },
+                        { category: 'family', capacity: 8, icon: getTableCategoryIcon('family'), label: 'Family' },
+                        { category: 'kids', capacity: 6, icon: getTableCategoryIcon('kids'), label: 'Kids' },
+                        { category: 'elderly', capacity: 6, icon: getTableCategoryIcon('elderly'), label: 'Elderly' },
+                        { category: 'friends', capacity: 10, icon: getTableCategoryIcon('friends'), label: 'Friends' },
+                        { category: 'entourage', capacity: 8, icon: getTableCategoryIcon('entourage'), label: 'Entourage' },
+                        { category: 'guest', capacity: 6, icon: getTableCategoryIcon('guest'), label: 'Guest' },
+                        { category: 'guest', capacity: 10, icon: getTableCategoryIcon('guest'), label: 'Guest' },
+                      ].map((item) => {
+                        const Icon = item.icon;
+                        const isDisabled = tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0;
+                        // Match colors with seating layout - softer, better for dark mode
+                        const categoryColors: Record<string, string> = {
+                          'VIP': 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-200 border-purple-300 dark:border-purple-800 hover:bg-purple-200 dark:hover:bg-purple-900',
+                          'kids': 'bg-yellow-100 dark:bg-yellow-950 text-yellow-800 dark:text-yellow-200 border-yellow-300 dark:border-yellow-800 hover:bg-yellow-200 dark:hover:bg-yellow-900',
+                          'elderly': 'bg-orange-100 dark:bg-orange-950 text-orange-800 dark:text-orange-200 border-orange-300 dark:border-orange-800 hover:bg-orange-200 dark:hover:bg-orange-900',
+                          'family': 'bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-200 border-green-300 dark:border-green-800 hover:bg-green-200 dark:hover:bg-green-900',
+                          'entourage': 'bg-indigo-100 dark:bg-indigo-950 text-indigo-800 dark:text-indigo-200 border-indigo-300 dark:border-indigo-800 hover:bg-indigo-200 dark:hover:bg-indigo-900',
+                          'friends': 'bg-cyan-100 dark:bg-cyan-950 text-cyan-800 dark:text-cyan-200 border-cyan-300 dark:border-cyan-800 hover:bg-cyan-200 dark:hover:bg-cyan-900',
+                          'guest': 'bg-blue-100 dark:bg-blue-950 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-800 hover:bg-blue-200 dark:hover:bg-blue-900',
+                        };
+                        const colorClass = categoryColors[item.category] || 'bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200 border-gray-300 dark:border-gray-700';
+                        return (
+                          <Button
+                            key={`${item.category}-${item.capacity}`}
+                            type="button"
+                            variant="outline"
+                            onClick={() => item.category === 'guest' ? addGuestTable(item.capacity) : addTableByCategory(item.category, item.capacity)}
+                            disabled={isDisabled}
+                            className={`h-auto py-1.5 px-2.5 justify-start ${colorClass} border`}
+                          >
+                            <Icon className="h-3.5 w-3.5 mr-1.5 flex-shrink-0" />
+                            <span className="text-xs font-medium">{item.label} (Capacity: {item.capacity})</span>
+                          </Button>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -3196,7 +3422,7 @@ const WeddingDetail = () => {
                         onClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
-                          const guestIds = unseatedAccepted.map(g => g.id);
+                          const guestIds = unseatedAccepted.map(g => g.id || g.guest_id).filter(Boolean);
                           setSelectedGuestIds(guestIds);
                           setBulkAssignFilter('accepted');
                           setBulkAssignmentOpen(true);
@@ -3270,48 +3496,43 @@ const WeddingDetail = () => {
                   
                   return (
                     <Card key={table.id || table.table_id || `table-${table.tableNumber || table.table_number || 'unknown'}`} className="flex flex-col">
-                      <CardHeader className="relative">
-                        <div className="flex items-center justify-between">
-                          <div>
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
                             <CardTitle className="text-lg">{table.tableNumber || table.table_number || 'Unknown'}</CardTitle>
                             <p className="text-xs text-muted-foreground mt-0.5">Table ID: {table.table_id || table.id || 'N/A'}</p>
+                            <div className="mt-2">
+                              {getTableCategoryBadge(tableCategory)}
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            {getTableCategoryBadge(tableCategory)}
-                          </div>
-                        </div>
-                        {/* Icon buttons in top-right corner */}
-                        <div className="absolute top-4 right-4 flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => {
-                              setSelectedTableForView(table);
-                              setViewTableOpen(true);
-                            }}
-                            title="View Details"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={() => handleEditTable(table)}
-                            title="Edit Table"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                            onClick={() => handleDeleteTable(table.id || table.table_id)}
-                            title="Delete Table"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          {/* Icon buttons in top-right corner - using dropdown menu */}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" size="sm" className="h-8 w-8 p-0 flex-shrink-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedTableForView(table);
+                                setViewTableOpen(true);
+                              }}>
+                                <Eye className="mr-2 h-4 w-4" />
+                                View Details
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleEditTable(table)}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit Table
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleDeleteTable(table.id || table.table_id)}
+                                className="text-destructive focus:text-destructive"
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete Table
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                         <CardDescription>
                           Capacity: {table.capacity || 0} | Assigned: {assignedCount} | Available: {available}
@@ -3378,7 +3599,10 @@ const WeddingDetail = () => {
                                     variant="outline" 
                                     className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                                   >
-                                    {getTypeIcon(r.restriction_type || '')}
+                                    {(() => {
+                                      const Icon = getTypeIcon(r.restriction_type || '');
+                                      return <Icon className="h-3 w-3" />;
+                                    })()}
                                     {r.restriction_name}
                                   </Badge>
                                 ))}
@@ -3453,7 +3677,10 @@ const WeddingDetail = () => {
                                                   variant="outline"
                                                   className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                                                 >
-                                                  {getTypeIcon(r.restriction_type || '')}
+                                                  {(() => {
+                                                    const Icon = getTypeIcon(r.restriction_type || '');
+                                                    return <Icon className="h-3 w-3" />;
+                                                  })()}
                                                   {r.restriction_name || r}
                                                 </Badge>
                                               ))}
@@ -3483,7 +3710,10 @@ const WeddingDetail = () => {
                                                   variant="outline"
                                                   className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                                                 >
-                                                  {getTypeIcon(r.restriction_type || '')}
+                                                  {(() => {
+                                                    const Icon = getTypeIcon(r.restriction_type || '');
+                                                    return <Icon className="h-3 w-3" />;
+                                                  })()}
                                                   {r.restriction_name || r}
                                                 </Badge>
                                               ))}
@@ -3509,7 +3739,10 @@ const WeddingDetail = () => {
                                                 variant="outline" 
                                                 className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                                               >
-                                                {getTypeIcon(r.restriction_type || '')}
+                                                {(() => {
+                                                  const Icon = getTypeIcon(r.restriction_type || '');
+                                                  return <Icon className="h-3 w-3" />;
+                                                })()}
                                                 {r.restriction_name}
                                               </Badge>
                                             ))}
@@ -3774,10 +4007,15 @@ const WeddingDetail = () => {
                         const x = ((e.clientX - rect.left) / rect.width) * 100;
                         const y = ((e.clientY - rect.top) / rect.height) * 100;
                         
-                        setTablePositions(prev => ({
-                          ...prev,
+                        const newPositions = {
+                          ...tablePositions,
                           [draggedTableId]: { x: Math.max(5, Math.min(95, x)), y: Math.max(5, Math.min(95, y)) }
-                        }));
+                        };
+                        setTablePositions(newPositions);
+                        // Save to localStorage immediately
+                        if (id) {
+                          localStorage.setItem(`wedding_${id}_table_positions`, JSON.stringify(newPositions));
+                        }
                         setDraggedTableId(null);
                       }
                     }}
@@ -3855,30 +4093,37 @@ const WeddingDetail = () => {
                               <div className="relative">
                                 {/* Calculate table size based on capacity and text content */}
                                 {(() => {
-                                  // Base size calculation
-                                  const minSize = 60;
-                                  const maxSize = 140;
-                                  const sizeStep = (maxSize - minSize) / 14; // 14 steps from 1 to 15
-                                  let baseTableSize = Math.max(minSize, Math.min(maxSize, minSize + (capacity - 1) * sizeStep));
-                                  
-                                  // Adjust size based on text content
-                                  const tableNumLength = displayTableNum.length;
-                                  const needsMoreSpace = tableNumLength > 6 || capacity > 10;
-                                  if (needsMoreSpace) {
-                                    baseTableSize = Math.max(baseTableSize, 80);
+                                  // Base size calculation - better scaling for different capacities
+                                  // Use a more gradual scaling that works better for common sizes like 8
+                                  let baseTableSize: number;
+                                  if (capacity <= 2) {
+                                    baseTableSize = 70;
+                                  } else if (capacity <= 4) {
+                                    baseTableSize = 85;
+                                  } else if (capacity <= 6) {
+                                    baseTableSize = 100;
+                                  } else if (capacity <= 8) {
+                                    baseTableSize = 115; // Better size for 8 capacity
+                                  } else if (capacity <= 10) {
+                                    baseTableSize = 130;
+                                  } else if (capacity <= 12) {
+                                    baseTableSize = 145;
+                                  } else {
+                                    baseTableSize = 160;
                                   }
                                   
-                                  const tableSize = baseTableSize;
+                                  // Always ensure minimum size for readability
+                                  const tableSize = Math.max(baseTableSize, 80);
                                   
-                                  // Calculate chair radius - place chairs outside the table box
-                                  const chairRadius = (tableSize / 2) + 12; // 12px outside the table
-                                  const chairSize = capacity <= 4 ? 10 : capacity <= 8 ? 9 : 8;
+                                  // Calculate chair radius - place chairs further outside the table box with better spacing
+                                  const chairRadius = (tableSize / 2) + 28; // Increased spacing to prevent overlap
+                                  const chairSize = capacity <= 4 ? 12 : capacity <= 8 ? 11 : 10; // Slightly larger chairs
                                   
-                                  // Calculate font sizes based on table size
-                                  const fontSizeTableNum = tableSize < 70 ? '9px' : tableSize < 90 ? '10px' : '11px';
-                                  const fontSizeId = tableSize < 70 ? '6px' : tableSize < 90 ? '7px' : '8px';
-                                  const fontSizeCapacity = tableSize < 70 ? '8px' : tableSize < 90 ? '9px' : '10px';
-                                  const fontSizeFull = tableSize < 70 ? '6px' : '7px';
+                                  // Calculate font sizes - ensure readability even for small tables
+                                  const fontSizeTableNum = '11px'; // Fixed size for consistency
+                                  const fontSizeCategory = '8px';
+                                  const fontSizeCapacity = '9px';
+                                  const fontSizeFull = '8px';
                                   
                                   return (
                                     <>
@@ -3920,41 +4165,46 @@ const WeddingDetail = () => {
                                         })}
                                       </div>
                                       
-                                      {/* Table center - dynamic size - higher z-index to show above chairs */}
+                                      {/* Table center - more rounded, better text display */}
                                       <div
-                                        className={`rounded-lg border-2 p-1.5 flex flex-col items-center justify-center text-xs transition-all hover:shadow-lg hover:scale-105 relative dark:border-gray-600 ${categoryColors[tableCategory] || categoryColors[tableCategory.toLowerCase()] || 'bg-gray-200 dark:bg-gray-800 border-gray-400'}`}
+                                        className={`rounded-2xl border-2 p-2 flex flex-col items-center justify-center text-xs transition-all hover:shadow-lg hover:scale-105 relative dark:border-gray-600 ${categoryColors[tableCategory] || categoryColors[tableCategory.toLowerCase()] || 'bg-gray-200 dark:bg-gray-800 border-gray-400'}`}
                                         style={{
                                           width: `${tableSize}px`,
                                           height: `${tableSize}px`,
                                           zIndex: 2,
-                                          minWidth: '60px',
-                                          minHeight: '60px'
+                                          minWidth: '80px',
+                                          minHeight: '80px',
+                                          borderRadius: '16px' // More rounded
                                         }}
-                                        title={`${displayTableNum} - ${actualAssignedCount}/${capacity} guests`}
+                                        title={`${displayTableNum} - ${tableCategory} - ${actualAssignedCount}/${capacity} guests`}
                                       >
+                                        {/* Table Number - Always visible */}
                                         <div 
-                                          className="font-semibold leading-tight relative z-10 text-gray-900 dark:text-gray-100 truncate max-w-full px-0.5 text-center"
-                                          style={{ fontSize: fontSizeTableNum }}
+                                          className="font-bold leading-tight relative z-10 text-gray-900 dark:text-gray-100 text-center px-1"
+                                          style={{ fontSize: fontSizeTableNum, lineHeight: '1.2' }}
                                         >
                                           {displayTableNum}
                                         </div>
-                                        {capacity > 1 && (
-                                          <div 
-                                            className="text-gray-600 dark:text-gray-400 mt-0.5 relative z-10"
-                                            style={{ fontSize: fontSizeId }}
-                                          >
-                                            ID: {tableId}
-                                          </div>
-                                        )}
+                                        {/* Table Category - Compact badge */}
                                         <div 
-                                          className="mt-0.5 font-medium relative z-10 text-gray-800 dark:text-gray-200"
+                                          className="mt-0.5 relative z-10"
+                                          style={{ fontSize: fontSizeCategory }}
+                                        >
+                                          <span className="text-gray-600 dark:text-gray-400 font-medium">
+                                            {tableCategory.charAt(0).toUpperCase() + tableCategory.slice(1).replace(/_/g, ' ')}
+                                          </span>
+                                        </div>
+                                        {/* Capacity indicator */}
+                                        <div 
+                                          className="mt-1 font-semibold relative z-10 text-gray-800 dark:text-gray-200"
                                           style={{ fontSize: fontSizeCapacity }}
                                         >
                                           {actualAssignedCount}/{capacity}
                                         </div>
+                                        {/* Full indicator */}
                                         {(capacity - actualAssignedCount) === 0 && (
                                           <div 
-                                            className="text-red-600 dark:text-red-400 mt-0.5 font-bold relative z-10"
+                                            className="mt-0.5 text-red-600 dark:text-red-400 font-bold relative z-10"
                                             style={{ fontSize: fontSizeFull }}
                                           >
                                             Full
@@ -4013,27 +4263,52 @@ const WeddingDetail = () => {
                     
                     {/* Filter and Quick Actions */}
                     <div className="space-y-2">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Select value={bulkAssignFilter} onValueChange={(value: any) => setBulkAssignFilter(value)}>
-                          <SelectTrigger className="h-8 text-xs">
+                          <SelectTrigger className="h-8 text-xs w-full dark:bg-[#1a1a1a] dark:text-[#e5e5e5] dark:border-[#333]">
                             <SelectValue />
                           </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="all">All Guests</SelectItem>
-                            <SelectItem value="accepted">Accepted RSVP</SelectItem>
-                            <SelectItem value="pending">Pending RSVP</SelectItem>
-                            <SelectItem value="declined">Declined RSVP</SelectItem>
-                            <SelectItem value="unassigned">Unassigned Only</SelectItem>
+                          <SelectContent className="dark:bg-[#1a1a1a] dark:text-[#e5e5e5] dark:border-[#333]">
+                            <SelectItem value="all" className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]">
+                              <div className="flex items-center gap-2">
+                                <Users className="h-3 w-3" />
+                                <span>All Guests</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="accepted" className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]">
+                              <div className="flex items-center gap-2">
+                                <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400" />
+                                <span>Accepted RSVP</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="pending" className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]">
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-3 w-3 text-yellow-600 dark:text-yellow-400" />
+                                <span>Pending RSVP</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="declined" className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]">
+                              <div className="flex items-center gap-2">
+                                <X className="h-3 w-3 text-red-600 dark:text-red-400" />
+                                <span>Declined RSVP</span>
+                              </div>
+                            </SelectItem>
+                            <SelectItem value="unassigned" className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]">
+                              <div className="flex items-center gap-2">
+                                <UserCheck className="h-3 w-3" />
+                                <span>Unassigned Only</span>
+                              </div>
+                            </SelectItem>
                           </SelectContent>
                         </Select>
-                        <div className="flex gap-1">
+                        <div className="flex gap-1 flex-wrap">
                           <Button
                             variant="outline"
                             size="sm"
                             className="h-8 text-xs"
                             onClick={() => {
                               const unassigned = getUnassignedGuests();
-                              setSelectedGuestIds(unassigned.map(g => g.id));
+                              setSelectedGuestIds(unassigned.map(g => g.id || g.guest_id).filter(Boolean));
                             }}
                           >
                             Select All Unassigned
@@ -4044,16 +4319,54 @@ const WeddingDetail = () => {
                             className="h-8 text-xs"
                             onClick={() => {
                               const accepted = guests.filter(g => (g.rsvpStatus === 'accepted' || g.rsvp_status === 'accepted') && !g.table_id);
-                              setSelectedGuestIds(accepted.map(g => g.id));
+                              setSelectedGuestIds(accepted.map(g => g.id || g.guest_id).filter(Boolean));
                             }}
                           >
                             Select All Accepted
                           </Button>
                         </div>
                       </div>
+                      {/* Auto-assign by dietary restriction */}
+                      <div className="space-y-2">
+                        <Label className="text-xs text-muted-foreground">Auto-Assign by Dietary Restriction</Label>
+                        <div className="flex flex-wrap gap-1">
+                          {dietaryRestrictions.filter(r => r.restriction_name && r.restriction_name !== 'None').slice(0, 5).map((restriction) => {
+                            const restrictionName = restriction.restriction_name;
+                            const guestsWithRestriction = guests.filter(g => {
+                              if (!g.table_id) {
+                                const restrictions = Array.isArray(g.dietaryRestrictions) 
+                                  ? g.dietaryRestrictions 
+                                  : g.dietaryRestriction 
+                                    ? [{ restriction_name: g.dietaryRestriction }] 
+                                    : [];
+                                return restrictions.some((r: any) => (r.restriction_name || r) === restrictionName);
+                              }
+                              return false;
+                            });
+                            if (guestsWithRestriction.length === 0) return null;
+                            return (
+                              <Button
+                                key={restriction.restriction_id}
+                                variant="outline"
+                                size="sm"
+                                className="h-7 text-xs"
+                                onClick={() => {
+                                  setSelectedGuestIds(guestsWithRestriction.map(g => g.id || g.guest_id).filter(Boolean));
+                                }}
+                              >
+                                {(() => {
+                                  const Icon = getTypeIcon(restriction.restriction_type || 'Dietary');
+                                  return <Icon className="h-3 w-3 mr-1" />;
+                                })()}
+                                {restrictionName} ({guestsWithRestriction.length})
+                              </Button>
+                            );
+                          })}
+                        </div>
+                      </div>
                     </div>
                     
-                    <div className="border rounded-lg p-4 max-h-[400px] overflow-y-auto">
+                    <div className="border rounded-lg p-4 max-h-[400px] overflow-y-auto dark:border-[#333] dark:bg-[#1a1a1a]">
                       {(() => {
                         let filteredGuests = guests;
                         if (bulkAssignFilter === 'accepted') {
@@ -4085,27 +4398,25 @@ const WeddingDetail = () => {
                                                      'bg-yellow-100 text-yellow-800 border-yellow-300';
                               return (
                                 <div key={guest.id} className={`flex items-center space-x-2 p-2 rounded hover:bg-muted ${isAssigned ? 'opacity-60' : ''}`}>
-                                  <Checkbox
-                                    checked={selectedGuestIds.includes(guest.id)}
+                                    <Checkbox
+                                    checked={selectedGuestIds.includes(guest.id || guest.guest_id)}
                                     onCheckedChange={(checked) => {
+                                      const guestId = guest.id || guest.guest_id;
                                       if (checked) {
-                                        setSelectedGuestIds([...selectedGuestIds, guest.id]);
+                                        setSelectedGuestIds([...selectedGuestIds, guestId]);
                                       } else {
-                                        setSelectedGuestIds(selectedGuestIds.filter(id => id !== guest.id));
+                                        setSelectedGuestIds(selectedGuestIds.filter(id => id !== guestId));
                                       }
                                     }}
                                     disabled={isAssigned && bulkAssignFilter === 'unassigned'}
                                   />
                                   <div className="flex-1">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                      <p className="text-sm font-medium">
+                                      <p className="text-sm font-medium dark:text-[#e5e5e5]">
                                         {guest.firstName || guest.name?.split(' ')[0]} {guest.lastName || guest.name?.split(' ').slice(1).join(' ')}
                                       </p>
-                                      <Badge variant="outline" className={`text-xs ${rsvpBadgeColor}`}>
-                                        RSVP: {rsvpStatus.charAt(0).toUpperCase() + rsvpStatus.slice(1)}
-                                      </Badge>
                                       {isAssigned && (
-                                        <Badge variant="secondary" className="text-xs">
+                                        <Badge variant="secondary" className="text-xs dark:bg-gray-800 dark:text-gray-200">
                                           {assignedTable?.tableNumber || assignedTable?.table_number || 'Table'} assigned
                                         </Badge>
                                       )}
@@ -4113,19 +4424,30 @@ const WeddingDetail = () => {
                                     {((guest.dietaryRestriction && guest.dietaryRestriction !== 'None') || (guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions) && guest.dietaryRestrictions.length > 0)) && (
                                       <div className="flex flex-wrap gap-1 mt-1">
                                         {guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions) && guest.dietaryRestrictions.length > 0
-                                          ? guest.dietaryRestrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').slice(0, 3).map((r: any, idx: number) => (
-                                              <Badge key={r.restriction_id || idx} variant="secondary" className="text-xs">
-                                                {r.restriction_name}
-                                              </Badge>
-                                            ))
+                                          ? guest.dietaryRestrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').slice(0, 3).map((r: any, idx: number) => {
+                                              const restrictionType = r.restriction_type || '';
+                                              return (
+                                                <Badge 
+                                                  key={r.restriction_id || idx} 
+                                                  variant="outline" 
+                                                  className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                                >
+                                                  {(() => {
+                                                    const Icon = getTypeIcon(restrictionType);
+                                                    return <Icon className="h-3 w-3" />;
+                                                  })()}
+                                                  {r.restriction_name}
+                                                </Badge>
+                                              );
+                                            })
                                           : guest.dietaryRestriction && guest.dietaryRestriction !== 'None' && (
-                                              <Badge variant="secondary" className="text-xs">
+                                              <Badge variant="outline" className="text-xs">
                                                 {guest.dietaryRestriction}
                                               </Badge>
                                             )
                                         }
                                         {guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions) && guest.dietaryRestrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').length > 3 && (
-                                          <Badge variant="outline" className="text-xs">
+                                          <Badge variant="outline" className="text-xs dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
                                             +{guest.dietaryRestrictions.filter((r: any) => r.restriction_name && r.restriction_name !== 'None').length - 3} more
                                           </Badge>
                                         )}
@@ -4146,10 +4468,10 @@ const WeddingDetail = () => {
                     <h4 className="font-medium">Select Table</h4>
                     <div className="space-y-2">
                       <Select value={bulkTableId} onValueChange={setBulkTableId} disabled={tables.length === 0}>
-                        <SelectTrigger>
+                        <SelectTrigger className="h-8 text-xs w-full dark:bg-[#1a1a1a] dark:text-[#e5e5e5] dark:border-[#333]">
                           <SelectValue placeholder="Choose a table" />
                         </SelectTrigger>
-                        <SelectContent>
+                        <SelectContent className="dark:bg-[#1a1a1a] dark:text-[#e5e5e5] dark:border-[#333]">
                           {tables.map((table) => {
                             if (!table) return null;
                             const tableId = table.id || table.table_id;
@@ -4157,26 +4479,33 @@ const WeddingDetail = () => {
                             const available = (table.capacity || 0) - assignedCount;
                             const tableNum = table.tableNumber || table.table_number || 'Unknown';
                             const category = table.category || table.table_category || 'General';
+                            const CategoryIcon = getTableCategoryIcon(category);
                             return (
                               <SelectItem 
                                 key={tableId || `table-${tableNum}`} 
                                 value={tableId ? tableId.toString() : `table-${tableNum}`}
                                 disabled={available === 0}
+                                className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]"
                               >
-                                {tableNum} ({category}) - {available} available
+                                <div className="flex items-center gap-2">
+                                  <CategoryIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span>{tableNum} ({category}) - {available} available</span>
+                                </div>
                               </SelectItem>
                             );
                           }).filter(Boolean)}
                         </SelectContent>
                       </Select>
                       {bulkTableId && (
-                        <div className={`border rounded-lg p-3 mt-2 ${selectedGuestIds.length > 0 ? (() => {
+                        <div className={`border rounded-lg p-3 mt-2 dark:border-[#333] dark:bg-[#1a1a1a] ${selectedGuestIds.length > 0 ? (() => {
                           const selectedTable = tables.find(t => (t.id ?? t.table_id)?.toString() === bulkTableId);
                           if (!selectedTable) return '';
                           const tableId = selectedTable.id || selectedTable.table_id;
                           const assignedCount = guests.filter(g => g && g.table_id === tableId).length;
                           const available = (selectedTable.capacity || 0) - assignedCount;
-                          return selectedGuestIds.length > available ? 'border-red-300 bg-red-50' : 'border-green-300 bg-green-50';
+                          return selectedGuestIds.length > available 
+                            ? 'border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-950/30' 
+                            : 'border-green-300 dark:border-green-800 bg-green-50 dark:bg-green-950/30';
                         })() : ''}`}>
                           {(() => {
                             const selectedTable = tables.find(t => (t.id ?? t.table_id)?.toString() === bulkTableId);
@@ -4186,24 +4515,24 @@ const WeddingDetail = () => {
                             const available = (selectedTable.capacity || 0) - assignedCount;
                             return (
                               <>
-                                <p className="text-sm font-medium">{selectedTable.tableNumber || selectedTable.table_number || 'Unknown'}</p>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="text-sm font-medium dark:text-[#e5e5e5]">{selectedTable.tableNumber || selectedTable.table_number || 'Unknown'}</p>
+                                <p className="text-xs text-muted-foreground dark:text-[#d4d4d4]">
                                   Capacity: {selectedTable.capacity || 0} | 
                                   Assigned: {assignedCount} | 
                                   Available: {available}
                                 </p>
                                 {selectedGuestIds.length > 0 && (
-                                  <div className="mt-2 pt-2 border-t">
-                                    <p className="text-xs font-medium">
+                                  <div className="mt-2 pt-2 border-t dark:border-[#333]">
+                                    <p className="text-xs font-medium dark:text-[#e5e5e5]">
                                       {selectedGuestIds.length} guest{selectedGuestIds.length !== 1 ? 's' : ''} selected
                                     </p>
                                     {selectedGuestIds.length > available ? (
-                                      <p className="text-xs text-red-600 font-semibold mt-1 flex items-center gap-1">
+                                      <p className="text-xs text-red-600 dark:text-red-400 font-semibold mt-1 flex items-center gap-1">
                                         <AlertTriangle className="h-3 w-3" />
                                         Warning: Only {available} seat{available !== 1 ? 's' : ''} available
                                       </p>
                                     ) : (
-                                      <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                      <p className="text-xs text-green-600 dark:text-green-400 mt-1 flex items-center gap-1">
                                         <CheckCircle className="h-3 w-3" />
                                         {available - selectedGuestIds.length} seat{available - selectedGuestIds.length !== 1 ? 's' : ''} remaining
                                       </p>
@@ -4307,6 +4636,235 @@ const WeddingDetail = () => {
 
           {/* Table Packages Tab */}
           <TabsContent value="table-packages" className="space-y-4">
+            {/* Table Grid View for Package Assignment */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Tables - Package Assignment</CardTitle>
+                <CardDescription>Select a table to view recommended packages based on dietary restrictions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {tables.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-4">No tables available. Please add tables first.</p>
+                ) : (
+                  <TooltipProvider>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {tables.map((table) => {
+                      if (!table) return null;
+                      const tableId = table.id || table.table_id;
+                      const tableNum = table.tableNumber || table.table_number || 'Unknown';
+                      const category = table.category || table.table_category || '';
+                      const tablePackage = getTablePackage(tableId);
+                      const tableRestrictions = getTableRestrictions(tableId);
+                      const recommendedPackages = getRecommendedPackages(tableId);
+                      const assignedGuestsList = guests.filter(g => g && g.table_id === tableId);
+                      const assignedCount = assignedGuestsList.length;
+                      const capacity = table.capacity || 0;
+                      const available = Math.max(0, capacity - assignedCount);
+                      
+                      return (
+                        <Card key={tableId} className="flex flex-col h-full">
+                          <CardHeader className="pb-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                <CardTitle className="text-lg">{tableNum}</CardTitle>
+                                <p className="text-xs text-muted-foreground mt-0.5">Table ID: {tableId}</p>
+                                <div className="mt-2">
+                                  <TableCategoryBadge category={category} />
+                                </div>
+                              </div>
+                            </div>
+                            <CardDescription>
+                              Capacity: {capacity} | Assigned: {assignedCount} | Available: {available}
+                            </CardDescription>
+                          </CardHeader>
+                          <CardContent className="flex-1 space-y-3">
+                            {tablePackage ? (
+                              <div className="pb-2 border-b">
+                                <Badge variant="outline" className="gap-1">
+                                  <Package className="w-3 h-3" />
+                                  {tablePackage.packageName} (ID: {tablePackage.packageId || tablePackage.package_id})
+                                </Badge>
+                              </div>
+                            ) : (
+                              <div className="space-y-2">
+                                {tableRestrictions.length > 0 && (
+                                  <div>
+                                    <p className="text-xs font-medium text-muted-foreground mb-1">Table Restrictions:</p>
+                                    <div className="flex flex-wrap gap-1">
+                                      {tableRestrictions.slice(0, 3).map((r: any) => {
+                                        const Icon = getTypeIcon(r.restriction_type || '');
+                                        return (
+                                          <Badge 
+                                            key={r.restriction_id || r.id} 
+                                            variant="outline" 
+                                            className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                          >
+                                            <Icon className="h-3 w-3" />
+                                            {r.restriction_name || r.name}
+                                          </Badge>
+                                        );
+                                      })}
+                                      {tableRestrictions.length > 3 && (
+                                        <Badge variant="outline" className="text-xs">+{tableRestrictions.length - 3}</Badge>
+                                      )}
+                                    </div>
+                                  </div>
+                                )}
+                                {recommendedPackages.length > 0 ? (
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div className="pb-2 border-b border-dashed">
+                                        <Badge variant="outline" className="gap-1 cursor-help">
+                                          <Package className="w-3 h-3" />
+                                          {recommendedPackages.length} Recommended Package{recommendedPackages.length !== 1 ? 's' : ''}
+                                        </Badge>
+                                      </div>
+                                    </TooltipTrigger>
+                                    <TooltipContent className="max-w-md p-3" side="right">
+                                      <div className="space-y-2">
+                                        <p className="font-semibold text-sm mb-2">Recommended Packages:</p>
+                                        <div className="space-y-1.5 max-h-[200px] overflow-y-auto">
+                                          {recommendedPackages.slice(0, 5).map((rec, idx) => {
+                                            const pkg = rec.pkg;
+                                            const pkgId = pkg.package_id || pkg.id;
+                                            const packageRestrictions: any[] = [];
+                                            if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                                              const restrictionSet = new Set<string>();
+                                              pkg.menu_items.forEach((item: any) => {
+                                                if (item.restriction_name && item.restriction_name !== 'None') {
+                                                  if (!restrictionSet.has(item.restriction_name)) {
+                                                    restrictionSet.add(item.restriction_name);
+                                                    packageRestrictions.push({
+                                                      restriction_name: item.restriction_name,
+                                                      restriction_type: item.restriction_type || 'Dietary'
+                                                    });
+                                                  }
+                                                }
+                                              });
+                                            }
+                                            return (
+                                              <div key={pkgId || idx} className="p-2 rounded border bg-background">
+                                                <div className="flex items-center gap-2 mb-1">
+                                                  <Package className="h-3 w-3" />
+                                                  <span className="font-medium text-xs">{pkg.package_name || pkg.packageName}</span>
+                                                  <Badge variant="outline" className="text-xs">ID: {pkgId}</Badge>
+                                                  <Badge variant="outline" className="text-xs">{pkg.package_type || 'Standard'}</Badge>
+                                                </div>
+                                                {packageRestrictions.length > 0 && (
+                                                  <div className="flex flex-wrap gap-1 mt-1">
+                                                    {packageRestrictions.slice(0, 3).map((r: any, rIdx: number) => {
+                                                      const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                                      return (
+                                                        <Badge key={rIdx} variant="outline" className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}>
+                                                          <Icon className="h-2.5 w-2.5" />
+                                                          {r.restriction_name}
+                                                        </Badge>
+                                                      );
+                                                    })}
+                                                    {packageRestrictions.length > 3 && (
+                                                      <Badge variant="outline" className="text-xs">+{packageRestrictions.length - 3}</Badge>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                          {recommendedPackages.length > 5 && (
+                                            <p className="text-xs text-muted-foreground mt-1">+{recommendedPackages.length - 5} more packages</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                ) : (
+                                  <p className="text-xs text-muted-foreground">No compatible packages found</p>
+                                )}
+                                {recommendedPackages.length > 0 ? (
+                                  <div className="space-y-1">
+                                    <Select
+                                      value=""
+                                      onValueChange={async (pkgId) => {
+                                        if (pkgId) {
+                                          const pkgIdNum = parseInt(pkgId);
+                                          // Call handleAssignPackage directly with parameters
+                                          try {
+                                            await handleAssignPackage(tableId, pkgIdNum);
+                                          } catch (error) {
+                                            console.error('Error assigning package:', error);
+                                          }
+                                        }
+                                      }}
+                                    >
+                                      <SelectTrigger className="w-full h-8 text-xs">
+                                        <SelectValue placeholder="Quick Assign Package" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {recommendedPackages.slice(0, 5).map((rec) => {
+                                          const pkg = rec.pkg;
+                                          const pkgId = pkg.package_id || pkg.id;
+                                          return (
+                                            <SelectItem key={pkgId} value={pkgId?.toString() || ''}>
+                                              {pkg.package_name || pkg.packageName} (ID: {pkgId})
+                                            </SelectItem>
+                                          );
+                                        })}
+                                      </SelectContent>
+                                    </Select>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="w-full"
+                                      onClick={() => {
+                                        setPackageAssignTableId(tableId.toString());
+                                        setPackageAssignPackageId('');
+                                        // Scroll to the assign package form
+                                        setTimeout(() => {
+                                          const formElement = document.getElementById('packageTable');
+                                          if (formElement) {
+                                            formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                            formElement.focus();
+                                          }
+                                        }, 100);
+                                      }}
+                                    >
+                                      <Package className="w-3 h-3 mr-2" />
+                                      View All Packages
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className="w-full"
+                                    onClick={() => {
+                                      setPackageAssignTableId(tableId.toString());
+                                      setPackageAssignPackageId('');
+                                      // Scroll to the assign package form
+                                      setTimeout(() => {
+                                        const formElement = document.getElementById('packageTable');
+                                        if (formElement) {
+                                          formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                                          formElement.focus();
+                                        }
+                                      }, 100);
+                                    }}
+                                  >
+                                    <Package className="w-3 h-3 mr-2" />
+                                    Assign Package
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                    </div>
+                  </TooltipProvider>
+                )}
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle>Assign Package to Table</CardTitle>
@@ -4316,9 +4874,9 @@ const WeddingDetail = () => {
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label htmlFor="packageTable">Table</Label>
+                      <Label htmlFor="packageTableSelect">Table</Label>
                       <Select value={packageAssignTableId} onValueChange={setPackageAssignTableId} disabled={packageFormLoading || tables.length === 0}>
-                        <SelectTrigger id="packageTable">
+                        <SelectTrigger id="packageTableSelect" name="packageTableSelect">
                           <SelectValue placeholder="Select a table" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px] overflow-y-auto">
@@ -4327,9 +4885,17 @@ const WeddingDetail = () => {
                             const tableId = table.id || table.table_id;
                             const tableNum = table.tableNumber || table.table_number || 'Unknown';
                             const category = table.category || table.table_category || 'General';
+                            const CategoryIcon = getTableCategoryIcon(category);
                             return (
-                              <SelectItem key={tableId || `table-${tableNum}`} value={tableId ? tableId.toString() : `table-${tableNum}`}>
-                                {tableNum} ({category})
+                              <SelectItem 
+                                key={tableId || `table-${tableNum}`} 
+                                value={tableId ? tableId.toString() : `table-${tableNum}`}
+                                className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]"
+                              >
+                                <div className="flex items-center gap-2">
+                                  <CategoryIcon className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span>{tableNum} ({category})</span>
+                                </div>
                             </SelectItem>
                             );
                           }).filter(Boolean)}
@@ -4337,9 +4903,9 @@ const WeddingDetail = () => {
                       </Select>
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="packageSelect">Package</Label>
+                      <Label htmlFor="packageSelectDropdown">Package</Label>
                       <Select value={packageAssignPackageId} onValueChange={setPackageAssignPackageId} disabled={packageFormLoading || packages.length === 0}>
-                        <SelectTrigger id="packageSelect">
+                        <SelectTrigger id="packageSelectDropdown" name="packageSelectDropdown">
                           <SelectValue placeholder="Select a package" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px] overflow-y-auto">
@@ -4371,41 +4937,47 @@ const WeddingDetail = () => {
                               <SelectItem 
                                 key={pkgId || `pkg-${pkg.package_name || pkg.packageName}`} 
                                 value={pkgValue}
+                                className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]"
                               >
                                 <div className="flex flex-col gap-1 py-1">
                                   <div className="flex items-center gap-2">
+                                    <Package className="h-3.5 w-3.5 text-muted-foreground dark:text-[#d4d4d4] flex-shrink-0" />
                                     {!compatibility.compatible && (
-                                      <AlertTriangle className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                                      <AlertTriangle className="h-3 w-3 text-amber-500 dark:text-amber-400 flex-shrink-0" />
                                     )}
                                     <span className="font-medium">
                                       {pkg.package_name || pkg.packageName || 'Unknown'}
                                     </span>
-                                    <span className="text-xs text-muted-foreground">
+                                    <Badge variant="outline" className="text-xs">ID: {pkgId}</Badge>
+                                    <span className="text-xs text-muted-foreground dark:text-[#a0a0a0]">
                                       ({pkg.package_type || pkg.packageType || 'Standard'})
                                     </span>
                                   </div>
                                   {packageRestrictions.length > 0 && (
-                                    <div className="flex items-center gap-1 flex-wrap ml-5">
-                                      <span className="text-xs text-muted-foreground">Restrictions:</span>
-                                      {packageRestrictions.slice(0, 2).map((r: any, idx: number) => (
-                                        <Badge 
-                                          key={idx} 
-                                          variant="outline" 
-                                          className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
-                                        >
-                                          {getTypeIcon(r.restriction_type || 'Dietary')}
-                                          {r.restriction_name}
-                                        </Badge>
-                                      ))}
+                                    <div className="flex items-center gap-1 flex-wrap ml-9">
+                                      <span className="text-xs text-muted-foreground dark:text-[#a0a0a0]">Restrictions:</span>
+                                      {packageRestrictions.slice(0, 2).map((r: any, idx: number) => {
+                                        const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                        return (
+                                          <Badge 
+                                            key={idx} 
+                                            variant="outline" 
+                                            className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
+                                          >
+                                            <Icon className="h-3 w-3" />
+                                            {r.restriction_name}
+                                          </Badge>
+                                        );
+                                      })}
                                       {packageRestrictions.length > 2 && (
-                                        <Badge variant="outline" className="text-xs">
+                                        <Badge variant="outline" className="text-xs dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
                                           +{packageRestrictions.length - 2} more
                                         </Badge>
                                       )}
                                     </div>
                                   )}
                                   {!compatibility.compatible && compatibility.conflicts.length > 0 && (
-                                    <div className="text-xs text-amber-600 dark:text-amber-400 ml-5">
+                                    <div className="text-xs text-amber-600 dark:text-amber-400 ml-9">
                                       ⚠️ {compatibility.conflicts.length} conflict{compatibility.conflicts.length !== 1 ? 's' : ''} with table
                                     </div>
                                   )}
@@ -4439,7 +5011,10 @@ const WeddingDetail = () => {
                                     variant="outline" 
                                     className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                                   >
-                                    {getTypeIcon(r.restriction_type || '')}
+                                    {(() => {
+                                      const Icon = getTypeIcon(r.restriction_type || '');
+                                      return <Icon className="h-3 w-3" />;
+                                    })()}
                                     {r.restriction_name || r.name}
                                   </Badge>
                                 ))}
@@ -4487,7 +5062,10 @@ const WeddingDetail = () => {
                                         variant="outline" 
                                         className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                                       >
-                                        {getTypeIcon(r.restriction_type || '')}
+                                        {(() => {
+                                          const Icon = getTypeIcon(r.restriction_type || '');
+                                          return <Icon className="h-3 w-3" />;
+                                        })()}
                                         {r.restriction_name || r.name}
                                       </Badge>
                                     ))}
@@ -4542,11 +5120,12 @@ const WeddingDetail = () => {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead>Assignment ID</TableHead>
                       <TableHead>Table Number</TableHead>
                       <TableHead>Package Name</TableHead>
                       <TableHead>Package Type</TableHead>
                       <TableHead>Compatibility</TableHead>
-                      <TableHead>Table Restrictions</TableHead>
+                      <TableHead>Dietary Restrictions</TableHead>
                       <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -4554,72 +5133,202 @@ const WeddingDetail = () => {
                       {tablePackageAssignments.map((assignment) => {
                         const compatibility = checkPackageCompatibility(assignment.packageId, assignment.tableId);
                         const tableRestrictions = getTableRestrictions(assignment.tableId);
+                        const pkg = packages.find(p => (p.package_id || p.id) === assignment.packageId);
+                        
+                        // Get package restrictions
+                        const packageRestrictions: any[] = [];
+                        if (pkg && pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                          const restrictionSet = new Set<string>();
+                          pkg.menu_items.forEach((item: any) => {
+                            if (item.restriction_name && item.restriction_name !== 'None') {
+                              if (!restrictionSet.has(item.restriction_name)) {
+                                restrictionSet.add(item.restriction_name);
+                                packageRestrictions.push({
+                                  restriction_name: item.restriction_name,
+                                  restriction_type: item.restriction_type || 'Dietary'
+                                });
+                              }
+                            }
+                          });
+                        }
+                        
+                        // Get table info to ensure we have the latest data
+                        const table = tables.find(t => (t.id || t.table_id) === (assignment.tableId || assignment.table_id));
+                        const assignmentId = assignment.id || assignment.assignment_id || assignment.table_package_id || 'N/A';
+                        const tableNumber = table?.tableNumber || table?.table_number || assignment.tableNumber || 'N/A';
+                        const packageName = pkg?.package_name || pkg?.packageName || assignment.packageName || 'N/A';
+                        const packageType = pkg?.package_type || pkg?.packageType || assignment.packageType || 'N/A';
+                        const packageId = pkg?.package_id || pkg?.id || assignment.packageId || assignment.package_id || 'N/A';
                         
                         return (
-                          <TableRow key={assignment.id || `assignment-${assignment.tableId}-${assignment.packageId}`}>
-                            <TableCell className="font-medium">{assignment.tableNumber || 'N/A'}</TableCell>
-                            <TableCell>{assignment.packageName || 'N/A'}</TableCell>
-                            <TableCell>{assignment.packageType || 'N/A'}</TableCell>
+                          <TableRow key={assignmentId || `assignment-${assignment.tableId}-${assignment.packageId}`}>
+                            <TableCell className="font-medium text-xs text-muted-foreground">#{assignmentId}</TableCell>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                {table && (() => {
+                                  const category = table.category || table.table_category || '';
+                                  if (!category) return null;
+                                  const CategoryIcon = getTableCategoryIcon(category);
+                                  if (!CategoryIcon) return null;
+                                  return <CategoryIcon className="h-3.5 w-3.5 text-muted-foreground" />;
+                                })()}
+                                <span>{tableNumber}</span>
+                                <span className="text-xs text-muted-foreground">(ID: {assignment.tableId || assignment.table_id})</span>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <Package className="h-3.5 w-3.5 text-muted-foreground" />
+                                <span>{packageName}</span>
+                                <Badge variant="outline" className="text-xs">ID: {packageId}</Badge>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {(() => {
+                                const typeLower = (packageType || '').toLowerCase();
+                                let icon, colorClass;
+                                if (typeLower.includes('premium') || typeLower.includes('deluxe')) {
+                                  icon = Crown;
+                                  colorClass = 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700';
+                                } else if (typeLower.includes('standard') || typeLower.includes('basic')) {
+                                  icon = Package;
+                                  colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                                } else if (typeLower.includes('economy') || typeLower.includes('budget')) {
+                                  icon = Package;
+                                  colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                                } else {
+                                  icon = Package;
+                                  colorClass = 'bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700';
+                                }
+                                const IconComponent = icon;
+                                return (
+                                  <Badge variant="outline" className={`text-xs ${colorClass} border flex items-center gap-1`}>
+                                    <IconComponent className="h-3 w-3" />
+                                    {packageType || 'Standard'}
+                                  </Badge>
+                                );
+                              })()}
+                            </TableCell>
                             <TableCell>
                               {compatibility.compatible ? (
-                                <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                                  <CheckCircle className="h-3 w-3 mr-1" />
+                                <Badge variant="outline" className="bg-green-50 dark:bg-green-900 text-green-700 dark:text-green-200 border-green-200 dark:border-green-700">
+                                  <CheckCircle className="h-3 w-3 mr-1 dark:text-green-300" />
                                   Compatible
                                 </Badge>
                               ) : (
-                                <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200">
-                                  <AlertTriangle className="h-3 w-3 mr-1" />
-                                  Conflicts
+                                <Badge variant="outline" className="bg-amber-50 dark:bg-amber-900 text-amber-700 dark:text-amber-200 border-amber-200 dark:border-amber-700">
+                                  <AlertTriangle className="h-3 w-3 mr-1 dark:text-amber-300" />
+                                  {compatibility.conflicts.length} Conflict{compatibility.conflicts.length !== 1 ? 's' : ''}
                                 </Badge>
                               )}
                             </TableCell>
                             <TableCell>
-                              {tableRestrictions.length > 0 ? (
-                                <div className="flex flex-wrap gap-1">
-                                  {tableRestrictions.slice(0, 2).map((r: any) => (
-                                    <Badge 
-                                      key={r.restriction_id || r.id} 
-                                      variant="outline" 
-                                      className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
-                                    >
-                                      {getTypeIcon(r.restriction_type || '')}
-                                      {r.restriction_name || r.name}
-                                    </Badge>
-                                  ))}
-                                  {tableRestrictions.length > 2 && (
-                                    <Badge variant="outline" className="text-xs">
-                                      +{tableRestrictions.length - 2} more
-                                    </Badge>
+                              <div className="space-y-1.5">
+                                {/* Table Restrictions */}
+                                <div>
+                                  <span className="text-xs font-medium text-muted-foreground">Table:</span>
+                                  {tableRestrictions.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                      {tableRestrictions.map((r: any) => {
+                                        const Icon = getTypeIcon(r.restriction_type || '');
+                                        return (
+                                          <Badge 
+                                            key={r.restriction_id || r.id} 
+                                            variant="outline" 
+                                            className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                          >
+                                            <Icon className="h-3 w-3" />
+                                            {r.restriction_name || r.name}
+                                          </Badge>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground ml-1">None</span>
                                   )}
                                 </div>
-                              ) : (
-                                <span className="text-xs text-muted-foreground">None</span>
-                              )}
+                                {/* Package Restrictions */}
+                                {packageRestrictions.length > 0 && (
+                                  <div>
+                                    <span className="text-xs font-medium text-muted-foreground">Package:</span>
+                                    <div className="flex flex-wrap gap-1 mt-0.5">
+                                      {packageRestrictions.map((r: any, idx: number) => {
+                                        const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                        return (
+                                          <Badge 
+                                            key={idx} 
+                                            variant="outline" 
+                                            className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
+                                          >
+                                            <Icon className="h-3 w-3" />
+                                            {r.restriction_name}
+                                          </Badge>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
                             </TableCell>
                             <TableCell>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                              onClick={async () => {
-                                try {
-                                  await packagesAPI.removeFromTable(assignment.tableId, assignment.packageId);
-                                  setTablePackageAssignments(prev => prev.filter(a => a.id !== assignment.id));
-                                  toast({
-                                    title: 'Package Removed',
-                                    description: 'Package removed from table successfully',
-                                  });
-                                } catch (error: any) {
-                                  toast({
-                                    title: 'Error',
-                                    description: error.response?.data?.error || 'Failed to remove package',
-                                    variant: 'destructive',
-                                  });
-                                }
-                              }}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem 
+                                    onClick={() => {
+                                      setSelectedTableForView(tables.find(t => (t.id || t.table_id) === assignment.tableId));
+                                      setViewTableOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    View Table Details
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={async () => {
+                                      try {
+                                        await packagesAPI.removeFromTable(assignment.tableId, assignment.packageId);
+                                        // Refresh assignments from API
+                                        const assignmentsResponse = await packagesAPI.getTableAssignments(id || '0');
+                                        if (assignmentsResponse && (assignmentsResponse.success || assignmentsResponse.data)) {
+                                          const assignmentsData = assignmentsResponse.data || [];
+                                          setTablePackageAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
+                                        } else {
+                                          setTablePackageAssignments(prev => prev.filter(a => a.id !== assignment.id));
+                                        }
+                                        
+                                        // Refresh wedding data to update costs
+                                        try {
+                                          const weddingResponse = await weddingsAPI.getById(id || '0');
+                                          if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+                                            setWedding(weddingResponse.data);
+                                          }
+                                        } catch (weddingError) {
+                                          console.error('Error refreshing wedding data:', weddingError);
+                                        }
+                                        
+                                        toast({
+                                          title: 'Package Removed',
+                                          description: 'Package removed from table successfully',
+                                        });
+                                      } catch (error: any) {
+                                        toast({
+                                          title: 'Error',
+                                          description: error.response?.data?.error || 'Failed to remove package',
+                                          variant: 'destructive',
+                                        });
+                                      }
+                                    }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Remove Package
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                           </TableCell>
                         </TableRow>
                       );
@@ -4636,7 +5345,7 @@ const WeddingDetail = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Menu Items</CardTitle>
-                <CardDescription>Menu items available for this wedding</CardDescription>
+                <CardDescription>Menu items from assigned packages for this wedding</CardDescription>
               </CardHeader>
               <CardContent>
                 {menuItemsLoading ? (
@@ -4644,69 +5353,172 @@ const WeddingDetail = () => {
                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                     <span className="ml-2 text-muted-foreground">Loading menu items...</span>
                   </div>
-                ) : menuItems.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-4">No menu items available for this wedding</p>
-                ) : (
-                  <div className="space-y-4">
-                    <Table>
-                      <TableHeader>
-                      <TableRow>
-                          <TableHead>Item Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Cost</TableHead>
-                          <TableHead>Price</TableHead>
-                          <TableHead>Profit Margin</TableHead>
-                          <TableHead>Stock</TableHead>
-                          <TableHead>Restrictions</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {menuItems.map((item) => {
-                          const restrictions = item.restriction_name ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type }] : [];
-                          return (
-                            <TableRow key={item.menu_item_id || item.id}>
-                              <TableCell className="font-medium">
-                                <div className="flex items-center gap-2">
-                                  <Utensils className="h-4 w-4 text-muted-foreground" />
-                                  {item.menu_name}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{item.menu_type}</Badge>
-                              </TableCell>
-                              <TableCell>${(item.menu_cost || 0).toFixed(2)}</TableCell>
-                              <TableCell>${(item.menu_price || 0).toFixed(2)}</TableCell>
-                              <TableCell className="text-green-600">${((item.menu_price || 0) - (item.menu_cost || 0)).toFixed(2)}</TableCell>
-                              <TableCell>
-                                <Badge variant={item.stock === 0 ? 'destructive' : item.stock < 10 ? 'secondary' : 'default'}>
-                                  {item.stock || 0}
-                                </Badge>
-                              </TableCell>
-                              <TableCell>
-                                {restrictions.length > 0 ? (
-                                  <div className="flex flex-wrap gap-1">
-                                    {restrictions.map((r: any, idx: number) => (
-                                      <Badge
-                                        key={idx}
-                                        variant="outline"
-                                        className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
-                                      >
-                                        {getTypeIcon(r.restriction_type || '')}
-                                        {r.restriction_name}
-                                      </Badge>
-                                    ))}
+                ) : (() => {
+                  // Get all menu items from assigned packages
+                  const menuItemsFromPackages: Map<number, any> = new Map();
+                  let totalAllocations = 0;
+                  
+                  tablePackageAssignments.forEach(assignment => {
+                    const pkg = packages.find(p => (p.package_id || p.id) === (assignment.packageId || assignment.package_id));
+                    if (pkg && pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                      pkg.menu_items.forEach((mi: any) => {
+                        const itemId = mi.menu_item_id || mi.id;
+                        if (itemId) {
+                          const quantity = mi.quantity || 1;
+                          totalAllocations += quantity;
+                          
+                          if (!menuItemsFromPackages.has(itemId)) {
+                            menuItemsFromPackages.set(itemId, {
+                              ...mi,
+                              menu_item_id: itemId,
+                              allocation_count: quantity,
+                              tables: [{
+                                table_id: assignment.tableId || assignment.table_id,
+                                table_number: assignment.tableNumber || assignment.table_number,
+                                package_id: assignment.packageId || assignment.package_id,
+                                package_name: assignment.packageName || assignment.package_name
+                              }]
+                            });
+                          } else {
+                            const existing = menuItemsFromPackages.get(itemId)!;
+                            existing.allocation_count += quantity;
+                            const tableInfo = {
+                              table_id: assignment.tableId || assignment.table_id,
+                              table_number: assignment.tableNumber || assignment.table_number,
+                              package_id: assignment.packageId || assignment.package_id,
+                              package_name: assignment.packageName || assignment.package_name
+                            };
+                            if (!existing.tables.find((t: any) => t.table_id === tableInfo.table_id && t.package_id === tableInfo.package_id)) {
+                              existing.tables.push(tableInfo);
+                            }
+                          }
+                        }
+                      });
+                    }
+                  });
+                  
+                  const menuItemsList = Array.from(menuItemsFromPackages.values());
+                  
+                  if (menuItemsList.length === 0) {
+                    return <p className="text-center text-muted-foreground py-4">No menu items from assigned packages. Assign packages to tables first.</p>;
+                  }
+                  
+                  return (
+                    <div className="space-y-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Item ID</TableHead>
+                            <TableHead>Item Name</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Cost</TableHead>
+                            <TableHead>Price</TableHead>
+                            <TableHead>Profit Margin</TableHead>
+                            <TableHead>Allocation Count</TableHead>
+                            <TableHead>Restrictions</TableHead>
+                            <TableHead>Used In Tables/Packages</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {menuItemsList.map((item) => {
+                            const restrictions = item.restriction_name ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type }] : [];
+                            const itemId = item.menu_item_id || item.id;
+                            
+                            return (
+                              <TableRow key={itemId}>
+                                <TableCell className="font-medium text-xs text-muted-foreground">#{itemId}</TableCell>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <Utensils className="h-4 w-4 text-muted-foreground" />
+                                    {item.menu_name || item.name}
                                   </div>
-                                ) : (
-                                  <span className="text-sm text-muted-foreground">None</span>
-                                )}
-                        </TableCell>
-                      </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                )}
+                                </TableCell>
+                                <TableCell>
+                                  {(() => {
+                                    const menuType = item.menu_type || 'N/A';
+                                    const typeLower = menuType.toLowerCase();
+                                    let icon, colorClass;
+                                    if (typeLower.includes('appetizer') || typeLower.includes('starter')) {
+                                      icon = Utensils;
+                                      colorClass = 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700';
+                                    } else if (typeLower.includes('main') || typeLower.includes('entree')) {
+                                      icon = UtensilsCrossed;
+                                      colorClass = 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700';
+                                    } else if (typeLower.includes('dessert')) {
+                                      icon = Heart;
+                                      colorClass = 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700';
+                                    } else if (typeLower.includes('drink') || typeLower.includes('beverage')) {
+                                      icon = Package;
+                                      colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                                    } else {
+                                      icon = Utensils;
+                                      colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                                    }
+                                    const IconComponent = icon;
+                                    return (
+                                      <Badge variant="outline" className={`${colorClass} border flex items-center gap-1`}>
+                                        <IconComponent className="h-3 w-3" />
+                                        {menuType}
+                                      </Badge>
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell>{formatCurrency(item.menu_cost || 0)}</TableCell>
+                                <TableCell>{formatCurrency(item.menu_price || 0)}</TableCell>
+                                <TableCell className="text-green-600">{formatCurrency((item.menu_price || 0) - (item.menu_cost || 0))}</TableCell>
+                                <TableCell>
+                                  <Badge variant="outline" className="font-semibold">
+                                    {item.allocation_count || 0}x
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {restrictions.length > 0 ? (
+                                    <div className="flex flex-wrap gap-1">
+                                      {restrictions.map((r: any, idx: number) => {
+                                        const Icon = getTypeIcon(r.restriction_type || '');
+                                        return (
+                                          <Badge
+                                            key={idx}
+                                            variant="outline"
+                                            className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                                          >
+                                            <Icon className="h-3 w-3" />
+                                            {r.restriction_name}
+                                          </Badge>
+                                        );
+                                      })}
+                                    </div>
+                                  ) : (
+                                    <span className="text-sm text-muted-foreground">None</span>
+                                  )}
+                                </TableCell>
+                                <TableCell>
+                                  {item.tables && item.tables.length > 0 ? (
+                                    <div className="flex flex-col gap-1">
+                                      {item.tables.slice(0, 2).map((t: any, idx: number) => (
+                                        <div key={idx} className="text-xs">
+                                          <Badge variant="outline" className="text-xs">
+                                            Table {t.table_number}
+                                          </Badge>
+                                          <span className="text-muted-foreground ml-1">({t.package_name} - ID: {t.package_id})</span>
+                                        </div>
+                                      ))}
+                                      {item.tables.length > 2 && (
+                                        <span className="text-xs text-muted-foreground">+{item.tables.length - 2} more</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-xs text-muted-foreground">Not used</span>
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
@@ -4716,7 +5528,7 @@ const WeddingDetail = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Packages</CardTitle>
-                <CardDescription>Packages available for this wedding</CardDescription>
+                <CardDescription>Packages assigned to tables for this wedding</CardDescription>
               </CardHeader>
               <CardContent>
                 {packagesLoading ? (
@@ -4724,79 +5536,205 @@ const WeddingDetail = () => {
                     <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
                     <span className="ml-2 text-muted-foreground">Loading packages...</span>
                   </div>
-                ) : packages.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-4">No packages available for this wedding</p>
-                ) : (
-                  <div className="space-y-4">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Package Name</TableHead>
-                          <TableHead>Type</TableHead>
-                          <TableHead>Price</TableHead>
-                          <TableHead>Menu Items</TableHead>
-                          <TableHead>Usage Count</TableHead>
-                          <TableHead className="w-[50px]"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {packages.map((pkg) => {
-                          const menuItemsList = pkg.menu_items || [];
-                          return (
-                            <TableRow key={pkg.package_id || pkg.id}>
-                              <TableCell className="font-medium">
-                                <div className="flex items-center gap-2">
-                                  <Package className="h-4 w-4 text-muted-foreground" />
-                                  {pkg.package_name}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{pkg.package_type}</Badge>
-                              </TableCell>
-                              <TableCell>${(pkg.package_price || 0).toLocaleString()}</TableCell>
-                              <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                  {menuItemsList.length > 0 ? (
-                                    menuItemsList.slice(0, 3).map((item: any, idx: number) => (
-                                      <Badge key={idx} variant="secondary" className="text-xs">
-                                        {item.menu_name || item.name} {item.quantity > 1 ? `x${item.quantity}` : ''}
+                ) : (() => {
+                  // Only show packages that are assigned to tables
+                  const assignedPackageIds = new Set(
+                    tablePackageAssignments.map(a => a.packageId || a.package_id).filter(Boolean)
+                  );
+                  
+                  const assignedPackages = packages.filter(pkg => {
+                    const pkgId = pkg.package_id || pkg.id;
+                    return pkgId && assignedPackageIds.has(pkgId);
+                  });
+                  
+                  if (assignedPackages.length === 0) {
+                    return <p className="text-center text-muted-foreground py-4">No packages assigned to tables yet. Assign packages to tables first.</p>;
+                  }
+                  
+                  return (
+                    <div className="space-y-4">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Package ID</TableHead>
+                            <TableHead>Package Name</TableHead>
+                            <TableHead>Type</TableHead>
+                            <TableHead>Price</TableHead>
+                            <TableHead>Menu Items</TableHead>
+                            <TableHead>Assigned To Tables</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {assignedPackages.map((pkg) => {
+                            const pkgId = pkg.package_id || pkg.id;
+                            const menuItemsList = pkg.menu_items || [];
+                            // Find which tables use this package
+                            const tablesUsingPackage = tablePackageAssignments
+                              .filter(a => (a.packageId || a.package_id) === pkgId)
+                              .map(a => {
+                                const table = tables.find(t => (t.id || t.table_id) === (a.tableId || a.table_id));
+                                return table ? {
+                                  table_id: table.id || table.table_id,
+                                  table_number: table.tableNumber || table.table_number,
+                                  category: table.category || table.table_category
+                                } : null;
+                              })
+                              .filter(Boolean);
+                            
+                            return (
+                              <TableRow key={pkgId}>
+                                <TableCell className="font-medium text-xs text-muted-foreground">#{pkgId}</TableCell>
+                                <TableCell className="font-medium">
+                                  <div className="flex items-center gap-2">
+                                    <Package className="h-4 w-4 text-muted-foreground" />
+                                    {pkg.package_name || pkg.packageName}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  {(() => {
+                                    const packageType = pkg.package_type || pkg.packageType || 'Standard';
+                                    const typeLower = packageType.toLowerCase();
+                                    let icon, colorClass;
+                                    if (typeLower.includes('premium') || typeLower.includes('deluxe')) {
+                                      icon = Crown;
+                                      colorClass = 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700';
+                                    } else if (typeLower.includes('standard') || typeLower.includes('basic')) {
+                                      icon = Package;
+                                      colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                                    } else if (typeLower.includes('economy') || typeLower.includes('budget')) {
+                                      icon = Package;
+                                      colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                                    } else {
+                                      icon = Package;
+                                      colorClass = 'bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700';
+                                    }
+                                    const IconComponent = icon;
+                                    return (
+                                      <Badge variant="outline" className={`${colorClass} border flex items-center gap-1`}>
+                                        <IconComponent className="h-3 w-3" />
+                                        {packageType}
                                       </Badge>
-                                    ))
-                                  ) : (
-                                    <span className="text-sm text-muted-foreground">No items</span>
-                                  )}
-                                  {menuItemsList.length > 3 && (
-                                    <Badge variant="outline" className="text-xs">
-                                      +{menuItemsList.length - 3} more
-                                    </Badge>
-                                  )}
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant="outline">{pkg.usage_count || 0}</Badge>
-                              </TableCell>
-                              <TableCell>
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" className="h-8 w-8 p-0">
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem>
-                                      <Edit className="mr-2 h-4 w-4" />
-                                      View Details
-                                    </DropdownMenuItem>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                  </TableBody>
-                </Table>
-                  </div>
-                )}
+                                    );
+                                  })()}
+                                </TableCell>
+                                <TableCell>{formatCurrency(pkg.package_price || pkg.packagePrice || 0)}</TableCell>
+                                <TableCell>
+                                  <div className="flex flex-wrap gap-1">
+                                    {menuItemsList.length > 0 ? (
+                                      menuItemsList.slice(0, 3).map((item: any, idx: number) => {
+                                        const menuType = item.menu_type || '';
+                                        const typeLower = menuType.toLowerCase();
+                                        let menuIcon, menuColorClass;
+                                        if (typeLower.includes('appetizer') || typeLower.includes('starter')) {
+                                          menuIcon = Utensils;
+                                          menuColorClass = 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700';
+                                        } else if (typeLower.includes('main') || typeLower.includes('entree')) {
+                                          menuIcon = UtensilsCrossed;
+                                          menuColorClass = 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700';
+                                        } else if (typeLower.includes('dessert')) {
+                                          menuIcon = Heart;
+                                          menuColorClass = 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700';
+                                        } else if (typeLower.includes('drink') || typeLower.includes('beverage')) {
+                                          menuIcon = Package;
+                                          menuColorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                                        } else {
+                                          menuIcon = Utensils;
+                                          menuColorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                                        }
+                                        const MenuIconComponent = menuIcon;
+                                        const restrictionIcon = getTypeIcon(item.restriction_type || '');
+                                        return (
+                                          <Badge key={idx} variant="outline" className={`text-xs ${menuColorClass} border flex items-center gap-1`}>
+                                            <MenuIconComponent className="h-3 w-3" />
+                                            {item.menu_name || item.name} {item.quantity > 1 ? `x${item.quantity}` : ''}
+                                            {item.restriction_name && item.restriction_name !== 'None' && (() => {
+                                              const RestrictionIcon = restrictionIcon;
+                                              return (
+                                                <span className="ml-1 flex items-center gap-0.5">
+                                                  <RestrictionIcon className="h-2.5 w-2.5" />
+                                                </span>
+                                              );
+                                            })()}
+                                          </Badge>
+                                        );
+                                      })
+                                    ) : (
+                                      <span className="text-sm text-muted-foreground">No items</span>
+                                    )}
+                                    {menuItemsList.length > 3 && (
+                                      <Badge variant="outline" className="text-xs">
+                                        +{menuItemsList.length - 3} more
+                                      </Badge>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <div className="flex flex-col gap-1">
+                                    {tablesUsingPackage.length > 0 ? (
+                                      <>
+                                        {tablesUsingPackage.slice(0, 2).map((t: any, idx: number) => (
+                                          <div key={idx} className="flex items-center gap-1">
+                                            <Badge variant="outline" className="text-xs">
+                                              Table {t.table_number}
+                                            </Badge>
+                                            <TableCategoryBadge category={t.category || 'General'} className="text-xs" />
+                                          </div>
+                                        ))}
+                                        {tablesUsingPackage.length > 2 && (
+                                          <span className="text-xs text-muted-foreground">+{tablesUsingPackage.length - 2} more</span>
+                                        )}
+                                      </>
+                                    ) : (
+                                      <span className="text-xs text-muted-foreground">Not assigned</span>
+                                    )}
+                                  </div>
+                                </TableCell>
+                                <TableCell>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" className="h-8 w-8 p-0">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          setSelectedPackage(pkg);
+                                          setViewPackageOpen(true);
+                                        }}
+                                      >
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        View Details
+                                      </DropdownMenuItem>
+                                      <DropdownMenuItem
+                                        onClick={() => {
+                                          // Find all assignments for this package and let user choose, or remove from first table
+                                          const assignments = tablePackageAssignments.filter(
+                                            a => (a.packageId || a.package_id) === pkgId
+                                          );
+                                          if (assignments.length > 0) {
+                                            // For now, remove from first assignment. Could be enhanced to show a selection dialog
+                                            setSelectedPackageAssignment(assignments[0]);
+                                            setDeletePackageAssignmentOpen(true);
+                                          }
+                                        }}
+                                        className="text-destructive focus:text-destructive"
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Remove from Table
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
+                              </TableRow>
+                            );
+                          })}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  );
+                })()}
               </CardContent>
             </Card>
           </TabsContent>
@@ -4848,7 +5786,14 @@ const WeddingDetail = () => {
                       </TableHeader>
                       <TableBody>
                         {inventoryAllocations.map((allocation) => (
-                          <TableRow key={allocation.allocation_id}>
+                          <TableRow 
+                            key={allocation.allocation_id}
+                            className="cursor-pointer"
+                            onDoubleClick={() => {
+                              setSelectedAllocation(allocation);
+                              setViewAllocationOpen(true);
+                            }}
+                          >
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
                                 <div className="w-8 h-8 rounded-full bg-primary/10 dark:bg-primary/20 flex items-center justify-center">
@@ -4863,41 +5808,60 @@ const WeddingDetail = () => {
                             <TableCell>
                               {getConditionBadge(allocation.item_condition)}
                             </TableCell>
-                            <TableCell>{allocation.quantity_used}</TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-1">
-                                <DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />
-                                {formatCurrency((typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0))}
+                              <div className="flex flex-col gap-0.5">
+                                <span>{allocation.quantity_used}</span>
+                                {(() => {
+                                  const item = availableInventoryItems.find(i => i.inventory_id === allocation.inventory_id);
+                                  const stockAvailable = item?.quantity_available || 0;
+                                  const remainingStock = stockAvailable - (allocation.quantity_used || 0);
+                                  return (
+                                    <span className={`text-xs ${remainingStock < 0 ? 'text-red-600 dark:text-red-400' : remainingStock < 5 ? 'text-yellow-600 dark:text-yellow-400' : 'text-muted-foreground'}`}>
+                                      Stock: {stockAvailable} (Remaining: {remainingStock})
+                                    </span>
+                                  );
+                                })()}
                               </div>
+                            </TableCell>
+                            <TableCell>
+                              {formatCurrency((typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0))}
                             </TableCell>
                             <TableCell className="font-semibold">
-                              <div className="flex items-center gap-1">
-                                <DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />
-                                {formatCurrency(((allocation.quantity_used || 0) * (typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0)))}
-                              </div>
+                              {formatCurrency(((allocation.quantity_used || 0) * (typeof allocation.rental_cost === 'number' ? allocation.rental_cost : parseFloat(allocation.rental_cost || '0') || 0)))}
                             </TableCell>
                             <TableCell>
-                              <div className="flex items-center gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0"
-                                  onClick={() => handleEditAllocation(allocation)}
-                                >
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-8 w-8 p-0 text-destructive hover:text-destructive"
-                                  onClick={() => {
-                                    setSelectedAllocation(allocation);
-                                    setDeleteAllocationOpen(true);
-                                  }}
-                                >
-                                  <Trash2 className="h-4 w-4" />
-                                </Button>
-                              </div>
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                    <MoreHorizontal className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem 
+                                    onClick={() => {
+                                      setSelectedAllocation(allocation);
+                                      setViewAllocationOpen(true);
+                                    }}
+                                  >
+                                    <Eye className="mr-2 h-4 w-4" />
+                                    View Details
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem onClick={() => handleEditAllocation(allocation)}>
+                                    <Edit className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem 
+                                    onClick={() => {
+                                      setSelectedAllocation(allocation);
+                                      setDeleteAllocationOpen(true);
+                                    }}
+                                    className="text-destructive focus:text-destructive"
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
                             </TableCell>
                           </TableRow>
                         ))}
@@ -4907,8 +5871,7 @@ const WeddingDetail = () => {
                       <div className="flex justify-end">
                         <div className="text-right">
                           <p className="text-sm text-muted-foreground">Total Rental Cost</p>
-                          <p className="text-2xl font-bold flex items-center gap-1">
-                            <DollarSign className="h-5 w-5 text-muted-foreground dark:text-muted-foreground" />
+                          <p className="text-2xl font-bold">
                             {formatCurrency(inventoryAllocations.reduce((sum, a) => 
                               sum + ((a.quantity_used || 0) * (typeof a.rental_cost === 'number' ? a.rental_cost : parseFloat(a.rental_cost || '0') || 0)), 0
                             ))}
@@ -5038,7 +6001,10 @@ const WeddingDetail = () => {
                             variant="outline" 
                             className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                           >
-                            {getTypeIcon(r.restriction_type || '')}
+                            {(() => {
+                              const Icon = getTypeIcon(r.restriction_type || '');
+                              return <Icon className="h-3 w-3" />;
+                            })()}
                             {r.restriction_name}
                           </Badge>
                         ))}
@@ -5116,7 +6082,10 @@ const WeddingDetail = () => {
                                         variant="outline" 
                                         className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
                                       >
-                                        {getTypeIcon(restrictionType)}
+                                        {(() => {
+                                          const Icon = getTypeIcon(restrictionType);
+                                          return <Icon className="h-3 w-3" />;
+                                        })()}
                                         {r.restriction_name || r}
                                       </Badge>
                                     );
@@ -5180,9 +6149,7 @@ const WeddingDetail = () => {
                 {wedding.ceremony_type && (
                   <div>
                     <p className="text-sm font-medium mb-2">Ceremony Type:</p>
-                    <Badge variant="outline" className="text-sm">
-                      {wedding.ceremony_type}
-                    </Badge>
+                    <CeremonyTypeBadge type={wedding.ceremony_type} />
                   </div>
                 )}
                 <div>
@@ -5193,7 +6160,10 @@ const WeddingDetail = () => {
                         key={r.restriction_id} 
                         className={`${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
                       >
-                        {getTypeIcon(r.restriction_type || '')}
+                        {(() => {
+                          const Icon = getTypeIcon(r.restriction_type || '');
+                          return <Icon className="h-3 w-3" />;
+                        })()}
                         <span>{r.restriction_name}</span>
                         {r.severity_level && (
                           <span className="text-xs ml-1">- {r.severity_level}</span>
@@ -5389,7 +6359,10 @@ const WeddingDetail = () => {
                         <div className="flex flex-wrap gap-2">
                           {wedding.all_restrictions.map((r: any) => (
                             <Badge key={r.restriction_id} className={`${getTypeColor(r.restriction_type || '')} border`}>
-                              {getTypeIcon(r.restriction_type || '')}
+                              {(() => {
+                                const Icon = getTypeIcon(r.restriction_type || '');
+                                return <Icon className="h-3 w-3" />;
+                              })()}
                               {r.restriction_name}
                             </Badge>
                           ))}
@@ -5603,7 +6576,7 @@ const WeddingDetail = () => {
                     <div className="p-3 bg-muted rounded-lg text-sm">
                       <p><strong>Available:</strong> {selectedItem.quantity_available}</p>
                       <p><strong>Condition:</strong> {selectedItem.item_condition}</p>
-                      <p><strong>Default Rental Cost:</strong> <span className="flex items-center gap-1 inline-flex"><DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />{formatCurrency((typeof selectedItem.rental_cost === 'number' ? selectedItem.rental_cost : parseFloat(selectedItem.rental_cost || '0') || 0))}</span> per unit</p>
+                      <p><strong>Default Rental Cost:</strong> {formatCurrency((typeof selectedItem.rental_cost === 'number' ? selectedItem.rental_cost : parseFloat(selectedItem.rental_cost || '0') || 0))} per unit</p>
                     </div>
                   ) : null;
                 })()}
@@ -5643,10 +6616,19 @@ const WeddingDetail = () => {
                     const qty = parseInt(allocationFormData.quantity_used) || 0;
                     const cost = parseFloat(allocationFormData.rental_cost || selectedItem.rental_cost?.toString() || '0');
                     const total = qty * cost;
+                    const stockAvailable = selectedItem.quantity_available || 0;
+                    const canAllocate = qty <= stockAvailable;
                     return (
-                      <p className="text-sm text-muted-foreground">
-                        Total cost: <strong className="flex items-center gap-1 inline-flex"><DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />{formatCurrency(total)}</strong> ({qty} × <span className="inline-flex items-center gap-1"><DollarSign className="h-3 w-3 text-muted-foreground dark:text-muted-foreground" />{formatCurrency(cost)}</span>)
-                      </p>
+                      <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">
+                          Total cost: <strong>{formatCurrency(total)}</strong> ({qty} × {formatCurrency(cost)})
+                        </p>
+                        <p className={`text-xs ${canAllocate ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          {canAllocate 
+                            ? `✓ Can allocate ${qty} (${stockAvailable} available)` 
+                            : `✗ Cannot allocate ${qty} (only ${stockAvailable} available)`}
+                        </p>
+                      </div>
                     );
                   }
                   return null;
@@ -5752,10 +6734,10 @@ const WeddingDetail = () => {
                 {allocationFormData.quantity_used && allocationFormData.rental_cost && (
                   <div className="p-3 bg-muted rounded-lg">
                     <p className="text-sm">
-                      <strong>Total Cost:</strong> ${(
+                      <strong>Total Cost:</strong> {formatCurrency((
                         (parseInt(allocationFormData.quantity_used) || 0) * 
                         (parseFloat(allocationFormData.rental_cost) || 0)
-                      ).toFixed(2)}
+                      ))}
                     </p>
                   </div>
                 )}
@@ -5782,6 +6764,269 @@ const WeddingDetail = () => {
           </DialogContent>
         </Dialog>
 
+        {/* View Inventory Allocation Dialog */}
+        <Dialog open={viewAllocationOpen} onOpenChange={setViewAllocationOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Inventory Allocation Details</DialogTitle>
+              <DialogDescription>
+                Complete information about this inventory allocation
+              </DialogDescription>
+            </DialogHeader>
+            {selectedAllocation && (() => {
+              const item = availableInventoryItems.find(i => i.inventory_id === selectedAllocation.inventory_id);
+              const totalCost = (selectedAllocation.quantity_used || 0) * (typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0);
+              const stockAvailable = item?.quantity_available || 0;
+              const remainingStock = stockAvailable - (selectedAllocation.quantity_used || 0);
+              return (
+                <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Item Name</Label>
+                      <p className="font-semibold">{selectedAllocation.item_name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Category</Label>
+                      <div className="mt-1">{getCategoryBadge(selectedAllocation.category)}</div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Condition</Label>
+                      <div className="mt-1">{getConditionBadge(selectedAllocation.item_condition)}</div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Quantity Used</Label>
+                      <p className="font-semibold">{selectedAllocation.quantity_used}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Rental Cost (per unit)</Label>
+                      <p className="font-semibold">{formatCurrency((typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0))}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Total Cost</Label>
+                      <p className="font-semibold text-lg">{formatCurrency(totalCost)}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Stock Available</Label>
+                      <p className="font-semibold">{stockAvailable}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Remaining Stock</Label>
+                      <p className={`font-semibold ${remainingStock < 0 ? 'text-red-600 dark:text-red-400' : remainingStock < 5 ? 'text-yellow-600 dark:text-yellow-400' : ''}`}>
+                        {remainingStock}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setViewAllocationOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Package Dialog */}
+        <Dialog open={viewPackageOpen} onOpenChange={setViewPackageOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Package Details</DialogTitle>
+              <DialogDescription>Complete information about this package</DialogDescription>
+            </DialogHeader>
+            {selectedPackage && (() => {
+              const pkgId = selectedPackage.package_id || selectedPackage.id;
+              const menuItemsList = selectedPackage.menu_items || [];
+              const tablesUsingPackage = tablePackageAssignments
+                .filter(a => (a.packageId || a.package_id) === pkgId)
+                .map(a => {
+                  const table = tables.find(t => (t.id || t.table_id) === (a.tableId || a.table_id));
+                  return table ? {
+                    table_id: table.id || table.table_id,
+                    table_number: table.tableNumber || table.table_number,
+                    category: table.category || table.table_category
+                  } : null;
+                })
+                .filter(Boolean);
+              
+              return (
+                <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Package ID</Label>
+                      <p className="font-semibold">#{pkgId}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Package Name</Label>
+                      <p className="font-semibold">{selectedPackage.package_name || selectedPackage.packageName}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Package Type</Label>
+                      <div className="mt-1">
+                        {(() => {
+                          const packageType = selectedPackage.package_type || selectedPackage.packageType || 'Standard';
+                          const typeLower = packageType.toLowerCase();
+                          let icon, colorClass;
+                          if (typeLower.includes('premium') || typeLower.includes('deluxe')) {
+                            icon = Crown;
+                            colorClass = 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700';
+                          } else if (typeLower.includes('standard') || typeLower.includes('basic')) {
+                            icon = Package;
+                            colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                          } else if (typeLower.includes('economy') || typeLower.includes('budget')) {
+                            icon = Package;
+                            colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                          } else {
+                            icon = Package;
+                            colorClass = 'bg-cyan-100 dark:bg-cyan-900 text-cyan-800 dark:text-cyan-200 border-cyan-200 dark:border-cyan-700';
+                          }
+                          const IconComponent = icon;
+                          return (
+                            <Badge variant="outline" className={`${colorClass} border flex items-center gap-1`}>
+                              <IconComponent className="h-3 w-3" />
+                              {packageType}
+                            </Badge>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Package Price</Label>
+                      <p className="font-semibold">{formatCurrency(selectedPackage.package_price || selectedPackage.packagePrice || 0)}</p>
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">Menu Items ({menuItemsList.length})</Label>
+                    {menuItemsList.length > 0 ? (
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                        {menuItemsList.map((item: any, idx: number) => {
+                          const menuType = item.menu_type || '';
+                          const typeLower = menuType.toLowerCase();
+                          let menuIcon, menuColorClass;
+                          if (typeLower.includes('appetizer') || typeLower.includes('starter')) {
+                            menuIcon = Utensils;
+                            menuColorClass = 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700';
+                          } else if (typeLower.includes('main') || typeLower.includes('entree')) {
+                            menuIcon = UtensilsCrossed;
+                            menuColorClass = 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700';
+                          } else if (typeLower.includes('dessert')) {
+                            menuIcon = Heart;
+                            menuColorClass = 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700';
+                          } else if (typeLower.includes('drink') || typeLower.includes('beverage')) {
+                            menuIcon = Package;
+                            menuColorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                          } else {
+                            menuIcon = Utensils;
+                            menuColorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                          }
+                          const MenuIconComponent = menuIcon;
+                          const restrictionIcon = getTypeIcon(item.restriction_type || '');
+                          return (
+                            <div key={idx} className="p-3 border rounded-lg">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <MenuIconComponent className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">{item.menu_name || item.name}</span>
+                                  {item.quantity > 1 && (
+                                    <Badge variant="outline" className="text-xs">x{item.quantity}</Badge>
+                                  )}
+                                </div>
+                                <Badge variant="outline" className={`${menuColorClass} border flex items-center gap-1`}>
+                                  <MenuIconComponent className="h-3 w-3" />
+                                  {menuType}
+                                </Badge>
+                              </div>
+                              {item.restriction_name && item.restriction_name !== 'None' && (() => {
+                                const RestrictionIcon = restrictionIcon;
+                                return (
+                                  <div className="mt-2">
+                                    <Badge variant="outline" className={`text-xs ${getTypeColor(item.restriction_type || '')} border flex items-center gap-1`}>
+                                      <RestrictionIcon className="h-3 w-3" />
+                                      {item.restriction_name}
+                                    </Badge>
+                                  </div>
+                                );
+                              })()}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No menu items</p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">Assigned To Tables ({tablesUsingPackage.length})</Label>
+                    {tablesUsingPackage.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {tablesUsingPackage.map((t: any, idx: number) => (
+                          <div key={idx} className="flex items-center gap-1">
+                            <Badge variant="outline" className="text-xs">
+                              Table {t.table_number}
+                            </Badge>
+                            <TableCategoryBadge category={t.category || 'General'} className="text-xs" />
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">Not assigned to any tables</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setViewPackageOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Package Assignment Dialog */}
+        <Dialog open={deletePackageAssignmentOpen} onOpenChange={setDeletePackageAssignmentOpen}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Remove Package from Table</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to remove this package from the table? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            {selectedPackageAssignment && (() => {
+              const table = tables.find(t => (t.id || t.table_id) === (selectedPackageAssignment.tableId || selectedPackageAssignment.table_id));
+              const pkg = packages.find(p => (p.package_id || p.id) === (selectedPackageAssignment.packageId || selectedPackageAssignment.package_id));
+              return (
+                <div className="p-4 bg-muted rounded-lg">
+                  <p className="font-medium">{pkg?.package_name || pkg?.packageName || 'Package'}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Table: {table?.tableNumber || table?.table_number || 'Unknown'}
+                  </p>
+                </div>
+              );
+            })()}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => {
+                setDeletePackageAssignmentOpen(false);
+                setSelectedPackageAssignment(null);
+              }} disabled={packageFormLoading}>
+                Cancel
+              </Button>
+              <Button variant="destructive" onClick={handleRemovePackageAssignment} disabled={packageFormLoading}>
+                {packageFormLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Removing...
+                  </>
+                ) : (
+                  'Remove'
+                )}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
         {/* Delete Inventory Allocation Dialog */}
         <Dialog open={deleteAllocationOpen} onOpenChange={setDeleteAllocationOpen}>
           <DialogContent className="max-w-md">
@@ -5796,7 +7041,7 @@ const WeddingDetail = () => {
                 <p className="font-medium">{selectedAllocation.item_name}</p>
                 <p className="text-sm text-muted-foreground">
                   Quantity: {selectedAllocation.quantity_used} • 
-                  Total Cost: ${((selectedAllocation.quantity_used || 0) * (typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0)).toFixed(2)}
+                  Total Cost: {formatCurrency(((selectedAllocation.quantity_used || 0) * (typeof selectedAllocation.rental_cost === 'number' ? selectedAllocation.rental_cost : parseFloat(selectedAllocation.rental_cost || '0') || 0)))}
                 </p>
               </div>
             )}

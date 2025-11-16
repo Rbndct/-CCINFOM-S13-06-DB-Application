@@ -93,16 +93,21 @@ export const MultiSelectRestrictions = React.forwardRef<
                       getTypeColor(restriction.restriction_type || '')
                     )}
                   >
-                    {getTypeIcon(restriction.restriction_type || '')}
+                    {(() => {
+                      const Icon = getTypeIcon(restriction.restriction_type || '');
+                      return <Icon className="h-3 w-3" />;
+                    })()}
                     <span className="max-w-[120px] truncate" title={restriction.restriction_name}>
                       {restriction.restriction_name}
                     </span>
                     {!disabled && (
-                      <button
-                        type="button"
-                        className="ml-1 rounded-full outline-none hover:bg-secondary"
+                      <span
+                        role="button"
+                        tabIndex={0}
+                        className="ml-1 rounded-full outline-none hover:bg-secondary cursor-pointer inline-flex items-center justify-center"
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
                             handleToggle(restriction.restriction_id);
                           }
                         }}
@@ -117,7 +122,7 @@ export const MultiSelectRestrictions = React.forwardRef<
                         }}
                       >
                         <X className="h-3 w-3 text-muted-foreground hover:text-foreground" />
-                      </button>
+                      </span>
                     )}
                   </Badge>
                   ))}
@@ -183,7 +188,10 @@ export const MultiSelectRestrictions = React.forwardRef<
                           "flex items-center gap-1 px-2 py-1 rounded text-xs",
                           getTypeColor(restriction.restriction_type || '')
                         )}>
-                          {getTypeIcon(restriction.restriction_type || '')}
+                          {(() => {
+                            const Icon = getTypeIcon(restriction.restriction_type || '');
+                            return <Icon className="h-3 w-3" />;
+                          })()}
                           <span className="truncate" title={restriction.restriction_name}>
                             {restriction.restriction_name}
                           </span>

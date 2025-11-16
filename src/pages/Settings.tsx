@@ -91,26 +91,32 @@ const Settings = () => {
   };
 
   const fetchDatabaseConfig = async () => {
+    // Use health endpoint to get database name only (non-sensitive info)
+    // Database host and user are not exposed for security reasons
     try {
-      const response = await api.get('/database/config');
-      if (response && response.data) {
-        setDbConfig(response.data);
+      const healthResponse = await api.get('/health');
+      if (healthResponse && healthResponse.database) {
+        setDbConfig({
+          host: 'Not disclosed', // Security: host not exposed
+          user: 'Not disclosed', // Security: user not exposed
+          database: healthResponse.database.name || 'wedding_management_db'
+        });
+      } else {
+        // Fallback to default values for display
+        setDbConfig({
+          host: 'Not disclosed',
+          user: 'Not disclosed',
+          database: 'wedding_management_db'
+        });
       }
-    } catch (error) {
-      console.error('Error fetching database config:', error);
-      // Fallback to health endpoint
-      try {
-        const healthResponse = await api.get('/health');
-        if (healthResponse && healthResponse.database) {
-          setDbConfig({
-            host: 'localhost',
-            user: 'root',
-            database: healthResponse.database.name || 'wedding_management_db'
-          });
-        }
-      } catch (healthError) {
-        console.error('Error fetching from health endpoint:', healthError);
-      }
+    } catch (healthError) {
+      console.error('Error fetching from health endpoint:', healthError);
+      // Fallback to default values for display
+      setDbConfig({
+        host: 'Not disclosed',
+        user: 'Not disclosed',
+        database: 'wedding_management_db'
+      });
     }
   };
 
@@ -503,17 +509,12 @@ const Settings = () => {
                 <Label className="text-base font-semibold">Database Configuration</Label>
                 <div className="space-y-2 rounded-md border p-4">
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">Host</span>
-                    <span className="text-sm font-medium">{dbConfig?.host || 'localhost'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-muted-foreground">User</span>
-                    <span className="text-sm font-medium">{dbConfig?.user || 'root'}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Database Name</span>
                     <span className="text-sm font-medium">{dbConfig?.database || 'wedding_management_db'}</span>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Note: Database host and user credentials are not displayed for security reasons.
+                  </p>
                 </div>
               </div>
 

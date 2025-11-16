@@ -13,7 +13,14 @@ import {
   Trash2,
   Loader2,
   Users,
-  Clock
+  Clock,
+  MoreHorizontal,
+  Eye,
+  Search,
+  Filter,
+  CheckCircle,
+  XCircle,
+  Clock as ClockIcon
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,11 +43,18 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI, guestsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
+import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
 import { useDateFormat } from '@/context/DateFormatContext';
 import { useTimeFormat } from '@/context/TimeFormatContext';
 
@@ -133,6 +147,10 @@ const CoupleDetail = () => {
     planner_contact: ''
   });
   const [editLoading, setEditLoading] = useState(false);
+  const [preferenceFilter, setPreferenceFilter] = useState<string>('all');
+  const [preferenceSearch, setPreferenceSearch] = useState('');
+  const [viewingPreference, setViewingPreference] = useState<Preference | null>(null);
+  const [viewPreferenceOpen, setViewPreferenceOpen] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -621,8 +639,67 @@ const CoupleDetail = () => {
           </CardHeader>
           <CardContent>
             {couple.preferences && couple.preferences.length > 0 ? (
-              <div className="space-y-3">
-                {couple.preferences.map((pref) => {
+              <>
+                {/* Filter and Search */}
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex-1 relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Search preferences..."
+                      value={preferenceSearch}
+                      onChange={(e) => setPreferenceSearch(e.target.value)}
+                      className="pl-9"
+                    />
+                  </div>
+                  <Select value={preferenceFilter} onValueChange={setPreferenceFilter}>
+                    <SelectTrigger className="w-[180px]">
+                      <Filter className="h-4 w-4 mr-2" />
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Preferences</SelectItem>
+                      <SelectItem value="with-restrictions">With Restrictions</SelectItem>
+                      <SelectItem value="no-restrictions">No Restrictions</SelectItem>
+                      <SelectItem value="used">Used in Weddings</SelectItem>
+                      <SelectItem value="unused">Not Used</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-3">
+                  {couple.preferences
+                    .filter((pref) => {
+                      const restrictions = pref.dietaryRestrictions && pref.dietaryRestrictions.length > 0
+                        ? pref.dietaryRestrictions
+                        : (pref.restriction_id ? [{
+                            restriction_id: pref.restriction_id,
+                            restriction_name: pref.restriction_name || 'Unknown',
+                            restriction_type: pref.restriction_type,
+                            severity_level: pref.severity_level
+                          }] : []);
+                      
+                      // Search filter
+                      if (preferenceSearch) {
+                        const searchLower = preferenceSearch.toLowerCase();
+                        const matchesSearch = 
+                          pref.ceremony_type.toLowerCase().includes(searchLower) ||
+                          restrictions.some(r => (r.restriction_name || '').toLowerCase().includes(searchLower));
+                        if (!matchesSearch) return false;
+                      }
+                      
+                      // Category filter
+                      if (preferenceFilter === 'with-restrictions') {
+                        return restrictions.length > 0;
+                      } else if (preferenceFilter === 'no-restrictions') {
+                        return restrictions.length === 0;
+                      } else if (preferenceFilter === 'used') {
+                        return getWeddingCountForPreference(pref.preference_id) > 0;
+                      } else if (preferenceFilter === 'unused') {
+                        return getWeddingCountForPreference(pref.preference_id) === 0;
+                      }
+                      
+                      return true;
+                    })
+                    .map((pref) => {
                   // Handle both new format (dietaryRestrictions array) and legacy format
                   const restrictions = pref.dietaryRestrictions && pref.dietaryRestrictions.length > 0
                     ? pref.dietaryRestrictions
@@ -636,16 +713,18 @@ const CoupleDetail = () => {
                   return (
                     <div
                       key={pref.preference_id}
-                      className="flex items-center justify-between p-4 border rounded-lg"
+                      className="flex items-center justify-between p-4 border rounded-lg cursor-pointer hover:bg-muted/50 transition-colors"
+                      onDoubleClick={() => {
+                        setViewingPreference(pref);
+                        setViewPreferenceOpen(true);
+                      }}
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-3 mb-2">
                           <Badge variant="outline" className="font-mono text-xs">
                             Pref ID: {pref.preference_id}
                           </Badge>
-                          <Badge variant="outline" className="font-semibold">
-                            {pref.ceremony_type}
-                          </Badge>
+                          <CeremonyTypeBadge type={pref.ceremony_type} />
                           <Badge variant="secondary" className="text-xs">
                             {restrictions.length} restriction{restrictions.length !== 1 ? 's' : ''}
                           </Badge>
@@ -667,7 +746,10 @@ const CoupleDetail = () => {
                                   variant="outline"
                                   className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
                                 >
-                                  {getTypeIcon(restrictionType)}
+                                  {(() => {
+                                    const Icon = getTypeIcon(restrictionType);
+                                    return <Icon className="h-3 w-3" />;
+                                  })()}
                                   {restrictionName}
                                   {restriction.severity_level && (
                                     <span className="text-xs ml-1">- {restriction.severity_level}</span>
@@ -680,27 +762,49 @@ const CoupleDetail = () => {
                           <span className="text-sm text-muted-foreground">No dietary restrictions</span>
                         )}
                       </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEditPreference(pref)}
-                        >
-                          <Edit className="w-4 h-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleDeletePreference(pref.preference_id)}
-                          className="text-red-600"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setViewingPreference(pref);
+                              setViewPreferenceOpen(true);
+                            }}
+                          >
+                            <Eye className="mr-2 h-4 w-4" />
+                            View Details
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleEditPreference(pref);
+                            }}
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDeletePreference(pref.preference_id);
+                            }}
+                            className="text-destructive focus:text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
                   );
                 })}
-              </div>
+                </div>
+              </>
             ) : (
               <div className="text-center py-8 text-muted-foreground">
                 <p>No preferences added yet</p>
@@ -765,14 +869,47 @@ const CoupleDetail = () => {
                         <Users className="w-4 h-4 text-muted-foreground" />
                         <span>{wedding.guestCount ?? wedding.guest_count ?? 0} guests</span>
                       </div>
-                      <div className="text-sm font-semibold">
-                        {formatCurrency(wedding.totalCost || 0)}
+                      <div className="space-y-1 pt-2 border-t">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Total Cost:</span>
+                          <span className="font-semibold">{formatCurrency(wedding.total_cost || wedding.totalCost || 0)}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="text-muted-foreground">Production Cost:</span>
+                          <span className="font-semibold">{formatCurrency(wedding.production_cost || wedding.productionCost || 0)}</span>
+                        </div>
+                      </div>
+                      <div className="pt-2">
+                        {(() => {
+                          const status = wedding.payment_status || wedding.paymentStatus || 'pending';
+                          const statusLower = status.toLowerCase();
+                          if (statusLower === 'paid') {
+                            return (
+                              <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 flex items-center gap-1">
+                                <CheckCircle className="h-3 w-3" />
+                                Paid
+                              </Badge>
+                            );
+                          } else if (statusLower === 'pending') {
+                            return (
+                              <Badge className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 flex items-center gap-1">
+                                <ClockIcon className="h-3 w-3" />
+                                Pending
+                              </Badge>
+                            );
+                          } else {
+                            return (
+                              <Badge className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 flex items-center gap-1">
+                                <XCircle className="h-3 w-3" />
+                                {status.charAt(0).toUpperCase() + status.slice(1)}
+                              </Badge>
+                            );
+                          }
+                        })()}
                       </div>
                       {wedding.ceremony_type && (
                         <div className="mt-2">
-                          <Badge variant="outline" className="text-xs mb-2">
-                            {wedding.ceremony_type}
-                          </Badge>
+                          <CeremonyTypeBadge type={wedding.ceremony_type} className="mb-2" />
                           {(() => {
                             const restrictions = wedding.all_restrictions || wedding.restrictions || [];
                             return restrictions.length > 0 ? (
@@ -782,7 +919,10 @@ const CoupleDetail = () => {
                                     key={r.restriction_id} 
                                     className={`${getTypeColor(r.restriction_type || '')} border text-xs flex items-center gap-1`}
                                   >
-                                    {getTypeIcon(r.restriction_type || '')}
+                                    {(() => {
+                                      const Icon = getTypeIcon(r.restriction_type || '');
+                                      return <Icon className="h-3 w-3" />;
+                                    })()}
                                     <span>{r.restriction_name}</span>
                                   </Badge>
                                 ))}
@@ -802,6 +942,85 @@ const CoupleDetail = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* View Preference Dialog */}
+        <Dialog open={viewPreferenceOpen} onOpenChange={setViewPreferenceOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Preference Details</DialogTitle>
+              <DialogDescription>View complete preference information</DialogDescription>
+            </DialogHeader>
+            {viewingPreference && (
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-semibold">Preference ID</Label>
+                    <p className="text-sm text-muted-foreground">#{viewingPreference.preference_id}</p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold">Ceremony Type</Label>
+                    <div className="mt-1">
+                      <CeremonyTypeBadge type={viewingPreference.ceremony_type} />
+                    </div>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-sm font-semibold mb-2 block">Dietary Restrictions</Label>
+                  {(() => {
+                    const restrictions = viewingPreference.dietaryRestrictions && viewingPreference.dietaryRestrictions.length > 0
+                      ? viewingPreference.dietaryRestrictions
+                      : (viewingPreference.restriction_id ? [{
+                          restriction_id: viewingPreference.restriction_id,
+                          restriction_name: viewingPreference.restriction_name || 'Unknown',
+                          restriction_type: viewingPreference.restriction_type,
+                          severity_level: viewingPreference.severity_level
+                        }] : []);
+                    return restrictions.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {restrictions.map((r) => (
+                          <Badge
+                            key={r.restriction_id}
+                            variant="outline"
+                            className={`${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                          >
+                            {(() => {
+                              const Icon = getTypeIcon(r.restriction_type || '');
+                              return <Icon className="h-3 w-3" />;
+                            })()}
+                            {r.restriction_name}
+                            {r.severity_level && (
+                              <span className="ml-1">- {r.severity_level}</span>
+                            )}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No dietary restrictions</p>
+                    );
+                  })()}
+                </div>
+                <div>
+                  <Label className="text-sm font-semibold">Used in Weddings</Label>
+                  <p className="text-sm text-muted-foreground">
+                    {getWeddingCountForPreference(viewingPreference.preference_id)} wedding(s)
+                  </p>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setViewPreferenceOpen(false)}>
+                    Close
+                  </Button>
+                  <Button onClick={() => {
+                    setViewPreferenceOpen(false);
+                    handleEditPreference(viewingPreference);
+                  }}>
+                    <Edit className="w-4 h-4 mr-2" />
+                    Edit Preference
+                  </Button>
+                </DialogFooter>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Preference Dialog */}
         <Dialog open={preferenceDialogOpen} onOpenChange={setPreferenceDialogOpen}>
@@ -838,40 +1057,45 @@ const CoupleDetail = () => {
               </div>
               <div className="space-y-2">
                 <Label>Dietary Restrictions (Optional - "None" will be used if none selected)</Label>
-                <div className="border rounded-md p-4 max-h-60 overflow-y-auto space-y-2">
+                <div className="border rounded-md p-4 max-h-60 overflow-y-auto">
                   {dietaryRestrictions.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No dietary restrictions available</p>
                   ) : (
-                    dietaryRestrictions.map((dr) => (
-                      <div key={dr.restriction_id} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`restriction-${dr.restriction_id}`}
-                          checked={preferenceForm.restriction_ids.includes(dr.restriction_id)}
-                          onCheckedChange={(checked) => {
-                            if (checked) {
-                              setPreferenceForm({
-                                ...preferenceForm,
-                                restriction_ids: [...preferenceForm.restriction_ids, dr.restriction_id]
-                              });
-                            } else {
-                              setPreferenceForm({
-                                ...preferenceForm,
-                                restriction_ids: preferenceForm.restriction_ids.filter(id => id !== dr.restriction_id)
-                              });
-                            }
-                          }}
-                        />
-                        <label
-                          htmlFor={`restriction-${dr.restriction_id}`}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 cursor-pointer flex-1"
-                        >
-                          {dr.restriction_name} ({dr.restriction_type})
-                          {dr.severity_level && (
-                            <span className="text-muted-foreground ml-2">- {dr.severity_level}</span>
-                          )}
-                        </label>
-                      </div>
-                    ))
+                    <div className="flex flex-wrap gap-2">
+                      {dietaryRestrictions.map((dr) => {
+                        const isSelected = preferenceForm.restriction_ids.includes(dr.restriction_id);
+                        const restrictionType = dr.restriction_type || '';
+                        return (
+                          <Badge
+                            key={dr.restriction_id}
+                            variant={isSelected ? "default" : "outline"}
+                            className={`text-xs cursor-pointer transition-all ${isSelected ? '' : getTypeColor(restrictionType)} border flex items-center gap-1 hover:opacity-80`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setPreferenceForm({
+                                  ...preferenceForm,
+                                  restriction_ids: preferenceForm.restriction_ids.filter(id => id !== dr.restriction_id)
+                                });
+                              } else {
+                                setPreferenceForm({
+                                  ...preferenceForm,
+                                  restriction_ids: [...preferenceForm.restriction_ids, dr.restriction_id]
+                                });
+                              }
+                            }}
+                          >
+                            {(() => {
+                              const Icon = getTypeIcon(restrictionType);
+                              return <Icon className="h-3 w-3" />;
+                            })()}
+                            {dr.restriction_name}
+                            {dr.severity_level && (
+                              <span className="text-xs ml-1">- {dr.severity_level}</span>
+                            )}
+                          </Badge>
+                        );
+                      })}
+                    </div>
                   )}
                 </div>
                 {preferenceForm.restriction_ids.length > 0 && (
