@@ -1865,28 +1865,76 @@ const WeddingDetail = () => {
     const packageMenuItems = pkg.menu_items || [];
     const conflicts: any[] = [];
     
+    // Get table and guests for this table
+    const table = tables.find(t => (t.id || t.table_id) === tableId);
+    const tableCategory = table?.category || table?.table_category || '';
+    const isCoupleTable = tableCategory.toLowerCase() === 'couple';
+    const assignedGuests = guests.filter(g => g && g.table_id === tableId);
+    
+    // Get couple data if it's a couple table
+    const partner1Name = wedding?.partner1 || wedding?.partner1_name || '';
+    const partner2Name = wedding?.partner2 || wedding?.partner2_name || '';
+    
     // Check each menu item in the package
     packageMenuItems.forEach((menuItem: any) => {
-      // If menu item has a restriction that conflicts with table restrictions
-      if (menuItem.restriction_id) {
-        // If the menu item's restriction matches a table restriction, it's a conflict
-        // (e.g., if table has vegan restriction, and menu item is non-vegan, that's a conflict)
-        // Actually, we need to think about this differently:
-        // - If a menu item has a restriction_id, it means it CANNOT be served to people with that restriction
-        // - So if table has guests with restriction X, and package has menu items with restriction_id X, that's a conflict
-        if (tableRestrictionIds.has(menuItem.restriction_id)) {
+      // Get menu item restrictions (from menu_item_restrictions junction table)
+      const menuItemRestrictions = menuItem.restrictions || [];
+      
+      // Check if any menu item restriction conflicts with table restrictions
+      menuItemRestrictions.forEach((menuRestriction: any) => {
+        const restrictionId = menuRestriction.restriction_id || menuRestriction.id;
+        if (tableRestrictionIds.has(restrictionId)) {
           const conflictRestriction = tableRestrictions.find(r => 
-            (r.restriction_id || r.id) === menuItem.restriction_id
+            (r.restriction_id || r.id) === restrictionId
           );
-          if (conflictRestriction && !conflicts.find(c => c.restriction_id === menuItem.restriction_id)) {
+          
+          if (conflictRestriction && !conflicts.find(c => c.restriction_id === restrictionId)) {
+            // Find which guests/couples have this restriction
+            const affectedGuests: string[] = [];
+            const affectedCouples: string[] = [];
+            
+            // Check assigned guests
+            assignedGuests.forEach((guest: any) => {
+              const guestRestrictions = guest.dietaryRestrictions || [];
+              const hasRestriction = guestRestrictions.some((gr: any) => 
+                (gr.restriction_id || gr.id) === restrictionId
+              );
+              if (hasRestriction) {
+                const guestName = (guest.firstName || guest.name?.split(' ')[0] || '') + ' ' + 
+                                 (guest.lastName || guest.name?.split(' ').slice(1).join(' ') || '');
+                affectedGuests.push(guestName.trim());
+              }
+            });
+            
+            // Check couple preferences if it's a couple table
+            if (isCoupleTable && coupleData && coupleData.preferences) {
+              coupleData.preferences.forEach((pref: any) => {
+                if (pref.dietaryRestrictions && Array.isArray(pref.dietaryRestrictions)) {
+                  const hasRestriction = pref.dietaryRestrictions.some((r: any) => 
+                    (r.restriction_id || r.id) === restrictionId
+                  );
+                  if (hasRestriction) {
+                    if (partner1Name && !affectedCouples.includes(partner1Name)) {
+                      affectedCouples.push(partner1Name);
+                    }
+                    if (partner2Name && !affectedCouples.includes(partner2Name)) {
+                      affectedCouples.push(partner2Name);
+                    }
+                  }
+                }
+              });
+            }
+            
             conflicts.push({
-              restriction_id: menuItem.restriction_id,
+              restriction_id: restrictionId,
               restriction_name: conflictRestriction.restriction_name || conflictRestriction.name,
-              menu_item: menuItem.menu_name || menuItem.name
+              menu_item: menuItem.menu_name || menuItem.name,
+              affected_guests: affectedGuests,
+              affected_couples: affectedCouples
             });
           }
         }
-      }
+      });
     });
     
     return {
@@ -2374,9 +2422,20 @@ const WeddingDetail = () => {
     const compatibility = checkPackageCompatibility(packageId, tableId);
     
     if (!compatibility.compatible && compatibility.conflicts.length > 0) {
-      const conflictMessages = compatibility.conflicts.map(c => 
-        `${c.menu_item} conflicts with ${c.restriction_name}`
-      ).join(', ');
+      const conflictMessages = compatibility.conflicts.map(c => {
+        let msg = `${c.menu_item} conflicts with ${c.restriction_name}`;
+        const affected: string[] = [];
+        if (c.affected_guests && c.affected_guests.length > 0) {
+          affected.push(`Guests: ${c.affected_guests.join(', ')}`);
+        }
+        if (c.affected_couples && c.affected_couples.length > 0) {
+          affected.push(`Couple: ${c.affected_couples.join(' & ')}`);
+        }
+        if (affected.length > 0) {
+          msg += ` (${affected.join('; ')})`;
+        }
+        return msg;
+      }).join('\n');
       
       const confirmMsg = `Warning: This package contains items that conflict with table restrictions:\n\n${conflictMessages}\n\nDo you still want to assign this package?`;
       if (!confirm(confirmMsg)) {
@@ -2387,14 +2446,29 @@ const WeddingDetail = () => {
     setPackageFormLoading(true);
     
     try {
-      // Use actual API endpoint
-      const table = tables.find(t => (t.id || t.table_id) === tableId);
-      const pkg = availablePackages.find(p => (p.package_id || p.id) === packageId);
+      // Use actual API endpoint - find table and package with proper ID matching
+      const table = tables.find(t => {
+        const tId = t.id || t.table_id;
+        return tId && (tId === tableId || tId.toString() === tableId.toString());
+      });
+      const pkg = availablePackages.find(p => {
+        const pId = p.package_id || p.id;
+        return pId && (pId === packageId || pId.toString() === packageId.toString());
+      });
       
-      if (!table || !pkg) {
+      if (!table) {
         toast({
           title: 'Error',
-          description: 'Table or package not found',
+          description: `Table with ID ${tableId} not found. Please refresh the page.`,
+          variant: 'destructive',
+        });
+        return;
+      }
+      
+      if (!pkg) {
+        toast({
+          title: 'Error',
+          description: `Package with ID ${packageId} not found. Please refresh the page.`,
           variant: 'destructive',
         });
         return;
@@ -3308,8 +3382,14 @@ const WeddingDetail = () => {
                   {/* Left side: Form fields */}
                   <div className="space-y-4">
               <form onSubmit={handleAddTable} className="space-y-4">
-                {/* Mandatory Couple Table CTA */}
-                      {tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0 && (
+                {/* Mandatory Couple Table CTA - Only show if no couple table exists */}
+                      {(() => {
+                        const coupleTables = tables.filter(t => {
+                          const category = t?.table_category || t?.category;
+                          return category === 'couple' || category === 'Couple';
+                        });
+                        return coupleTables.length === 0;
+                      })() && (
                   <div className="p-3 rounded border bg-muted/30 flex items-center justify-between">
                     <div>
                       <p className="text-sm font-medium">Couple Table Required</p>
@@ -4944,11 +5024,26 @@ const WeddingDetail = () => {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="packageTableSelect">Table</Label>
-                      <Select value={packageAssignTableId} onValueChange={setPackageAssignTableId} disabled={packageFormLoading || tables.length === 0}>
-                        <SelectTrigger id="packageTableSelect" name="packageTableSelect">
+                      <Select 
+                        value={packageAssignTableId} 
+                        onValueChange={setPackageAssignTableId} 
+                        onOpenChange={(open) => {
+                          if (!open) {
+                            // Clear focus when dropdown closes to prevent stuck highlight
+                            setTimeout(() => {
+                              const trigger = document.getElementById('packageTableSelect');
+                              if (trigger) {
+                                trigger.blur();
+                              }
+                            }, 100);
+                          }
+                        }}
+                        disabled={packageFormLoading || tables.length === 0}
+                      >
+                        <SelectTrigger id="packageTableSelect" name="packageTableSelect" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
                           <SelectValue placeholder="Select a table" />
                         </SelectTrigger>
-                        <SelectContent className="max-h-[300px] overflow-y-auto">
+                        <SelectContent className="max-h-[300px] overflow-y-auto dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
                           {tables.map((table) => {
                             if (!table) return null;
                             const tableId = table.id || table.table_id;
@@ -4959,7 +5054,7 @@ const WeddingDetail = () => {
                               <SelectItem 
                                 key={tableId || `table-${tableNum}`} 
                                 value={tableId ? tableId.toString() : `table-${tableNum}`}
-                                className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]"
+                                className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4] dark:hover:bg-[#1a1a1a]"
                               >
                                 <div className="flex items-center gap-2">
                                   <CategoryIcon className="h-3.5 w-3.5 flex-shrink-0" />
@@ -4973,11 +5068,28 @@ const WeddingDetail = () => {
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="packageSelectDropdown">Package</Label>
-                      <Select value={packageAssignPackageId} onValueChange={setPackageAssignPackageId} disabled={packageFormLoading || packages.length === 0}>
-                        <SelectTrigger id="packageSelectDropdown" name="packageSelectDropdown">
+                      <Select 
+                        value={packageAssignPackageId} 
+                        onValueChange={(value) => {
+                          setPackageAssignPackageId(value);
+                        }}
+                        onOpenChange={(open) => {
+                          if (!open) {
+                            // Clear focus when dropdown closes to prevent stuck highlight
+                            setTimeout(() => {
+                              const trigger = document.getElementById('packageSelectDropdown');
+                              if (trigger) {
+                                trigger.blur();
+                              }
+                            }, 100);
+                          }
+                        }}
+                        disabled={packageFormLoading || packages.length === 0}
+                      >
+                        <SelectTrigger id="packageSelectDropdown" name="packageSelectDropdown" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
                           <SelectValue placeholder="Select a package" />
                         </SelectTrigger>
-                        <SelectContent className="max-h-[300px] overflow-y-auto">
+                        <SelectContent className="max-h-[300px] overflow-y-auto dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
                           {packages.map((pkg) => {
                             const pkgId = pkg.package_id || pkg.id;
                             const tableId = packageAssignTableId ? parseInt(packageAssignTableId) : null;
@@ -5006,7 +5118,7 @@ const WeddingDetail = () => {
                               <SelectItem 
                                 key={pkgId || `pkg-${pkg.package_name || pkg.packageName}`} 
                                 value={pkgValue}
-                                className="dark:focus:bg-[#2a2a2a] dark:focus:text-[#f5f5f5] dark:text-[#e5e5e5]"
+                                className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4] dark:hover:bg-[#1a1a1a]"
                               >
                                 <div className="flex flex-col gap-1 py-1">
                                   <div className="flex items-center gap-2">
@@ -5104,24 +5216,37 @@ const WeddingDetail = () => {
                     
                     if (!compatibility.compatible && compatibility.conflicts.length > 0) {
                       return (
-                        <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                        <div className="p-4 bg-amber-50 dark:bg-amber-900/40 border border-amber-200 dark:border-amber-800/50 rounded-lg">
                           <div className="flex items-start gap-2">
-                            <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                            <AlertTriangle className="h-5 w-5 text-amber-600 dark:text-amber-500 mt-0.5" />
                             <div className="flex-1">
-                              <p className="font-semibold text-amber-900 mb-2">Package Compatibility Warning</p>
-                              <p className="text-sm text-amber-800 mb-2">
+                              <p className="font-semibold text-amber-900 dark:text-amber-200 mb-2">Package Compatibility Warning</p>
+                              <p className="text-sm text-amber-800 dark:text-amber-300 mb-2">
                                 This package contains items that may conflict with table restrictions:
                               </p>
-                              <div className="space-y-1 mb-2">
+                              <div className="space-y-2 mb-2">
                                 {compatibility.conflicts.map((conflict, idx) => (
-                                  <div key={idx} className="text-sm text-amber-800">
-                                    • <strong>{conflict.menu_item}</strong> conflicts with <strong>{conflict.restriction_name}</strong>
+                                  <div key={idx} className="text-sm text-amber-800 dark:text-amber-300 bg-amber-100/50 dark:bg-amber-900/40 p-2 rounded">
+                                    <div className="font-semibold mb-1">
+                                      • <strong>{conflict.menu_item}</strong> conflicts with <strong>{conflict.restriction_name}</strong>
+                                    </div>
+                                    {(conflict.affected_guests && conflict.affected_guests.length > 0) || 
+                                     (conflict.affected_couples && conflict.affected_couples.length > 0) ? (
+                                      <div className="text-xs text-amber-700 dark:text-amber-400 mt-1 ml-4">
+                                        Affected: {[
+                                          ...(conflict.affected_guests || []).map((g: string) => `Guest: ${g}`),
+                                          ...(conflict.affected_couples || []).length > 0 
+                                            ? [`Couple: ${(conflict.affected_couples || []).join(' & ')}`] 
+                                            : []
+                                        ].join('; ')}
+                                      </div>
+                                    ) : null}
                                   </div>
                                 ))}
                               </div>
                               {tableRestrictions.length > 0 && (
                                 <div className="mt-2">
-                                  <p className="text-xs font-medium text-amber-900 mb-1">Table Restrictions:</p>
+                                  <p className="text-xs font-medium text-amber-900 dark:text-amber-200 mb-1">Table Restrictions:</p>
                                   <div className="flex flex-wrap gap-1">
                                     {tableRestrictions.map((r: any) => (
                                       <Badge 
@@ -5145,10 +5270,10 @@ const WeddingDetail = () => {
                       );
                     } else if (tableRestrictions.length > 0) {
                       return (
-                        <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+                        <div className="p-3 bg-green-50 dark:bg-green-900/40 border border-green-200 dark:border-green-800/50 rounded-lg">
                           <div className="flex items-center gap-2">
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                            <p className="text-sm text-green-800">
+                            <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-500" />
+                            <p className="text-sm text-green-800 dark:text-green-300">
                               Package is compatible with table restrictions
                             </p>
                           </div>
@@ -5415,6 +5540,11 @@ const WeddingDetail = () => {
                             menuItemsFromPackages.set(itemId, {
                               ...mi,
                               menu_item_id: itemId,
+                              // Ensure pricing fields are properly set with fallbacks
+                              unit_cost: parseFloat(mi.unit_cost || mi.menu_cost || 0),
+                              selling_price: parseFloat(mi.selling_price || mi.menu_price || 0),
+                              menu_cost: parseFloat(mi.unit_cost || mi.menu_cost || 0), // Backward compatibility
+                              menu_price: parseFloat(mi.selling_price || mi.menu_price || 0), // Backward compatibility
                               allocation_count: quantity,
                               tables: [{
                                 table_id: assignment.tableId || assignment.table_id,
@@ -5426,6 +5556,15 @@ const WeddingDetail = () => {
                           } else {
                             const existing = menuItemsFromPackages.get(itemId)!;
                             existing.allocation_count += quantity;
+                            // Update pricing if not already set
+                            if (!existing.unit_cost && (mi.unit_cost || mi.menu_cost)) {
+                              existing.unit_cost = parseFloat(mi.unit_cost || mi.menu_cost || 0);
+                              existing.menu_cost = existing.unit_cost;
+                            }
+                            if (!existing.selling_price && (mi.selling_price || mi.menu_price)) {
+                              existing.selling_price = parseFloat(mi.selling_price || mi.menu_price || 0);
+                              existing.menu_price = existing.selling_price;
+                            }
                             const tableInfo = {
                               table_id: assignment.tableId || assignment.table_id,
                               table_number: assignment.tableNumber || assignment.table_number,
@@ -5455,9 +5594,9 @@ const WeddingDetail = () => {
                             <TableHead>Item ID</TableHead>
                             <TableHead>Item Name</TableHead>
                             <TableHead>Type</TableHead>
-                            <TableHead>Cost</TableHead>
-                            <TableHead>Price</TableHead>
-                            <TableHead>Profit Margin</TableHead>
+                            <TableHead className="text-right">Cost</TableHead>
+                            <TableHead className="text-right">Price</TableHead>
+                            <TableHead className="text-right">Profit Margin</TableHead>
                             <TableHead>Allocation Count</TableHead>
                             <TableHead>Restrictions</TableHead>
                             <TableHead>Used In Tables/Packages</TableHead>
@@ -5507,9 +5646,9 @@ const WeddingDetail = () => {
                                     );
                                   })()}
                                 </TableCell>
-                                <TableCell>{formatCurrency(item.menu_cost || 0)}</TableCell>
-                                <TableCell>{formatCurrency(item.menu_price || 0)}</TableCell>
-                                <TableCell className="text-green-600">{formatCurrency((item.menu_price || 0) - (item.menu_cost || 0))}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(item.unit_cost || item.menu_cost || 0)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(item.selling_price || item.menu_price || 0)}</TableCell>
+                                <TableCell className="text-right text-green-600">{formatCurrency((item.selling_price || item.menu_price || 0) - (item.unit_cost || item.menu_cost || 0))}</TableCell>
                                 <TableCell>
                                   <Badge variant="outline" className="font-semibold">
                                     {item.allocation_count || 0}x
@@ -5603,7 +5742,7 @@ const WeddingDetail = () => {
                             <TableHead>Package ID</TableHead>
                             <TableHead>Package Name</TableHead>
                             <TableHead>Type</TableHead>
-                            <TableHead>Price</TableHead>
+                            <TableHead className="text-right">Price</TableHead>
                             <TableHead>Menu Items</TableHead>
                             <TableHead>Assigned To Tables</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
@@ -5638,7 +5777,7 @@ const WeddingDetail = () => {
                                 <TableCell>
                                   <PackageTypeBadge type={pkg.package_type || pkg.packageType || 'Standard'} />
                                 </TableCell>
-                                <TableCell>{formatCurrency(pkg.package_price || pkg.packagePrice || 0)}</TableCell>
+                                <TableCell className="text-right">{formatCurrency(pkg.selling_price || pkg.package_price || pkg.packagePrice || 0)}</TableCell>
                                 <TableCell>
                                   <div className="flex flex-wrap gap-1">
                                     {menuItemsList.length > 0 ? (
