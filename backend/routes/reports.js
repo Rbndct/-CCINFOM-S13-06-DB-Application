@@ -438,4 +438,328 @@ router.get('/financial', async (req, res) => {
   }
 });
 
+// GET /reports/cash-flow?period=month|year|day&value=YYYY-MM-DD|YYYY-MM|YYYY
+// Cash Flow Statement combining package sales, equipment rental, and payment
+// transactions
+router.get('/cash-flow', async (req, res) => {
+  try {
+    const {period = 'month', value} = req.query;
+    let whereSql, params;
+
+    if (period === 'day') {
+      whereSql = 'DATE(w.wedding_date) = ?';
+      params = [value];  // YYYY-MM-DD
+    } else if (period === 'month') {
+      whereSql = 'DATE_FORMAT(w.wedding_date, "%Y-%m") = ?';
+      params = [value];  // YYYY-MM
+    } else if (period === 'year') {
+      whereSql = 'YEAR(w.wedding_date) = ?';
+      params = [value];  // YYYY
+    } else {
+      whereSql = '1=1';
+      params = [];
+    }
+
+    // Cash Inflows: Package Sales Revenue (from table_package transactions)
+    const [packageRevenue] = await promisePool.query(
+        `SELECT 
+        COALESCE(SUM(p.selling_price), 0) AS total_revenue,
+        COUNT(DISTINCT tp.table_id) AS transaction_count
+      FROM table_package tp
+      JOIN seating_table st ON tp.table_id = st.table_id
+      JOIN wedding w ON st.wedding_id = w.wedding_id
+      JOIN package p ON tp.package_id = p.package_id
+      WHERE ${whereSql}`,
+        params);
+
+    // Cash Inflows: Equipment Rental Income (from inventory_allocation
+    // transactions)
+    const [equipmentRevenue] = await promisePool.query(
+        `SELECT 
+        COALESCE(SUM(ia.rental_cost), 0) AS total_rental_income,
+        COUNT(DISTINCT ia.allocation_id) AS transaction_count
+      FROM inventory_allocation ia
+      JOIN wedding w ON ia.wedding_id = w.wedding_id
+      WHERE ${whereSql}`,
+        params);
+
+    // Cash Outflows: Package Costs (COGS)
+    const [packageCosts] = await promisePool.query(
+        `SELECT 
+        COALESCE(SUM(p.unit_cost), 0) AS total_cogs
+      FROM table_package tp
+      JOIN seating_table st ON tp.table_id = st.table_id
+      JOIN wedding w ON st.wedding_id = w.wedding_id
+      JOIN package p ON tp.package_id = p.package_id
+      WHERE ${whereSql}`,
+        params);
+
+    // Cash Outflows: Equipment Rental Costs (if any)
+    const equipmentCosts =
+        0;  // Can be extended if equipment has associated costs
+
+    // Payment Receipts (cash actually received based on payment_status)
+    const [paymentReceipts] = await promisePool.query(
+        `SELECT 
+        COALESCE(SUM(
+          CASE 
+            WHEN w.payment_status = 'paid' THEN COALESCE(w.total_cost, 0)
+            WHEN w.payment_status = 'partial' THEN COALESCE(w.total_cost * 0.5, 0)
+            ELSE 0
+          END
+        ), 0) AS cash_received,
+        COUNT(CASE WHEN w.payment_status = 'paid' THEN 1 END) AS paid_count,
+        COUNT(CASE WHEN w.payment_status = 'partial' THEN 1 END) AS partial_count,
+        COUNT(CASE WHEN w.payment_status = 'pending' THEN 1 END) AS pending_count
+      FROM wedding w
+      WHERE ${whereSql}`,
+        params);
+
+    // Calculate net cash flow
+    const totalInflows = parseFloat(packageRevenue[0]?.total_revenue || 0) +
+        parseFloat(equipmentRevenue[0]?.total_rental_income || 0);
+    const totalOutflows =
+        parseFloat(packageCosts[0]?.total_cogs || 0) + equipmentCosts;
+    const netCashFlow = totalInflows - totalOutflows;
+    const cashReceived = parseFloat(paymentReceipts[0]?.cash_received || 0);
+
+    // Get daily/monthly breakdown for charts
+    let breakdown = [];
+    if (period === 'year') {
+      const [monthlyBreakdown] = await promisePool.query(
+          `SELECT 
+          DATE_FORMAT(w.wedding_date, "%Y-%m") AS period,
+          COALESCE(SUM(p.selling_price), 0) AS revenue,
+          COALESCE(SUM(p.unit_cost), 0) AS costs,
+          COALESCE(SUM(ia.rental_cost), 0) AS equipment_income
+        FROM wedding w
+        LEFT JOIN seating_table st ON st.wedding_id = w.wedding_id
+        LEFT JOIN table_package tp ON tp.table_id = st.table_id
+        LEFT JOIN package p ON p.package_id = tp.package_id
+        LEFT JOIN inventory_allocation ia ON ia.wedding_id = w.wedding_id
+        WHERE YEAR(w.wedding_date) = ?
+        GROUP BY DATE_FORMAT(w.wedding_date, "%Y-%m")
+        ORDER BY period ASC`,
+          [value]);
+      breakdown = monthlyBreakdown;
+    } else if (period === 'month') {
+      const [dailyBreakdown] = await promisePool.query(
+          `SELECT 
+          DATE(w.wedding_date) AS period,
+          COALESCE(SUM(p.selling_price), 0) AS revenue,
+          COALESCE(SUM(p.unit_cost), 0) AS costs,
+          COALESCE(SUM(ia.rental_cost), 0) AS equipment_income
+        FROM wedding w
+        LEFT JOIN seating_table st ON st.wedding_id = w.wedding_id
+        LEFT JOIN table_package tp ON tp.table_id = st.table_id
+        LEFT JOIN package p ON p.package_id = tp.package_id
+        LEFT JOIN inventory_allocation ia ON ia.wedding_id = w.wedding_id
+        WHERE DATE_FORMAT(w.wedding_date, "%Y-%m") = ?
+        GROUP BY DATE(w.wedding_date)
+        ORDER BY period ASC`,
+          [value]);
+      breakdown = dailyBreakdown;
+    }
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        value,
+        cash_flows: {
+          inflows: {
+            package_sales: parseFloat(packageRevenue[0]?.total_revenue || 0),
+            equipment_rental:
+                parseFloat(equipmentRevenue[0]?.total_rental_income || 0),
+            total: totalInflows
+          },
+          outflows: {
+            package_costs: parseFloat(packageCosts[0]?.total_cogs || 0),
+            equipment_costs: equipmentCosts,
+            total: totalOutflows
+          },
+          net_cash_flow: netCashFlow
+        },
+        payment_receipts: {
+          cash_received: cashReceived,
+          paid_count: paymentReceipts[0]?.paid_count || 0,
+          partial_count: paymentReceipts[0]?.partial_count || 0,
+          pending_count: paymentReceipts[0]?.pending_count || 0
+        },
+        breakdown: breakdown.map(
+            b => ({
+              period: b.period,
+              revenue: parseFloat(b.revenue || 0),
+              costs: parseFloat(b.costs || 0),
+              equipment_income: parseFloat(b.equipment_income || 0),
+              net_flow: parseFloat(b.revenue || 0) +
+                  parseFloat(b.equipment_income || 0) - parseFloat(b.costs || 0)
+            }))
+      }
+    });
+  } catch (error) {
+    console.error('Error generating cash flow report:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate cash flow report',
+      message: error.message
+    });
+  }
+});
+
+// GET
+// /reports/accounts-receivable?period=month|year|day&value=YYYY-MM-DD|YYYY-MM|YYYY
+// Accounts Receivable Aging Report combining wedding invoices and payment
+// status
+router.get('/accounts-receivable', async (req, res) => {
+  try {
+    const {period = 'month', value} = req.query;
+    let whereSql, params;
+
+    if (period === 'day') {
+      whereSql = 'DATE(w.wedding_date) = ?';
+      params = [value];
+    } else if (period === 'month') {
+      whereSql = 'DATE_FORMAT(w.wedding_date, "%Y-%m") = ?';
+      params = [value];
+    } else if (period === 'year') {
+      whereSql = 'YEAR(w.wedding_date) = ?';
+      params = [value];
+    } else {
+      whereSql = '1=1';
+      params = [];
+    }
+
+    // Get all weddings with outstanding balances
+    const [receivables] = await promisePool.query(
+        `SELECT 
+        w.wedding_id,
+        w.wedding_date,
+        w.total_cost,
+        w.payment_status,
+        c.partner1_name,
+        c.partner2_name,
+        w.venue,
+        DATEDIFF(CURDATE(), w.wedding_date) AS days_since_wedding,
+        CASE 
+          WHEN w.payment_status = 'paid' THEN 0
+          WHEN w.payment_status = 'partial' THEN COALESCE(w.total_cost * 0.5, 0)
+          ELSE COALESCE(w.total_cost, 0)
+        END AS outstanding_balance
+      FROM wedding w
+      JOIN couple c ON w.couple_id = c.couple_id
+      WHERE ${whereSql}
+        AND w.payment_status != 'paid'
+      ORDER BY w.wedding_date DESC`,
+        params);
+
+    // Calculate aging buckets
+    const agingBuckets = {
+      current: {amount: 0, count: 0, items: []},     // 0-30 days
+      days_31_60: {amount: 0, count: 0, items: []},  // 31-60 days
+      days_61_90: {amount: 0, count: 0, items: []},  // 61-90 days
+      over_90: {amount: 0, count: 0, items: []}      // 90+ days
+    };
+
+    receivables.forEach((rec) => {
+      const days = rec.days_since_wedding || 0;
+      const balance = parseFloat(rec.outstanding_balance || 0);
+      const item = {
+        wedding_id: rec.wedding_id,
+        wedding_date: rec.wedding_date,
+        couple_name: `${rec.partner1_name} & ${rec.partner2_name}`,
+        venue: rec.venue,
+        total_cost: parseFloat(rec.total_cost || 0),
+        outstanding_balance: balance,
+        payment_status: rec.payment_status,
+        days_overdue: days
+      };
+
+      if (days <= 30) {
+        agingBuckets.current.amount += balance;
+        agingBuckets.current.count += 1;
+        agingBuckets.current.items.push(item);
+      } else if (days <= 60) {
+        agingBuckets.days_31_60.amount += balance;
+        agingBuckets.days_31_60.count += 1;
+        agingBuckets.days_31_60.items.push(item);
+      } else if (days <= 90) {
+        agingBuckets.days_61_90.amount += balance;
+        agingBuckets.days_61_90.count += 1;
+        agingBuckets.days_61_90.items.push(item);
+      } else {
+        agingBuckets.over_90.amount += balance;
+        agingBuckets.over_90.count += 1;
+        agingBuckets.over_90.items.push(item);
+      }
+    });
+
+    const totalReceivables = agingBuckets.current.amount +
+        agingBuckets.days_31_60.amount + agingBuckets.days_61_90.amount +
+        agingBuckets.over_90.amount;
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        value,
+        total_receivables: totalReceivables,
+        total_count: receivables.length,
+        aging_buckets: {
+          current: {
+            label: 'Current (0-30 days)',
+            amount: agingBuckets.current.amount,
+            count: agingBuckets.current.count,
+            percentage: totalReceivables > 0 ?
+                (agingBuckets.current.amount / totalReceivables) * 100 :
+                0
+          },
+          days_31_60: {
+            label: '31-60 days',
+            amount: agingBuckets.days_31_60.amount,
+            count: agingBuckets.days_31_60.count,
+            percentage: totalReceivables > 0 ?
+                (agingBuckets.days_31_60.amount / totalReceivables) * 100 :
+                0
+          },
+          days_61_90: {
+            label: '61-90 days',
+            amount: agingBuckets.days_61_90.amount,
+            count: agingBuckets.days_61_90.count,
+            percentage: totalReceivables > 0 ?
+                (agingBuckets.days_61_90.amount / totalReceivables) * 100 :
+                0
+          },
+          over_90: {
+            label: 'Over 90 days',
+            amount: agingBuckets.over_90.amount,
+            count: agingBuckets.over_90.count,
+            percentage: totalReceivables > 0 ?
+                (agingBuckets.over_90.amount / totalReceivables) * 100 :
+                0
+          }
+        },
+        receivables: receivables.map(
+            (r) => ({
+              wedding_id: r.wedding_id,
+              wedding_date: r.wedding_date,
+              couple_name: `${r.partner1_name} & ${r.partner2_name}`,
+              venue: r.venue,
+              total_cost: parseFloat(r.total_cost || 0),
+              outstanding_balance: parseFloat(r.outstanding_balance || 0),
+              payment_status: r.payment_status,
+              days_overdue: r.days_since_wedding || 0
+            }))
+      }
+    });
+  } catch (error) {
+    console.error('Error generating accounts receivable report:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate accounts receivable report',
+      message: error.message
+    });
+  }
+});
+
 module.exports = router;
