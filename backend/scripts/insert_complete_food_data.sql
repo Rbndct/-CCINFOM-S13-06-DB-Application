@@ -52,6 +52,9 @@ DELETE FROM dietary_restriction;
 -- ============================================================================
 
 INSERT INTO dietary_restriction (restriction_name, severity_level, restriction_type) VALUES
+-- System Restriction (must be first to get ID 1)
+('None', 'Low', 'System'),
+
 -- Dietary Preferences (Low to Moderate Severity)
 ('Vegetarian', 'Low', 'Dietary'),
 ('Vegan', 'Low', 'Dietary'),
