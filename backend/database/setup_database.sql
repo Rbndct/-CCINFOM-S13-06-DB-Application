@@ -75,6 +75,8 @@ CREATE TABLE wedding (
     wedding_id INT PRIMARY KEY AUTO_INCREMENT,
     couple_id INT NOT NULL,
     guest_count INT,
+    equipment_rental_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
+    food_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
     total_cost DECIMAL(10,2),
     production_cost DECIMAL(10,2),
     venue VARCHAR(255) NOT NULL,
@@ -119,14 +121,18 @@ CREATE TABLE guest (
 CREATE TABLE menu_item (
     menu_item_id INT AUTO_INCREMENT PRIMARY KEY,
     menu_name VARCHAR(255) NOT NULL,
-    menu_cost DECIMAL(10,2) NOT NULL,
-    menu_price DECIMAL(10,2) NOT NULL,
+    unit_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
+    selling_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+    default_markup_percentage DECIMAL(5,2) DEFAULT 200.00,
+    cost_override BOOLEAN DEFAULT FALSE,
     menu_type VARCHAR(100) NOT NULL,
     stock INT NOT NULL,
     restriction_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (restriction_id) REFERENCES dietary_restriction(restriction_id) ON DELETE SET NULL
+    FOREIGN KEY (restriction_id) REFERENCES dietary_restriction(restriction_id) ON DELETE SET NULL,
+    INDEX idx_menu_item_unit_cost (unit_cost),
+    INDEX idx_menu_item_selling_price (selling_price)
 );
 
 -- Create ingredient table
@@ -158,9 +164,13 @@ CREATE TABLE package (
     package_id INT AUTO_INCREMENT PRIMARY KEY,
     package_name VARCHAR(255) NOT NULL,
     package_type VARCHAR(100) NOT NULL,
-    package_price DECIMAL(10,2) NOT NULL,
+    unit_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
+    selling_price DECIMAL(10,2) NOT NULL DEFAULT 0,
+    default_markup_percentage DECIMAL(5,2) DEFAULT 180.00,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_package_unit_cost (unit_cost),
+    INDEX idx_package_selling_price (selling_price)
 );
 
 -- Create package_menu_items table
@@ -193,6 +203,7 @@ CREATE TABLE inventory_items (
     category VARCHAR(100) NOT NULL,
     item_condition VARCHAR(50) NOT NULL,
     quantity_available INT NOT NULL,
+    unit_rental_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
     rental_cost DECIMAL(10,2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -204,6 +215,7 @@ CREATE TABLE inventory_allocation (
     wedding_id INT NOT NULL,
     inventory_id INT NOT NULL,
     quantity_used INT NOT NULL,
+    unit_rental_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
     rental_cost DECIMAL(10,2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -214,9 +226,21 @@ CREATE TABLE inventory_allocation (
 -- ============================================================================
 -- MIGRATIONS: Create Junction Tables for Many-to-Many Relationships
 -- ============================================================================
+-- Note: The following migrations are incorporated into this setup script:
+-- - create_guest_restrictions_junction.sql (Migration 1 below)
+-- - create_couple_preference_restrictions_junction.sql (Migration 2 below)
+-- - menu_item_restrictions junction table (Migration 3 below)
+-- - add_preference_id_to_wedding.sql (incorporated in wedding table definition)
+-- - rename_cost_fields_to_accounting_standards.sql (incorporated in table definitions)
+-- - add_preference_restrictions_junction.sql (replaced by Migration 2)
+-- - Pricing structure updates (incorporated in table definitions):
+--   * Pricing simplified: ingredients have no cost, only menu items have pricing
+--   * unit_cost, selling_price, default_markup_percentage, cost_override in menu_item table
+--   * unit_cost, selling_price, default_markup_percentage in package table
 
 -- Migration 1: Create guest_restrictions junction table
 -- This allows guests to have multiple dietary restrictions
+-- Source: create_guest_restrictions_junction.sql
 CREATE TABLE guest_restrictions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     guest_id INT NOT NULL,
@@ -231,6 +255,8 @@ CREATE TABLE guest_restrictions (
 
 -- Migration 2: Create couple_preference_restrictions junction table
 -- This allows each preference to have multiple dietary restrictions
+-- Source: create_couple_preference_restrictions_junction.sql
+-- Note: This replaces the earlier preference_dietary_restrictions table
 CREATE TABLE couple_preference_restrictions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     preference_id INT NOT NULL,
@@ -241,6 +267,20 @@ CREATE TABLE couple_preference_restrictions (
     UNIQUE KEY unique_preference_restriction (preference_id, restriction_id),
     INDEX idx_cpr_preference_id (preference_id),
     INDEX idx_cpr_restriction_id (restriction_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- Migration 3: Create menu_item_restrictions junction table
+-- This allows menu items to have multiple dietary restrictions
+CREATE TABLE menu_item_restrictions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    menu_item_id INT NOT NULL,
+    restriction_id INT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (menu_item_id) REFERENCES menu_item(menu_item_id) ON DELETE CASCADE,
+    FOREIGN KEY (restriction_id) REFERENCES dietary_restriction(restriction_id) ON DELETE CASCADE,
+    UNIQUE KEY unique_menu_item_restriction (menu_item_id, restriction_id),
+    INDEX idx_mir_menu_item_id (menu_item_id),
+    INDEX idx_mir_restriction_id (restriction_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- ============================================================================
