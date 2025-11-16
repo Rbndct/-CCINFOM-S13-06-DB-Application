@@ -84,6 +84,7 @@ const Weddings = () => {
   const [hasRestrictions, setHasRestrictions] = useState<string | undefined>();
   const [filterWeddingType, setFilterWeddingType] = useState<string>('all');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingWeddingId, setEditingWeddingId] = useState<number | null>(null);
   const [couples, setCouples] = useState([]);
   const [totalGuests, setTotalGuests] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
@@ -285,6 +286,7 @@ const Weddings = () => {
 
   // Reset form
   const resetForm = () => {
+    setEditingWeddingId(null);
     setSelectedCoupleId('');
     setWeddingDate('');
     setWeddingTime('');
@@ -320,26 +322,43 @@ const Weddings = () => {
     setLoading(true);
 
     try {
-      // Create wedding via API
-      const response = await weddingsAPI.create({
-        couple_id: parseInt(selectedCoupleId),
-        wedding_date: weddingDate,
-        wedding_time: weddingTime,
-        venue: venue.trim(),
-        guest_count: 0,
-        total_cost: 0,
-        production_cost: 0,
-        payment_status: paymentStatus,
-        preference_id: selectedPreferenceId ? parseInt(selectedPreferenceId) : null,
-      });
+      if (editingWeddingId) {
+        // Update existing wedding
+        await weddingsAPI.update(editingWeddingId, {
+          couple_id: parseInt(selectedCoupleId),
+          wedding_date: weddingDate,
+          wedding_time: weddingTime,
+          venue: venue.trim(),
+          payment_status: paymentStatus,
+          preference_id: selectedPreferenceId ? parseInt(selectedPreferenceId) : null,
+        });
+
+        toast({
+          title: 'Wedding Updated',
+          description: 'Wedding details have been updated successfully',
+        });
+      } else {
+        // Create new wedding
+        const response = await weddingsAPI.create({
+          couple_id: parseInt(selectedCoupleId),
+          wedding_date: weddingDate,
+          wedding_time: weddingTime,
+          venue: venue.trim(),
+          guest_count: 0,
+          total_cost: 0,
+          production_cost: 0,
+          payment_status: paymentStatus,
+          preference_id: selectedPreferenceId ? parseInt(selectedPreferenceId) : null,
+        });
+
+        toast({
+          title: 'Wedding Created',
+          description: `Wedding for ${response.data.couple} has been created successfully`,
+        });
+      }
 
       // Refresh weddings list
       refetch();
-
-      toast({
-        title: 'Wedding Created',
-        description: `Wedding for ${response.data.couple} has been created successfully`,
-      });
 
       // Close dialog and reset form
       setDialogOpen(false);
@@ -743,6 +762,31 @@ const Weddings = () => {
                             View Details
                           </DropdownMenuItem>
                           <DropdownMenuItem
+                            onClick={async () => {
+                              setEditingWeddingId(wedding.id || wedding.wedding_id);
+                              setSelectedCoupleId((wedding.couple_id || wedding.coupleId || '').toString());
+                              setWeddingDate(wedding.wedding_date || wedding.weddingDate || '');
+                              setWeddingTime(wedding.wedding_time || wedding.weddingTime || '');
+                              setVenue(wedding.venue || '');
+                              setPaymentStatus(wedding.payment_status || wedding.paymentStatus || 'pending');
+                              setSelectedPreferenceId((wedding.preference_id || wedding.pref_id || '').toString());
+                              // Fetch couple preferences
+                              if (wedding.couple_id || wedding.coupleId) {
+                                try {
+                                  const prefResponse = await couplesAPI.getPreferences((wedding.couple_id || wedding.coupleId).toString());
+                                  setCouplePreferences(prefResponse.data || []);
+                                } catch (e) {
+                                  console.error('Error fetching preferences:', e);
+                                  setCouplePreferences([]);
+                                }
+                              }
+                              setDialogOpen(true);
+                            }}
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
                             className="text-red-600"
                             onClick={async () => {
                               if (!confirm('Delete this wedding?')) return;
@@ -827,9 +871,9 @@ const Weddings = () => {
         <Dialog open={dialogOpen} onOpenChange={handleDialogClose}>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" key={dialogOpen ? 'open' : 'closed'}>
             <DialogHeader>
-              <DialogTitle>Add New Wedding</DialogTitle>
+              <DialogTitle>{editingWeddingId ? 'Edit Wedding' : 'Add New Wedding'}</DialogTitle>
               <DialogDescription>
-                Fill in all the required information to create a new wedding
+                {editingWeddingId ? 'Update wedding information' : 'Fill in all the required information to create a new wedding'}
               </DialogDescription>
             </DialogHeader>
             
