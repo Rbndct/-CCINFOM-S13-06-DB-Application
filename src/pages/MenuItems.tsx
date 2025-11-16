@@ -16,7 +16,9 @@ import {
   ArrowUpDown,
   X,
   ChefHat,
-  List
+  List,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -58,6 +60,7 @@ import { menuItemsAPI, dietaryRestrictionsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useCurrencyFormat } from '@/utils/currency';
+import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
 
 const MenuItems = () => {
   const { formatCurrency } = useCurrencyFormat();
@@ -86,6 +89,7 @@ const MenuItems = () => {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState<any>(null);
   const [selectedItemRecipe, setSelectedItemRecipe] = useState<any[]>([]);
+  const [showIngredients, setShowIngredients] = useState(false);
   const [dietaryRestrictions, setDietaryRestrictions] = useState<any[]>([]);
   
   // Form states
@@ -339,22 +343,22 @@ const MenuItems = () => {
 
   const getMakeableStatus = (qty: number) => {
     if (!qty || qty <= 0) {
-      return <Badge variant="destructive" className="bg-red-100 text-red-800">Unavailable</Badge>;
+      return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border">Unavailable</Badge>;
     } else if (qty < 10) {
-      return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Low Availability</Badge>;
+      return <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border">Low Availability</Badge>;
     } else {
-      return <Badge className="bg-green-100 text-green-800">Available</Badge>;
+      return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border">Available</Badge>;
     }
   };
 
   const getTypeBadge = (type: string) => {
     const colors = {
-      'Appetizer': 'bg-blue-100 text-blue-800',
-      'Main Course': 'bg-green-100 text-green-800',
-      'Dessert': 'bg-purple-100 text-purple-800',
-      'Beverage': 'bg-orange-100 text-orange-800'
+      'Appetizer': 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700',
+      'Main Course': 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700',
+      'Dessert': 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700',
+      'Beverage': 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700'
     };
-    return <Badge className={colors[type] || 'bg-gray-100 text-gray-800'}>{type}</Badge>;
+    return <Badge className={`${colors[type] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'} border`}>{type}</Badge>;
   };
 
   // Filter and sort menu items
@@ -620,17 +624,14 @@ const MenuItems = () => {
                           </TableCell>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2 min-w-0">
-                              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                                <Utensils className="h-4 w-4 text-primary" />
-                              </div>
                               <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <span className="truncate">{item.menu_name}</span>
                                 {item.is_template && (
-                                  <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 flex-shrink-0">
-                                    <Lock className="w-3 h-3 mr-1" />
+                                  <Badge variant="outline" className="bg-blue-50 dark:bg-blue-900 text-blue-700 dark:text-blue-200 border-blue-200 dark:border-blue-700 flex-shrink-0">
+                                    <Lock className="w-3 h-3 mr-1 dark:text-blue-300" />
                                     Template
                                   </Badge>
                                 )}
+                                <span className="truncate">{item.menu_name}</span>
                               </div>
                             </div>
                           </TableCell>
@@ -660,9 +661,12 @@ const MenuItems = () => {
                           </TableCell>
                           <TableCell>
                             {item.restriction_name ? (
-                              <Badge variant="outline" className="bg-orange-100 text-orange-800">
-                                {item.restriction_name}
-                              </Badge>
+                              <div className="space-y-0.5">
+                                <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
+                                  {getTypeIcon('Dietary')}
+                                  {item.restriction_name}
+                                </Badge>
+                              </div>
                             ) : (
                               <span className="text-sm text-muted-foreground">None</span>
                             )}
@@ -683,14 +687,10 @@ const MenuItems = () => {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handleViewItem(item)}>
-                                  <Eye className="mr-2 h-4 w-4" />
+                                  <Eye className="mr-2 h-4 w-4 dark:text-muted-foreground" />
                                   View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEditItem(item)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteItem(item)}>
+                                <DropdownMenuItem className="text-red-600 dark:text-red-400" onClick={() => handleDeleteItem(item)}>
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Delete
                                 </DropdownMenuItem>
@@ -892,9 +892,12 @@ const MenuItems = () => {
                           </TableCell>
                           <TableCell>
                             {item.restriction_name ? (
-                              <Badge variant="outline" className="bg-orange-100 text-orange-800">
-                                {item.restriction_name}
-                              </Badge>
+                              <div className="space-y-0.5">
+                                <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
+                                  {getTypeIcon('Dietary')}
+                                  {item.restriction_name}
+                                </Badge>
+                              </div>
                             ) : (
                               <span className="text-sm text-muted-foreground">None</span>
                             )}
@@ -913,14 +916,10 @@ const MenuItems = () => {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
                                 <DropdownMenuItem onClick={() => handleViewItem(item)}>
-                                  <Eye className="mr-2 h-4 w-4" />
+                                  <Eye className="mr-2 h-4 w-4 dark:text-muted-foreground" />
                                   View Details
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => handleEditItem(item)}>
-                                  <Edit className="mr-2 h-4 w-4" />
-                                  Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem className="text-red-600" onClick={() => handleDeleteItem(item)}>
+                                <DropdownMenuItem className="text-red-600 dark:text-red-400" onClick={() => handleDeleteItem(item)}>
                                   <Trash2 className="mr-2 h-4 w-4" />
                                   Delete
                                 </DropdownMenuItem>
@@ -1034,7 +1033,8 @@ const MenuItems = () => {
                   <Label className="text-sm font-medium text-muted-foreground">Dietary Restriction</Label>
                   <div className="mt-1">
                     {selectedItem?.restriction_name ? (
-                      <Badge variant="outline" className="bg-orange-100 text-orange-800">
+                      <Badge variant="outline" className={`${getTypeColor('Dietary')} border text-xs flex items-center gap-1 w-fit`}>
+                        {getTypeIcon('Dietary')}
                         {selectedItem.restriction_name}
                       </Badge>
                     ) : (
@@ -1044,41 +1044,61 @@ const MenuItems = () => {
                 </div>
               </div>
               
-              {/* Recipe and Ingredients */}
+              {/* Recipe and Ingredients - Collapsible */}
               <div className="border-t pt-4">
-                <div className="flex items-center gap-2 mb-4">
-                  <List className="w-5 h-5 text-primary" />
-                  <h3 className="text-lg font-semibold">Recipe & Ingredients</h3>
-                </div>
-                {selectedItemRecipe.length > 0 ? (
-                  <div className="space-y-2">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Ingredient</TableHead>
-                          <TableHead>Quantity</TableHead>
-                          <TableHead>Unit</TableHead>
-                          <TableHead>Stock Available</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {selectedItemRecipe.map((ingredient: any) => (
-                          <TableRow key={ingredient.ingredient_id}>
-                            <TableCell className="font-medium">{ingredient.ingredient_name}</TableCell>
-                            <TableCell>{ingredient.quantity_needed}</TableCell>
-                            <TableCell>{ingredient.unit}</TableCell>
-                            <TableCell>
-                              <span className={parseFloat(ingredient.stock_quantity || 0) < parseFloat(ingredient.quantity_needed || 0) ? 'text-red-600 font-medium' : ''}>
-                                {ingredient.stock_quantity} {ingredient.unit}
-                              </span>
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                <button
+                  type="button"
+                  onClick={() => setShowIngredients(!showIngredients)}
+                  className="flex items-center justify-between w-full mb-4 hover:opacity-80 transition-opacity"
+                >
+                  <div className="flex items-center gap-2">
+                    <List className="w-5 h-5 text-primary" />
+                    <h3 className="text-lg font-semibold">Recipe & Ingredients</h3>
+                    {selectedItemRecipe.length > 0 && (
+                      <Badge variant="outline" className="text-xs">
+                        {selectedItemRecipe.length} {selectedItemRecipe.length === 1 ? 'ingredient' : 'ingredients'}
+                      </Badge>
+                    )}
                   </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">No recipe information available for this menu item.</p>
+                  {showIngredients ? (
+                    <ChevronUp className="w-5 h-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="w-5 h-5 text-muted-foreground" />
+                  )}
+                </button>
+                {showIngredients && (
+                  <>
+                    {selectedItemRecipe.length > 0 ? (
+                      <div className="space-y-2">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Ingredient</TableHead>
+                              <TableHead>Quantity</TableHead>
+                              <TableHead>Unit</TableHead>
+                              <TableHead>Stock Available</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {selectedItemRecipe.map((ingredient: any) => (
+                              <TableRow key={ingredient.ingredient_id}>
+                                <TableCell className="font-medium">{ingredient.ingredient_name}</TableCell>
+                                <TableCell>{ingredient.quantity_needed}</TableCell>
+                                <TableCell>{ingredient.unit}</TableCell>
+                                <TableCell>
+                                  <span className={parseFloat(ingredient.stock_quantity || 0) < parseFloat(ingredient.quantity_needed || 0) ? 'text-red-600 font-medium' : ''}>
+                                    {ingredient.stock_quantity} {ingredient.unit}
+                                  </span>
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No recipe information available for this menu item.</p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
