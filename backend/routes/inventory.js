@@ -338,6 +338,14 @@ router.post('/allocations', async (req, res) => {
       [wedding_id, inventory_id, quantity_used, finalRentalCost, finalRentalCost]
     );
 
+    // Deduct allocated quantity from inventory stock
+    await promisePool.query(
+      `UPDATE inventory_items 
+       SET quantity_available = quantity_available - ?
+       WHERE inventory_id = ?`,
+      [quantity_used, inventory_id]
+    );
+
     // Fetch the created allocation with item details
     const [newAllocation] = await promisePool.query(
       `SELECT 
@@ -455,6 +463,17 @@ router.put('/allocations/:allocation_id', async (req, res) => {
       });
     }
 
+    // Update inventory stock if quantity changed
+    if (quantity_used !== undefined && quantity_used !== currentQuantity) {
+      const quantityDelta = quantity_used - currentQuantity;
+      await promisePool.query(
+        `UPDATE inventory_items 
+         SET quantity_available = quantity_available - ?
+         WHERE inventory_id = ?`,
+        [quantityDelta, currentAllocation[0].inventory_id]
+      );
+    }
+
     // Fetch updated allocation with item details
     const [updatedAllocation] = await promisePool.query(
       `SELECT 
@@ -506,10 +525,29 @@ router.delete('/allocations/:allocation_id', async (req, res) => {
   try {
     const {allocation_id} = req.params;
 
-    // Get wedding_id before deleting
+    // Get allocation details before deletion for stock restoration and cost update
     const [allocationBeforeDelete] = await promisePool.query(
-      'SELECT wedding_id FROM inventory_allocation WHERE allocation_id = ?',
+      `SELECT wedding_id, inventory_id, quantity_used 
+       FROM inventory_allocation 
+       WHERE allocation_id = ?`,
       [allocation_id]
+    );
+
+    if (allocationBeforeDelete.length === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Inventory allocation not found'
+      });
+    }
+
+    const allocation = allocationBeforeDelete[0];
+
+    // Restore allocated quantity back to inventory stock
+    await promisePool.query(
+      `UPDATE inventory_items 
+       SET quantity_available = quantity_available + ?
+       WHERE inventory_id = ?`,
+      [allocation.quantity_used, allocation.inventory_id]
     );
 
     const [result] = await promisePool.query(
@@ -525,9 +563,7 @@ router.delete('/allocations/:allocation_id', async (req, res) => {
     }
 
     // Update wedding costs after deletion
-    if (allocationBeforeDelete.length > 0) {
-      await updateWeddingCosts(allocationBeforeDelete[0].wedding_id);
-    }
+    await updateWeddingCosts(allocation.wedding_id);
 
     res.json({
       success: true,
