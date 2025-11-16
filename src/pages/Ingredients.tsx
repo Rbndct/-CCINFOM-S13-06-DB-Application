@@ -19,13 +19,15 @@ import {
   TrendingDown,
   PackagePlus,
   AlertCircle,
-  Info
+  Info,
+  DollarSign
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { 
   Table, 
   TableBody, 
@@ -84,7 +86,8 @@ const Ingredients = () => {
     ingredient_name: '',
     unit: '',
     stock_quantity: '',
-    re_order_level: ''
+    re_order_level: '',
+    unit_cost: ''
   });
   const [restockAmount, setRestockAmount] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -141,11 +144,15 @@ const Ingredients = () => {
   // Handle edit ingredient
   const handleEditIngredient = (ingredient: any) => {
     setSelectedIngredient(ingredient);
+    const stockQty = (ingredient.stock_quantity || 0).toString();
+    // Calculate re-order level for display (but it will be recalculated on save)
+    const calculatedReorder = stockQty ? Math.max(1, Math.floor(parseFloat(stockQty) * 0.2)).toString() : '';
     setFormData({
       ingredient_name: ingredient.ingredient_name || '',
       unit: ingredient.unit || '',
-      stock_quantity: (ingredient.stock_quantity || 0).toString(),
-      re_order_level: (ingredient.re_order_level || 0).toString()
+      stock_quantity: stockQty,
+      re_order_level: calculatedReorder, // Auto-calculated, not editable
+      unit_cost: (ingredient.unit_cost || 0).toString()
     });
     setEditDialogOpen(true);
   };
@@ -176,9 +183,6 @@ const Ingredients = () => {
     if (!formData.stock_quantity || parseFloat(formData.stock_quantity) < 0) {
       newErrors.stock_quantity = 'Valid stock quantity is required';
     }
-    if (!formData.re_order_level || parseFloat(formData.re_order_level) < 0) {
-      newErrors.re_order_level = 'Valid re-order level is required';
-    }
 
     if (Object.keys(newErrors).length > 0) {
       toast({
@@ -191,11 +195,16 @@ const Ingredients = () => {
 
     setFormLoading(true);
     try {
+      // Calculate re-order level as 20% of stock quantity (or minimum 1)
+      const stockQty = parseFloat(formData.stock_quantity);
+      const calculatedReorderLevel = Math.max(1, Math.floor(stockQty * 0.2));
+      
       const data = {
         ingredient_name: formData.ingredient_name.trim(),
         unit: formData.unit.trim(),
-        stock_quantity: parseFloat(formData.stock_quantity),
-        re_order_level: parseFloat(formData.re_order_level)
+        stock_quantity: stockQty,
+        re_order_level: calculatedReorderLevel,
+        unit_cost: parseFloat(formData.unit_cost) || 0
       };
 
       if (selectedIngredient) {
@@ -223,7 +232,8 @@ const Ingredients = () => {
         ingredient_name: '',
         unit: '',
         stock_quantity: '',
-        re_order_level: ''
+        re_order_level: '', // This will be auto-calculated
+        unit_cost: ''
       });
       setSelectedIngredient(null);
     } catch (error: any) {
@@ -286,16 +296,32 @@ const Ingredients = () => {
         title: 'Success', 
         description: `Stock ${delta > 0 ? 'increased' : 'decreased'} by ${Math.abs(delta)}` 
       });
-      setRestockDialogOpen(false);
-      setRestockAmount('');
-      
       // Refresh ingredients
       const response = await ingredientsAPI.getAll();
       if (response && response.success && response.data) {
-        setIngredients(response.data || []);
+        const updatedIngredients = response.data || [];
+        setIngredients(updatedIngredients);
+        // Update selected ingredient with fresh data
+        const updatedIngredient = updatedIngredients.find((ing: any) => 
+          (ing.ingredient_id || ing.id) === (selectedIngredient.ingredient_id || selectedIngredient.id)
+        );
+        if (updatedIngredient) {
+          setSelectedIngredient(updatedIngredient);
+        }
       } else if (response && response.data) {
-        setIngredients(response.data || []);
+        const updatedIngredients = response.data || [];
+        setIngredients(updatedIngredients);
+        // Update selected ingredient with fresh data
+        const updatedIngredient = updatedIngredients.find((ing: any) => 
+          (ing.ingredient_id || ing.id) === (selectedIngredient.ingredient_id || selectedIngredient.id)
+        );
+        if (updatedIngredient) {
+          setSelectedIngredient(updatedIngredient);
+        }
       }
+      
+      // Keep dialog open for multiple restocks, but reset amount
+      setRestockAmount('');
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -872,41 +898,81 @@ const Ingredients = () => {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="unit">Unit *</Label>
-                <Input
-                  id="unit"
+                <Select
                   value={formData.unit}
-                  onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
-                  placeholder="e.g., kg, g, L, ml, pieces"
+                  onValueChange={(value) => setFormData({ ...formData, unit: value })}
                   disabled={formLoading}
-                />
+                >
+                  <SelectTrigger id="unit" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
+                    <SelectValue placeholder="Select unit" />
+                  </SelectTrigger>
+                  <SelectContent className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
+                    <SelectItem value="kg" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">kg (Kilogram)</SelectItem>
+                    <SelectItem value="g" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">g (Gram)</SelectItem>
+                    <SelectItem value="L" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">L (Liter)</SelectItem>
+                    <SelectItem value="ml" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">ml (Milliliter)</SelectItem>
+                    <SelectItem value="pieces" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">pieces</SelectItem>
+                    <SelectItem value="pcs" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">pcs</SelectItem>
+                    <SelectItem value="cup" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">cup</SelectItem>
+                    <SelectItem value="tbsp" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">tbsp (Tablespoon)</SelectItem>
+                    <SelectItem value="tsp" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">tsp (Teaspoon)</SelectItem>
+                    <SelectItem value="oz" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">oz (Ounce)</SelectItem>
+                    <SelectItem value="lb" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">lb (Pound)</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="stock_quantity">Stock Quantity *</Label>
-                  <Input
-                    id="stock_quantity"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.stock_quantity}
-                    onChange={(e) => setFormData({ ...formData, stock_quantity: e.target.value })}
-                    placeholder="0"
-                    disabled={formLoading}
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="re_order_level">Re-order Level *</Label>
-                  <Input
-                    id="re_order_level"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={formData.re_order_level}
-                    onChange={(e) => setFormData({ ...formData, re_order_level: e.target.value })}
-                    placeholder="0"
-                    disabled={formLoading}
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="stock_quantity">Stock Quantity *</Label>
+                <Input
+                  id="stock_quantity"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={formData.stock_quantity}
+                  onChange={(e) => {
+                    const stockQty = e.target.value;
+                    const calculatedReorder = stockQty ? Math.max(1, Math.floor(parseFloat(stockQty) * 0.2)).toString() : '';
+                    setFormData({ 
+                      ...formData, 
+                      stock_quantity: stockQty,
+                      re_order_level: calculatedReorder
+                    });
+                  }}
+                  placeholder="0"
+                  disabled={formLoading}
+                  className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Re-order level will be automatically calculated as 20% of stock quantity
+                </p>
+                {formData.stock_quantity && !isNaN(parseFloat(formData.stock_quantity)) && (
+                  <div className="p-2 bg-muted/50 dark:bg-[#1a1a1a] rounded text-sm">
+                    <span className="text-muted-foreground">Calculated Re-order Level: </span>
+                    <span className="font-semibold">{Math.max(1, Math.floor(parseFloat(formData.stock_quantity) * 0.2))} {formData.unit || 'units'}</span>
+                  </div>
+                )}
+              </div>
+              
+              {/* Unit Cost (for menu item cost calculation) */}
+              <div className="space-y-2 border-t pt-4 dark:border-[#2a2a2a]">
+                <Label htmlFor="unit_cost" className="flex items-center gap-2">
+                  <DollarSign className="h-4 w-4" />
+                  Unit Cost (PHP)
+                </Label>
+                <Input
+                  id="unit_cost"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={formData.unit_cost}
+                  onChange={(e) => setFormData({ ...formData, unit_cost: e.target.value })}
+                  placeholder="0.00"
+                  disabled={formLoading}
+                  className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Cost per unit - used to calculate menu item costs
+                </p>
               </div>
             </div>
             <DialogFooter>
@@ -919,7 +985,8 @@ const Ingredients = () => {
                     ingredient_name: '',
                     unit: '',
                     stock_quantity: '',
-                    re_order_level: ''
+                    re_order_level: '',
+                    unit_cost: ''
                   });
                   setSelectedIngredient(null);
                 }}
@@ -927,7 +994,11 @@ const Ingredients = () => {
               >
                 Cancel
               </Button>
-              <Button onClick={handleSaveIngredient} disabled={formLoading}>
+              <Button 
+                onClick={handleSaveIngredient} 
+                disabled={formLoading}
+                className="dark:bg-primary dark:hover:bg-primary/90"
+              >
                 {formLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -943,58 +1014,249 @@ const Ingredients = () => {
 
         {/* Restock Dialog */}
         <Dialog open={restockDialogOpen} onOpenChange={setRestockDialogOpen}>
-          <DialogContent>
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Restock Ingredient</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <PackagePlus className="h-5 w-5" />
+                Restock Ingredient
+              </DialogTitle>
               <DialogDescription>
-                Adjust stock quantity for {selectedIngredient?.ingredient_name}
+                Adjust stock quantity for ingredients. Select an ingredient or use the currently selected one.
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4 py-4">
-              <div>
-                <Label className="text-xs text-muted-foreground">Current Stock</Label>
-                <p className="font-semibold text-lg">
-                  {(parseFloat(selectedIngredient?.stock_quantity) || 0).toLocaleString()} {selectedIngredient?.unit}
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="restock_amount">Adjustment Amount *</Label>
-                <Input
-                  id="restock_amount"
-                  type="number"
-                  value={restockAmount}
-                  onChange={(e) => setRestockAmount(e.target.value)}
-                  placeholder="Enter positive to add, negative to subtract"
-                  disabled={formLoading}
-                />
-                <p className="text-xs text-muted-foreground">
-                  Enter a positive number to increase stock, negative to decrease
-                </p>
-              </div>
-              {restockAmount && !isNaN(parseFloat(restockAmount)) && (
-                <div className="p-3 bg-muted rounded-lg">
-                  <Label className="text-xs text-muted-foreground">New Stock After Adjustment</Label>
-                  <p className="font-semibold text-lg">
-                    {Math.max(0, (parseFloat(selectedIngredient?.stock_quantity) || 0) + parseFloat(restockAmount)).toLocaleString()} {selectedIngredient?.unit}
-                  </p>
+            <div className="grid md:grid-cols-2 gap-6 py-4">
+              {/* Ingredient Selection List */}
+              <div className="space-y-3">
+                <Label className="text-sm font-medium flex items-center gap-2">
+                  <Search className="h-4 w-4" />
+                  Select Ingredient
+                </Label>
+                <div className="border rounded-lg max-h-[400px] overflow-auto dark:border-[#2a2a2a]">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>Stock</TableHead>
+                        <TableHead>Status</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {loading ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center text-muted-foreground">
+                            <Loader2 className="w-4 h-4 animate-spin inline mr-2" />
+                            Loading...
+                          </TableCell>
+                        </TableRow>
+                      ) : ingredients.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={3} className="text-center text-muted-foreground">
+                            No ingredients found
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        ingredients.map((ing: any) => {
+                          const isSelected = (selectedIngredient?.ingredient_id || selectedIngredient?.id) === (ing.ingredient_id || ing.id);
+                          const stockQty = parseFloat(ing.stock_quantity || 0);
+                          const reorderLevel = parseFloat(ing.re_order_level || 0);
+                          const isLowStock = stockQty <= reorderLevel;
+                          const isWarning = stockQty <= reorderLevel * 1.5;
+                          
+                          return (
+                            <TableRow
+                              key={ing.ingredient_id || ing.id}
+                              onClick={() => {
+                                setSelectedIngredient(ing);
+                                setRestockAmount('');
+                              }}
+                              className={`cursor-pointer transition-colors ${
+                                isSelected 
+                                  ? 'bg-primary/10 dark:bg-primary/20 border-l-2 border-l-primary' 
+                                  : 'hover:bg-muted dark:hover:bg-[#1a1a1a]'
+                              }`}
+                            >
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2">
+                                  <Package className="h-4 w-4 text-muted-foreground" />
+                                  {ing.ingredient_name}
+                                </div>
+                              </TableCell>
+                              <TableCell>
+                                <span className="font-semibold">{stockQty.toLocaleString()}</span>
+                                <span className="text-xs text-muted-foreground ml-1">{ing.unit}</span>
+                              </TableCell>
+                              <TableCell>
+                                {isLowStock ? (
+                                  <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Low
+                                  </Badge>
+                                ) : isWarning ? (
+                                  <Badge variant="outline" className="flex items-center gap-1 w-fit bg-yellow-100 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700">
+                                    <AlertCircle className="h-3 w-3" />
+                                    Warning
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="flex items-center gap-1 w-fit bg-green-100 dark:bg-green-900/20 text-green-800 dark:text-green-200 border-green-300 dark:border-green-700">
+                                    <CheckCircle className="h-3 w-3" />
+                                    Good
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
                 </div>
-              )}
+              </div>
+
+              {/* Restock Form */}
+              <div className="space-y-4">
+                {selectedIngredient ? (
+                  <>
+                    <div className="space-y-3">
+                      <div>
+                        <Label className="text-sm font-medium flex items-center gap-2 mb-2">
+                          <Info className="h-4 w-4" />
+                          Selected Ingredient
+                        </Label>
+                        <div className="p-3 border rounded-lg bg-muted/50 dark:bg-[#1a1a1a] dark:border-[#2a2a2a]">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-semibold">{selectedIngredient.ingredient_name}</p>
+                              <p className="text-xs text-muted-foreground">ID: #{selectedIngredient.ingredient_id || selectedIngredient.id}</p>
+                            </div>
+                            <Package className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                        </div>
+                      </div>
+
+                      <div>
+                        <Label className="text-sm font-medium mb-2">Current Stock</Label>
+                        <div className="p-3 border rounded-lg bg-background dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-2xl font-bold">
+                                {(parseFloat(selectedIngredient.stock_quantity) || 0).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{selectedIngredient.unit}</p>
+                            </div>
+                            {(() => {
+                              const stockQty = parseFloat(selectedIngredient.stock_quantity || 0);
+                              const reorderLevel = parseFloat(selectedIngredient.re_order_level || 0);
+                              const isLowStock = stockQty <= reorderLevel;
+                              const isWarning = stockQty <= reorderLevel * 1.5;
+                              
+                              if (isLowStock) {
+                                return <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />;
+                              } else if (isWarning) {
+                                return <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />;
+                              } else {
+                                return <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />;
+                              }
+                            })()}
+                          </div>
+                          <div className="mt-2 pt-2 border-t dark:border-[#2a2a2a]">
+                            <p className="text-xs text-muted-foreground">
+                              Re-order Level: <span className="font-semibold">{parseFloat(selectedIngredient.re_order_level || 0).toLocaleString()} {selectedIngredient.unit}</span>
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="restock_amount" className="text-sm font-medium flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4" />
+                          Adjustment Amount *
+                        </Label>
+                        <Input
+                          id="restock_amount"
+                          type="number"
+                          value={restockAmount}
+                          onChange={(e) => setRestockAmount(e.target.value)}
+                          placeholder="+10 or -5"
+                          disabled={formLoading}
+                          className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a]"
+                        />
+                        <p className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Info className="h-3 w-3" />
+                          Enter positive to increase, negative to decrease stock
+                        </p>
+                      </div>
+
+                      {restockAmount && !isNaN(parseFloat(restockAmount)) && (
+                        <div className="p-4 border rounded-lg bg-muted/50 dark:bg-[#1a1a1a] dark:border-[#2a2a2a]">
+                          <Label className="text-xs text-muted-foreground mb-2 block">New Stock After Adjustment</Label>
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="text-2xl font-bold">
+                                {Math.max(0, (parseFloat(selectedIngredient.stock_quantity) || 0) + parseFloat(restockAmount)).toLocaleString()}
+                              </p>
+                              <p className="text-xs text-muted-foreground">{selectedIngredient.unit}</p>
+                            </div>
+                            {(() => {
+                              const newStock = Math.max(0, (parseFloat(selectedIngredient.stock_quantity) || 0) + parseFloat(restockAmount));
+                              const reorderLevel = parseFloat(selectedIngredient.re_order_level || 0);
+                              const isLowStock = newStock <= reorderLevel;
+                              const isWarning = newStock <= reorderLevel * 1.5;
+                              
+                              if (isLowStock) {
+                                return <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />;
+                              } else if (isWarning) {
+                                return <AlertCircle className="h-6 w-6 text-yellow-600 dark:text-yellow-400" />;
+                              } else {
+                                return <CheckCircle className="h-6 w-6 text-green-600 dark:text-green-400" />;
+                              }
+                            })()}
+                          </div>
+                          {parseFloat(restockAmount) < 0 && Math.max(0, (parseFloat(selectedIngredient.stock_quantity) || 0) + parseFloat(restockAmount)) === 0 && (
+                            <p className="text-xs text-red-600 dark:text-red-400 mt-2 flex items-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              Warning: This will set stock to zero
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full min-h-[300px] text-center p-6 border rounded-lg border-dashed dark:border-[#2a2a2a]">
+                    <Package className="h-12 w-12 text-muted-foreground mb-3" />
+                    <p className="text-sm font-medium mb-1">No Ingredient Selected</p>
+                    <p className="text-xs text-muted-foreground">Select an ingredient from the list to restock</p>
+                  </div>
+                )}
+              </div>
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => {
-                setRestockDialogOpen(false);
-                setRestockAmount('');
-              }} disabled={formLoading}>
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setRestockDialogOpen(false);
+                  setRestockAmount('');
+                }} 
+                disabled={formLoading}
+                className="dark:border-[#2a2a2a]"
+              >
                 Cancel
               </Button>
-              <Button onClick={handleConfirmRestock} disabled={formLoading || !restockAmount}>
+              <Button 
+                onClick={handleConfirmRestock} 
+                disabled={formLoading || !restockAmount || !selectedIngredient}
+                className="dark:bg-primary dark:hover:bg-primary/90"
+              >
                 {formLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Updating...
                   </>
                 ) : (
-                  'Update Stock'
+                  <>
+                    <PackagePlus className="w-4 h-4 mr-2" />
+                    Update Stock
+                  </>
                 )}
               </Button>
             </DialogFooter>
