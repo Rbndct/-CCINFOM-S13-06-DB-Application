@@ -38,7 +38,7 @@ import {
 import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { couplesAPI, dietaryRestrictionsAPI } from '@/api';
+import { couplesAPI, dietaryRestrictionsAPI, guestsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
 import { useDateFormat } from '@/context/DateFormatContext';
@@ -212,7 +212,30 @@ const CoupleDetail = () => {
   const fetchWeddings = async () => {
     try {
       const response = await couplesAPI.getWeddings(id!);
-      setWeddings(response.data || []);
+      const weddingsData = response.data || [];
+      
+      // Fetch actual guest counts for each wedding
+      const weddingsWithGuestCounts = await Promise.all(weddingsData.map(async (wedding: any) => {
+        try {
+          const guestsResponse = await guestsAPI.getAll({ wedding_id: wedding.id || wedding.wedding_id });
+          const guestCount = (guestsResponse.data || []).length;
+          return {
+            ...wedding,
+            guestCount: guestCount,
+            guest_count: guestCount
+          };
+        } catch (e) {
+          // Fallback to existing guest_count if fetch fails
+          const fallbackCount = wedding.guest_count || wedding.guestCount || 0;
+          return {
+            ...wedding,
+            guestCount: fallbackCount,
+            guest_count: fallbackCount
+          };
+        }
+      }));
+      
+      setWeddings(weddingsWithGuestCounts);
     } catch (error: any) {
       console.error('Error fetching weddings:', error);
     }
@@ -276,12 +299,12 @@ const CoupleDetail = () => {
     
     // If no restrictions selected and "None" ID not found, show error
     if (finalRestrictionIds.length === 0) {
-      toast({
-        title: 'Validation Error',
+        toast({
+          title: 'Validation Error',
         description: 'Unable to assign default restriction. Please try again.',
-        variant: 'destructive',
-      });
-      return;
+          variant: 'destructive',
+        });
+        return;
     }
 
     setPreferenceLoading(true);
@@ -740,7 +763,7 @@ const CoupleDetail = () => {
                       </div>
                       <div className="flex items-center gap-2 text-sm">
                         <Users className="w-4 h-4 text-muted-foreground" />
-                        <span>{wedding.guestCount} guests</span>
+                        <span>{wedding.guestCount ?? wedding.guest_count ?? 0} guests</span>
                       </div>
                       <div className="text-sm font-semibold">
                         {formatCurrency(wedding.totalCost || 0)}
