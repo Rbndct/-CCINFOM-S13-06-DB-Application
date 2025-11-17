@@ -74,21 +74,33 @@ router.get('/:id', async (req, res) => {
 
 // POST /ingredients - create new ingredient
 router.post('/', async (req, res) => {
+  const connection = await promisePool.getConnection();
   try {
-    const { ingredient_name, unit, stock_quantity, re_order_level, unit_cost } = req.body;
+    await connection.beginTransaction();
+    
+    const { ingredient_name, unit, stock_quantity, re_order_level } = req.body;
     if (!ingredient_name || !unit || stock_quantity === undefined || re_order_level === undefined) {
+      await connection.rollback();
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    const [result] = await promisePool.query(
-      `INSERT INTO ingredient (ingredient_name, unit, stock_quantity, re_order_level, unit_cost) VALUES (?, ?, ?, ?, ?)`,
-      [ingredient_name, unit, stock_quantity, re_order_level, unit_cost || 0]
+    // Get the next ingredient_id since it's not AUTO_INCREMENT
+    const [maxIdRows] = await connection.query(
+      `SELECT COALESCE(MAX(ingredient_id), 0) as max_id FROM ingredient`
     );
+    const nextId = (maxIdRows[0].max_id || 0) + 1;
+
+    const [result] = await connection.query(
+      `INSERT INTO ingredient (ingredient_id, ingredient_name, unit, stock_quantity, re_order_level, unit_cost) VALUES (?, ?, ?, ?, ?, 0)`,
+      [nextId, ingredient_name, unit, stock_quantity, re_order_level]
+    );
+
+    await connection.commit();
 
     res.status(201).json({
       success: true,
       data: {
-        ingredient_id: result.insertId,
+        ingredient_id: nextId,
         ingredient_name,
         unit,
         stock_quantity,
@@ -96,8 +108,11 @@ router.post('/', async (req, res) => {
       }
     });
   } catch (error) {
+    await connection.rollback();
     console.error('Error creating ingredient:', error);
     res.status(500).json({ success: false, error: 'Failed to create ingredient', message: error.message });
+  } finally {
+    connection.release();
   }
 });
 
@@ -105,11 +120,11 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { ingredient_name, unit, stock_quantity, re_order_level, unit_cost } = req.body;
+    const { ingredient_name, unit, stock_quantity, re_order_level } = req.body;
 
     const [result] = await promisePool.query(
-      `UPDATE ingredient SET ingredient_name = ?, unit = ?, stock_quantity = ?, re_order_level = ?, unit_cost = ? WHERE ingredient_id = ?`,
-      [ingredient_name, unit, stock_quantity, re_order_level, unit_cost || 0, id]
+      `UPDATE ingredient SET ingredient_name = ?, unit = ?, stock_quantity = ?, re_order_level = ? WHERE ingredient_id = ?`,
+      [ingredient_name, unit, stock_quantity, re_order_level, id]
     );
 
     if (result.affectedRows === 0) {

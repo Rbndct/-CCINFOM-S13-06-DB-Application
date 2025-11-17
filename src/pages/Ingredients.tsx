@@ -19,8 +19,7 @@ import {
   TrendingDown,
   PackagePlus,
   AlertCircle,
-  Info,
-  DollarSign
+  Info
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -86,8 +85,7 @@ const Ingredients = () => {
     ingredient_name: '',
     unit: '',
     stock_quantity: '',
-    re_order_level: '',
-    unit_cost: ''
+    re_order_level: ''
   });
   const [restockAmount, setRestockAmount] = useState('');
   const [formLoading, setFormLoading] = useState(false);
@@ -151,8 +149,7 @@ const Ingredients = () => {
       ingredient_name: ingredient.ingredient_name || '',
       unit: ingredient.unit || '',
       stock_quantity: stockQty,
-      re_order_level: calculatedReorder, // Auto-calculated, not editable
-      unit_cost: (ingredient.unit_cost || 0).toString()
+      re_order_level: calculatedReorder // Auto-calculated, not editable
     });
     setEditDialogOpen(true);
   };
@@ -203,8 +200,7 @@ const Ingredients = () => {
         ingredient_name: formData.ingredient_name.trim(),
         unit: formData.unit.trim(),
         stock_quantity: stockQty,
-        re_order_level: calculatedReorderLevel,
-        unit_cost: parseFloat(formData.unit_cost) || 0
+        re_order_level: calculatedReorderLevel
       };
 
       if (selectedIngredient) {
@@ -232,8 +228,7 @@ const Ingredients = () => {
         ingredient_name: '',
         unit: '',
         stock_quantity: '',
-        re_order_level: '', // This will be auto-calculated
-        unit_cost: ''
+        re_order_level: '' // This will be auto-calculated
       });
       setSelectedIngredient(null);
     } catch (error: any) {
@@ -890,7 +885,7 @@ const Ingredients = () => {
                 <Label htmlFor="ingredient_name">Ingredient Name *</Label>
                 <Input
                   id="ingredient_name"
-                  value={formData.ingredient_name}
+                  value={formData.ingredient_name || ''}
                   onChange={(e) => setFormData({ ...formData, ingredient_name: e.target.value })}
                   placeholder="e.g., Flour, Sugar, Salt"
                   disabled={formLoading}
@@ -899,8 +894,8 @@ const Ingredients = () => {
               <div className="space-y-2">
                 <Label htmlFor="unit">Unit *</Label>
                 <Select
-                  value={formData.unit}
-                  onValueChange={(value) => setFormData({ ...formData, unit: value })}
+                  value={formData.unit || ''}
+                  onValueChange={(value) => setFormData({ ...formData, unit: value || '' })}
                   disabled={formLoading}
                 >
                   <SelectTrigger id="unit" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
@@ -928,7 +923,7 @@ const Ingredients = () => {
                   type="number"
                   min="0"
                   step="0.01"
-                  value={formData.stock_quantity}
+                  value={formData.stock_quantity || ''}
                   onChange={(e) => {
                     const stockQty = e.target.value;
                     const calculatedReorder = stockQty ? Math.max(1, Math.floor(parseFloat(stockQty) * 0.2)).toString() : '';
@@ -953,27 +948,6 @@ const Ingredients = () => {
                 )}
               </div>
               
-              {/* Unit Cost (for menu item cost calculation) */}
-              <div className="space-y-2 border-t pt-4 dark:border-[#2a2a2a]">
-                <Label htmlFor="unit_cost" className="flex items-center gap-2">
-                  <DollarSign className="h-4 w-4" />
-                  Unit Cost (PHP)
-                </Label>
-                <Input
-                  id="unit_cost"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.unit_cost}
-                  onChange={(e) => setFormData({ ...formData, unit_cost: e.target.value })}
-                  placeholder="0.00"
-                  disabled={formLoading}
-                  className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Cost per unit - used to calculate menu item costs
-                </p>
-              </div>
             </div>
             <DialogFooter>
               <Button 
@@ -985,8 +959,7 @@ const Ingredients = () => {
                     ingredient_name: '',
                     unit: '',
                     stock_quantity: '',
-                    re_order_level: '',
-                    unit_cost: ''
+                    re_order_level: ''
                   });
                   setSelectedIngredient(null);
                 }}
