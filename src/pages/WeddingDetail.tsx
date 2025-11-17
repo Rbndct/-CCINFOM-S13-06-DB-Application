@@ -2406,13 +2406,66 @@ const WeddingDetail = () => {
 
   // Package assignment handler
   const handleAssignPackage = async (tableIdParam?: number, packageIdParam?: number) => {
-    const tableId = tableIdParam || (packageAssignTableId ? parseInt(packageAssignTableId) : null);
-    const packageId = packageIdParam || (packageAssignPackageId ? parseInt(packageAssignPackageId) : null);
+    // Ignore event objects that might be passed accidentally
+    if (tableIdParam && typeof tableIdParam === 'object' && 'target' in tableIdParam) {
+      tableIdParam = undefined;
+    }
+    if (packageIdParam && typeof packageIdParam === 'object' && 'target' in packageIdParam) {
+      packageIdParam = undefined;
+    }
     
-    if (!tableId || !packageId) {
+    // Safely extract table ID - ensure it's always a number
+    let tableId: number | null = null;
+    if (tableIdParam !== undefined && tableIdParam !== null && typeof tableIdParam === 'number') {
+      tableId = Number(tableIdParam);
+      if (isNaN(tableId)) tableId = null;
+    } else if (packageAssignTableId) {
+      // Handle both string and number cases, trim whitespace
+      const value = typeof packageAssignTableId === 'string' 
+        ? packageAssignTableId.trim() 
+        : String(packageAssignTableId).trim();
+      
+      if (value && value !== '') {
+        const parsed = parseInt(value, 10);
+        tableId = isNaN(parsed) ? null : parsed;
+      }
+    }
+    
+    // Safely extract package ID - ensure it's always a number
+    let packageId: number | null = null;
+    if (packageIdParam !== undefined && packageIdParam !== null && typeof packageIdParam === 'number') {
+      packageId = Number(packageIdParam);
+      if (isNaN(packageId)) packageId = null;
+    } else if (packageAssignPackageId) {
+      // Handle both string and number cases, trim whitespace
+      const value = typeof packageAssignPackageId === 'string' 
+        ? packageAssignPackageId.trim() 
+        : String(packageAssignPackageId).trim();
+      
+      if (value && value !== '') {
+        const parsed = parseInt(value, 10);
+        packageId = isNaN(parsed) ? null : parsed;
+      }
+    }
+    
+    // Debug logging
+    console.log('handleAssignPackage validation:', {
+      tableIdParam,
+      packageIdParam,
+      packageAssignTableId,
+      packageAssignPackageId,
+      extractedTableId: tableId,
+      extractedPackageId: packageId,
+      tableIdType: typeof tableId,
+      packageIdType: typeof packageId,
+      tableIdValid: tableId !== null && !isNaN(tableId) && tableId > 0,
+      packageIdValid: packageId !== null && !isNaN(packageId) && packageId > 0
+    });
+    
+    if (!tableId || !packageId || isNaN(tableId) || isNaN(packageId) || tableId <= 0 || packageId <= 0) {
       toast({
         title: 'Validation Error',
-        description: 'Please select both a table and a package',
+        description: `Please select both a table and a package. Current values: Table=${packageAssignTableId || 'none'}, Package=${packageAssignPackageId || 'none'}`,
         variant: 'destructive',
       });
       return;
@@ -2457,9 +2510,10 @@ const WeddingDetail = () => {
       });
       
       if (!table) {
+        console.error('Table not found:', { tableId, tableIdType: typeof tableId, tables: tables.map(t => ({ id: t.id, table_id: t.table_id })) });
         toast({
           title: 'Error',
-          description: `Table with ID ${tableId} not found. Please refresh the page.`,
+          description: `Table with ID ${tableId} (${typeof tableId}) not found. Please refresh the page.`,
           variant: 'destructive',
         });
         return;
@@ -2489,11 +2543,21 @@ const WeddingDetail = () => {
       }
       
       // Call API to assign package
-      await packagesAPI.assignToTable({
+      const assignResponse = await packagesAPI.assignToTable({
         wedding_id: parseInt(id || '0'),
         table_id: tableId,
         package_id: packageId
       });
+      
+      // Check if assignment was successful
+      if (assignResponse && assignResponse.data && !assignResponse.data.success && assignResponse.data.error) {
+        toast({
+          title: 'Error',
+          description: assignResponse.data.error || 'Failed to assign package',
+          variant: 'destructive',
+        });
+        return;
+      }
       
       // Refresh assignments - always fetch from API to ensure consistency
       const assignmentsResponse = await packagesAPI.getTableAssignments(id || '0');
@@ -5021,12 +5085,17 @@ const WeddingDetail = () => {
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-4 min-w-0">
+                    <div className="space-y-2 min-w-0">
                       <Label htmlFor="packageTableSelect">Table</Label>
                       <Select 
                         value={packageAssignTableId} 
-                        onValueChange={setPackageAssignTableId} 
+                        onValueChange={(value) => {
+                          // Ensure value is always a string
+                          const stringValue = String(value || '');
+                          console.log('Table Select changed:', { value, stringValue, type: typeof value });
+                          setPackageAssignTableId(stringValue);
+                        }} 
                         onOpenChange={(open) => {
                           if (!open) {
                             // Clear focus when dropdown closes to prevent stuck highlight
@@ -5040,20 +5109,27 @@ const WeddingDetail = () => {
                         }}
                         disabled={packageFormLoading || tables.length === 0}
                       >
-                        <SelectTrigger id="packageTableSelect" name="packageTableSelect" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
+                        <SelectTrigger id="packageTableSelect" name="packageTableSelect" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5] max-w-full">
                           <SelectValue placeholder="Select a table" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px] overflow-y-auto dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
                           {tables.map((table) => {
                             if (!table) return null;
                             const tableId = table.id || table.table_id;
+                            // Ensure tableId is a valid number
+                            if (!tableId || (typeof tableId !== 'number' && typeof tableId !== 'string')) {
+                              console.warn('Invalid table ID:', tableId, table);
+                              return null;
+                            }
+                            const tableIdStr = String(tableId);
                             const tableNum = table.tableNumber || table.table_number || 'Unknown';
                             const category = table.category || table.table_category || 'General';
                             const CategoryIcon = getTableCategoryIcon(category);
                             return (
                               <SelectItem 
-                                key={tableId || `table-${tableNum}`} 
-                                value={tableId ? tableId.toString() : `table-${tableNum}`}
+                                key={tableIdStr} 
+                                value={tableIdStr}
+                                textValue={`${tableNum} (${category})`}
                                 className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4] dark:hover:bg-[#1a1a1a]"
                               >
                                 <div className="flex items-center gap-2">
@@ -5066,12 +5142,15 @@ const WeddingDetail = () => {
                         </SelectContent>
                       </Select>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-2 min-w-0">
                       <Label htmlFor="packageSelectDropdown">Package</Label>
                       <Select 
                         value={packageAssignPackageId} 
                         onValueChange={(value) => {
-                          setPackageAssignPackageId(value);
+                          // Ensure value is always a string
+                          const stringValue = String(value || '');
+                          console.log('Package Select changed:', { value, stringValue, type: typeof value });
+                          setPackageAssignPackageId(stringValue);
                         }}
                         onOpenChange={(open) => {
                           if (!open) {
@@ -5086,7 +5165,7 @@ const WeddingDetail = () => {
                         }}
                         disabled={packageFormLoading || packages.length === 0}
                       >
-                        <SelectTrigger id="packageSelectDropdown" name="packageSelectDropdown" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
+                        <SelectTrigger id="packageSelectDropdown" name="packageSelectDropdown" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5] max-w-full">
                           <SelectValue placeholder="Select a package" />
                         </SelectTrigger>
                         <SelectContent className="max-h-[300px] overflow-y-auto dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
@@ -5118,6 +5197,7 @@ const WeddingDetail = () => {
                               <SelectItem 
                                 key={pkgId || `pkg-${pkg.package_name || pkg.packageName}`} 
                                 value={pkgValue}
+                                textValue={pkg.package_name || pkg.packageName || 'Unknown'}
                                 className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4] dark:hover:bg-[#1a1a1a]"
                               >
                                 <div className="flex flex-col gap-1 py-1">
@@ -5129,8 +5209,8 @@ const WeddingDetail = () => {
                                     <span className="font-medium">
                                       {pkg.package_name || pkg.packageName || 'Unknown'}
                                     </span>
-                                    <Badge variant="outline" className="text-xs">ID: {pkgId}</Badge>
-                                    <PackageTypeBadge type={pkg.package_type || pkg.packageType || 'Standard'} className="text-xs" />
+                                    <Badge variant="outline" className="text-xs flex-shrink-0">ID: {pkgId}</Badge>
+                                    <PackageTypeBadge type={pkg.package_type || pkg.packageType || 'Standard'} className="text-xs flex-shrink-0" />
                                   </div>
                                   {packageRestrictions.length > 0 && (
                                     <div className="flex items-center gap-1 flex-wrap ml-9">
@@ -5141,7 +5221,7 @@ const WeddingDetail = () => {
                                           <Badge 
                                             key={idx} 
                                             variant="outline" 
-                                            className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
+                                            className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1 flex-shrink-0`}
                                           >
                                             <Icon className="h-3 w-3" />
                                             {r.restriction_name}
@@ -5149,7 +5229,7 @@ const WeddingDetail = () => {
                                         );
                                       })}
                                       {packageRestrictions.length > 2 && (
-                                        <Badge variant="outline" className="text-xs dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700">
+                                        <Badge variant="outline" className="text-xs dark:bg-gray-800 dark:text-gray-200 dark:border-gray-700 flex-shrink-0">
                                           +{packageRestrictions.length - 2} more
                                         </Badge>
                                       )}
@@ -5283,7 +5363,18 @@ const WeddingDetail = () => {
                     return null;
                   })()}
                   
-                  <Button onClick={handleAssignPackage} disabled={packageFormLoading || tables.length === 0 || packages.length === 0}>
+                  {/* Debug display - remove after fixing */}
+                  {(packageAssignTableId || packageAssignPackageId) && (
+                    <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs">
+                      <strong>Debug:</strong> Table ID: "{packageAssignTableId}" (type: {typeof packageAssignTableId}), 
+                      Package ID: "{packageAssignPackageId}" (type: {typeof packageAssignPackageId})
+                    </div>
+                  )}
+                  
+                  <Button onClick={(e) => {
+                    e.preventDefault();
+                    handleAssignPackage();
+                  }} disabled={packageFormLoading || tables.length === 0 || packages.length === 0}>
                     {packageFormLoading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
