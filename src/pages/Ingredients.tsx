@@ -760,9 +760,9 @@ const Ingredients = () => {
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Unit</Label>
-                    <p className="font-semibold">
+                    <div className="font-semibold">
                       <Badge variant="outline">{selectedIngredient.unit}</Badge>
-                    </p>
+                    </div>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Stock Quantity</Label>

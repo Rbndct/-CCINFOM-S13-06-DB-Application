@@ -252,6 +252,10 @@ const WeddingDetail = () => {
   const [selectedPackage, setSelectedPackage] = useState<any>(null);
   const [deletePackageAssignmentOpen, setDeletePackageAssignmentOpen] = useState(false);
   const [selectedPackageAssignment, setSelectedPackageAssignment] = useState<any>(null);
+  const [viewMenuItemOpen, setViewMenuItemOpen] = useState(false);
+  const [selectedMenuItem, setSelectedMenuItem] = useState<any>(null);
+  const [selectedMenuItemRecipe, setSelectedMenuItemRecipe] = useState<any[]>([]);
+  const [menuItemLoading, setMenuItemLoading] = useState(false);
   const [allocationFormData, setAllocationFormData] = useState({
     inventory_id: '',
     quantity_used: '',
@@ -2000,14 +2004,34 @@ const WeddingDetail = () => {
     
     setAllocationFormLoading(true);
     try {
-      const rentalCostValue = allocationFormData.unit_rental_cost || allocationFormData.rental_cost
-        ? parseFloat(allocationFormData.unit_rental_cost || allocationFormData.rental_cost) 
-        : (selectedItem.unit_rental_cost || selectedItem.rental_cost);
+      // Always use the rental cost from the selected inventory item
+      console.log('[FRONTEND] Selected item for allocation:', {
+        inventory_id: selectedItem.inventory_id,
+        item_name: selectedItem.item_name,
+        unit_rental_cost: selectedItem.unit_rental_cost,
+        rental_cost: selectedItem.rental_cost,
+        unit_rental_cost_type: typeof selectedItem.unit_rental_cost,
+        rental_cost_type: typeof selectedItem.rental_cost
+      });
+      
+      // Parse rental cost - handle both number and string types
+      let rentalCost = 0;
+      if (selectedItem.unit_rental_cost !== undefined && selectedItem.unit_rental_cost !== null) {
+        rentalCost = typeof selectedItem.unit_rental_cost === 'number' 
+          ? selectedItem.unit_rental_cost 
+          : parseFloat(String(selectedItem.unit_rental_cost)) || 0;
+      } else if (selectedItem.rental_cost !== undefined && selectedItem.rental_cost !== null) {
+        rentalCost = typeof selectedItem.rental_cost === 'number' 
+          ? selectedItem.rental_cost 
+          : parseFloat(String(selectedItem.rental_cost)) || 0;
+      }
+      
+      console.log('[FRONTEND] Parsed rental cost:', rentalCost);
       
       // Ensure rental_cost is a valid number
-      const rentalCost = (rentalCostValue && !isNaN(rentalCostValue)) 
-        ? rentalCostValue 
-        : (selectedItem.unit_rental_cost || selectedItem.rental_cost || 0);
+      if (isNaN(rentalCost) || rentalCost < 0) {
+        throw new Error(`Invalid rental cost from inventory item: ${rentalCost}. Item: ${selectedItem.item_name}`);
+      }
       
       await inventoryAllocationAPI.create({
         wedding_id: parseInt(id || '0'),
@@ -2023,9 +2047,35 @@ const WeddingDetail = () => {
       
       // Refresh allocations
       const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id || '0');
-      if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
-        setInventoryAllocations(allocationsResponse.data || []);
+      console.log('[FRONTEND] Allocation response:', allocationsResponse);
+      
+      // Handle different response structures
+      let allocations = [];
+      if (allocationsResponse) {
+        if (allocationsResponse.success && allocationsResponse.data) {
+          allocations = allocationsResponse.data || [];
+        } else if (Array.isArray(allocationsResponse)) {
+          allocations = allocationsResponse;
+        } else if (allocationsResponse.data && Array.isArray(allocationsResponse.data)) {
+          allocations = allocationsResponse.data;
+        }
       }
+      
+      console.log('[FRONTEND] Received allocations:', allocations);
+      if (allocations.length > 0) {
+        console.log('[FRONTEND] Sample allocation:', {
+          allocation_id: allocations[0].allocation_id,
+          unit_rental_cost: allocations[0].unit_rental_cost,
+          rental_cost: allocations[0].rental_cost,
+          total_cost: allocations[0].total_cost,
+          types: {
+            unit_rental_cost: typeof allocations[0].unit_rental_cost,
+            rental_cost: typeof allocations[0].rental_cost,
+            total_cost: typeof allocations[0].total_cost
+          }
+        });
+      }
+      setInventoryAllocations(allocations);
       
       // Refresh wedding data to update costs
       const weddingResponse = await weddingsAPI.getById(id || '0');
@@ -2048,8 +2098,8 @@ const WeddingDetail = () => {
     setAllocationFormData({
       inventory_id: allocation.inventory_id?.toString() || '',
       quantity_used: allocation.quantity_used?.toString() || '',
-      unit_rental_cost: (allocation.unit_rental_cost || allocation.rental_cost)?.toString() || '',
-      rental_cost: allocation.rental_cost?.toString() || ''
+      unit_rental_cost: '',
+      rental_cost: ''
     });
     setAllocationFormErrors({});
     setEditAllocationOpen(true);
@@ -2084,15 +2134,29 @@ const WeddingDetail = () => {
     
     setAllocationFormLoading(true);
     try {
+      // Find the inventory item to get its rental cost
+      const selectedItem = availableInventoryItems.find(item => 
+        item.inventory_id?.toString() === selectedAllocation.inventory_id?.toString()
+      );
+      
+      if (!selectedItem) {
+        throw new Error('Inventory item not found');
+      }
+      
+      // Always use the rental cost from the inventory item
+      const rentalCost = selectedItem.unit_rental_cost || selectedItem.rental_cost || 0;
+      
+      if (isNaN(rentalCost) || rentalCost < 0) {
+        throw new Error('Invalid rental cost from inventory item');
+      }
+      
       const updateData: any = {};
       if (allocationFormData.quantity_used) {
         updateData.quantity_used = parseInt(allocationFormData.quantity_used);
       }
-      if (allocationFormData.unit_rental_cost || allocationFormData.rental_cost) {
-        const cost = parseFloat(allocationFormData.unit_rental_cost || allocationFormData.rental_cost);
-        updateData.unit_rental_cost = cost;
-        updateData.rental_cost = cost; // Keep for backward compatibility
-      }
+      // Always update rental cost from inventory item
+      updateData.unit_rental_cost = rentalCost;
+      updateData.rental_cost = rentalCost; // Keep for backward compatibility
       
       await inventoryAllocationAPI.update(selectedAllocation.allocation_id, updateData);
       
@@ -3016,14 +3080,70 @@ const WeddingDetail = () => {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Payment Status</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="mb-2">{getPaymentStatusBadge(wedding?.paymentStatus || wedding?.payment_status || 'pending')}</div>
-              <p className="text-xs text-muted-foreground">
-                Total: {formatCurrency((wedding?.equipmentRentalCost || wedding?.equipment_rental_cost || wedding?.totalCost || wedding?.total_cost || 0) as number)}
-              </p>
+              {(() => {
+                // Calculate total package cost (package price * quantity served per package)
+                // Group by package ID to avoid double counting
+                const packageCostMap = new Map<number, { price: number; quantity: number }>();
+                
+                tablePackageAssignments.forEach(assignment => {
+                  const packageId = assignment.packageId || assignment.package_id;
+                  if (!packageId) return;
+                  
+                  const pkg = packages.find(p => (p.package_id || p.id) === packageId);
+                  if (!pkg) return;
+                  
+                  const packagePrice = typeof pkg.selling_price === 'number' 
+                    ? pkg.selling_price 
+                    : parseFloat(pkg.selling_price || pkg.package_price || pkg.packagePrice || '0') || 0;
+                  
+                  // Get table ID for this assignment
+                  const tableId = assignment.tableId || assignment.table_id;
+                  if (!tableId) return;
+                  
+                  // Count guests at this table
+                  const tableGuests = guests.filter(g => g && (g.table_id || g.tableId) === tableId);
+                  const guestCount = tableGuests.length;
+                  
+                  // Accumulate quantity for this package
+                  if (!packageCostMap.has(packageId)) {
+                    packageCostMap.set(packageId, { price: packagePrice, quantity: 0 });
+                  }
+                  const packageData = packageCostMap.get(packageId)!;
+                  packageData.quantity += guestCount;
+                });
+                
+                // Calculate total package cost
+                const totalPackageCost = Array.from(packageCostMap.values()).reduce((total, pkgData) => {
+                  return total + (pkgData.price * pkgData.quantity);
+                }, 0);
+                
+                // Calculate total inventory cost
+                const totalInventoryCost = inventoryAllocations.reduce((total, allocation) => {
+                  const cost = typeof allocation.total_cost === 'number' 
+                    ? allocation.total_cost 
+                    : parseFloat(String(allocation.total_cost || '0')) || 0;
+                  return total + cost;
+                }, 0);
+                
+                // Combined total
+                const combinedTotal = totalPackageCost + totalInventoryCost;
+                
+                return (
+                  <>
+                    <div className="text-2xl font-bold mb-1">
+                      {formatCurrency(combinedTotal)}
+                    </div>
+                    <div className="text-xs text-muted-foreground space-y-0.5">
+                      <div>Packages: {formatCurrency(totalPackageCost)}</div>
+                      <div>Inventory: {formatCurrency(totalInventoryCost)}</div>
+                    </div>
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
@@ -5704,7 +5824,29 @@ const WeddingDetail = () => {
                                 <TableCell className="font-medium">
                                   <div className="flex items-center gap-2">
                                     <Utensils className="h-4 w-4 text-muted-foreground" />
-                                    {item.menu_name || item.name}
+                                    <button
+                                      onClick={async () => {
+                                        setMenuItemLoading(true);
+                                        setSelectedMenuItem(item);
+                                        try {
+                                          const response = await menuItemsAPI.getById(itemId);
+                                          if (response && response.data) {
+                                            setSelectedMenuItem(response.data);
+                                            setSelectedMenuItemRecipe(response.data.recipe || []);
+                                          }
+                                        } catch (error) {
+                                          console.error('Error fetching menu item details:', error);
+                                          setSelectedMenuItem(item);
+                                          setSelectedMenuItemRecipe([]);
+                                        } finally {
+                                          setMenuItemLoading(false);
+                                          setViewMenuItemOpen(true);
+                                        }
+                                      }}
+                                      className="text-left hover:underline cursor-pointer font-medium"
+                                    >
+                                      {item.menu_name || item.name}
+                                    </button>
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -5785,6 +5927,40 @@ const WeddingDetail = () => {
                                     <span className="text-xs text-muted-foreground">Not used</span>
                                   )}
                                 </TableCell>
+                                <TableCell>
+                                  <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                      <Button variant="ghost" className="h-8 w-8 p-0">
+                                        <MoreHorizontal className="h-4 w-4" />
+                                      </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                      <DropdownMenuItem
+                                        onClick={async () => {
+                                          setMenuItemLoading(true);
+                                          setSelectedMenuItem(item);
+                                          try {
+                                            const response = await menuItemsAPI.getById(itemId);
+                                            if (response && response.data) {
+                                              setSelectedMenuItem(response.data);
+                                              setSelectedMenuItemRecipe(response.data.recipe || []);
+                                            }
+                                          } catch (error) {
+                                            console.error('Error fetching menu item details:', error);
+                                            setSelectedMenuItem(item);
+                                            setSelectedMenuItemRecipe([]);
+                                          } finally {
+                                            setMenuItemLoading(false);
+                                            setViewMenuItemOpen(true);
+                                          }
+                                        }}
+                                      >
+                                        <Eye className="mr-2 h-4 w-4" />
+                                        View Details
+                                      </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                  </DropdownMenu>
+                                </TableCell>
                               </TableRow>
                             );
                           })}
@@ -5834,6 +6010,7 @@ const WeddingDetail = () => {
                             <TableHead>Package Name</TableHead>
                             <TableHead>Type</TableHead>
                             <TableHead className="text-right">Price</TableHead>
+                            <TableHead className="text-right">Quantity Served</TableHead>
                             <TableHead>Menu Items</TableHead>
                             <TableHead>Assigned To Tables</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
@@ -5856,6 +6033,12 @@ const WeddingDetail = () => {
                               })
                               .filter(Boolean);
                             
+                            // Calculate quantity served (total guests at tables using this package)
+                            const quantityServed = tablesUsingPackage.reduce((total, table) => {
+                              const tableGuests = guests.filter(g => g && g.table_id === table.table_id);
+                              return total + tableGuests.length;
+                            }, 0);
+                            
                             return (
                               <TableRow key={pkgId}>
                                 <TableCell className="font-medium text-xs text-muted-foreground">#{pkgId}</TableCell>
@@ -5868,7 +6051,21 @@ const WeddingDetail = () => {
                                 <TableCell>
                                   <PackageTypeBadge type={pkg.package_type || pkg.packageType || 'Standard'} />
                                 </TableCell>
-                                <TableCell className="text-right">{formatCurrency(pkg.selling_price || pkg.package_price || pkg.packagePrice || 0)}</TableCell>
+                                <TableCell className="text-right">
+                                  {formatCurrency(
+                                    typeof pkg.selling_price === 'number' 
+                                      ? pkg.selling_price 
+                                      : parseFloat(pkg.selling_price || pkg.package_price || pkg.packagePrice || '0') || 0
+                                  )}
+                                </TableCell>
+                                <TableCell className="text-right">
+                                  <div className="flex flex-col items-end gap-0.5">
+                                    <span className="font-semibold">{quantityServed}</span>
+                                    <span className="text-xs text-muted-foreground">
+                                      {tablesUsingPackage.length} table{tablesUsingPackage.length !== 1 ? 's' : ''}
+                                    </span>
+                                  </div>
+                                </TableCell>
                                 <TableCell>
                                   <div className="flex flex-wrap gap-1">
                                     {menuItemsList.length > 0 ? (
@@ -6074,10 +6271,31 @@ const WeddingDetail = () => {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {formatCurrency((typeof (allocation.unit_rental_cost || allocation.rental_cost) === 'number' ? (allocation.unit_rental_cost || allocation.rental_cost) : parseFloat((allocation.unit_rental_cost || allocation.rental_cost || '0').toString()) || 0))}
+                              {(() => {
+                                const cost = allocation.unit_rental_cost ?? allocation.rental_cost ?? 0;
+                                const numCost = typeof cost === 'number' ? cost : parseFloat(String(cost)) || 0;
+                                return formatCurrency(numCost);
+                              })()}
                             </TableCell>
                             <TableCell className="font-semibold">
-                              {formatCurrency(((allocation.quantity_used || 0) * (typeof (allocation.unit_rental_cost || allocation.rental_cost) === 'number' ? (allocation.unit_rental_cost || allocation.rental_cost) : parseFloat((allocation.unit_rental_cost || allocation.rental_cost || '0').toString()) || 0)))}
+                              {(() => {
+                                // Use total_cost if available, otherwise calculate it
+                                let totalCost = 0;
+                                if (allocation.total_cost !== undefined && allocation.total_cost !== null) {
+                                  totalCost = typeof allocation.total_cost === 'number' 
+                                    ? allocation.total_cost 
+                                    : parseFloat(String(allocation.total_cost)) || 0;
+                                } else {
+                                  // Fallback calculation
+                                  const qty = typeof allocation.quantity_used === 'number' 
+                                    ? allocation.quantity_used 
+                                    : parseInt(String(allocation.quantity_used)) || 0;
+                                  const cost = allocation.unit_rental_cost ?? allocation.rental_cost ?? 0;
+                                  const unitCost = typeof cost === 'number' ? cost : parseFloat(String(cost)) || 0;
+                                  totalCost = qty * unitCost;
+                                }
+                                return formatCurrency(totalCost);
+                              })()}
                             </TableCell>
                             <TableCell>
                               <DropdownMenu>
@@ -6793,17 +7011,6 @@ const WeddingDetail = () => {
                   value={allocationFormData.inventory_id} 
                   onValueChange={(val) => {
                     setAllocationFormData({ ...allocationFormData, inventory_id: val });
-                    const selectedItem = availableInventoryItems.find(item => 
-                      item.inventory_id?.toString() === val
-                    );
-                    if (selectedItem) {
-                      setAllocationFormData(prev => ({
-                        ...prev,
-                        inventory_id: val,
-                        unit_rental_cost: (selectedItem.unit_rental_cost || selectedItem.rental_cost)?.toString() || '',
-                        rental_cost: selectedItem.rental_cost?.toString() || ''
-                      }));
-                    }
                   }}
                   disabled={allocationFormLoading}
                 >
@@ -6867,12 +7074,16 @@ const WeddingDetail = () => {
                   );
                   if (selectedItem) {
                     const qty = parseInt(allocationFormData.quantity_used) || 0;
-                    const cost = parseFloat(allocationFormData.unit_rental_cost || allocationFormData.rental_cost || (selectedItem.unit_rental_cost || selectedItem.rental_cost)?.toString() || '0');
+                    // Always use the rental cost from the inventory item
+                    const cost = selectedItem.unit_rental_cost || selectedItem.rental_cost || 0;
                     const total = qty * cost;
                     const stockAvailable = selectedItem.quantity_available || 0;
                     const canAllocate = qty <= stockAvailable;
                     return (
                       <div className="space-y-1">
+                        <p className="text-sm text-muted-foreground">
+                          Rental cost (per unit): <strong>{formatCurrency(cost)}</strong>
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           Total cost: <strong>{formatCurrency(total)}</strong> ({qty} × {formatCurrency(cost)})
                         </p>
@@ -6886,22 +7097,6 @@ const WeddingDetail = () => {
                   }
                   return null;
                 })()}
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="allocation_rental_cost">Rental Cost (per unit) *</Label>
-                <Input
-                  id="allocation_rental_cost"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={allocationFormData.unit_rental_cost || allocationFormData.rental_cost}
-                  onChange={(e) => setAllocationFormData({ ...allocationFormData, unit_rental_cost: e.target.value, rental_cost: e.target.value })}
-                  disabled={allocationFormLoading}
-                  placeholder="Enter rental cost per unit"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Leave empty to use default rental cost from inventory item
-                </p>
               </div>
             </div>
             <DialogFooter>
@@ -6972,28 +7167,26 @@ const WeddingDetail = () => {
                     return null;
                   })()}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="edit_allocation_rental_cost">Rental Cost (per unit) *</Label>
-                  <Input
-                    id="edit_allocation_rental_cost"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={allocationFormData.unit_rental_cost || allocationFormData.rental_cost}
-                    onChange={(e) => setAllocationFormData({ ...allocationFormData, unit_rental_cost: e.target.value, rental_cost: e.target.value })}
-                    disabled={allocationFormLoading}
-                  />
-                </div>
-                {allocationFormData.quantity_used && allocationFormData.rental_cost && (
-                  <div className="p-3 bg-muted rounded-lg">
-                    <p className="text-sm">
-                      <strong>Total Cost:</strong> {formatCurrency((
-                        (parseInt(allocationFormData.quantity_used) || 0) * 
-                        (parseFloat(allocationFormData.rental_cost) || 0)
-                      ))}
-                    </p>
-                  </div>
-                )}
+                {(() => {
+                  const selectedItem = availableInventoryItems.find(item => 
+                    item.inventory_id?.toString() === selectedAllocation.inventory_id?.toString()
+                  );
+                  if (selectedItem && allocationFormData.quantity_used) {
+                    const rentalCost = selectedItem.unit_rental_cost || selectedItem.rental_cost || 0;
+                    const qty = parseInt(allocationFormData.quantity_used) || 0;
+                    return (
+                      <div className="p-3 bg-muted rounded-lg">
+                        <p className="text-sm">
+                          <strong>Rental Cost (per unit):</strong> {formatCurrency(rentalCost)}
+                        </p>
+                        <p className="text-sm">
+                          <strong>Total Cost:</strong> {formatCurrency(qty * rentalCost)}
+                        </p>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             )}
             <DialogFooter>
@@ -7104,6 +7297,12 @@ const WeddingDetail = () => {
                 })
                 .filter(Boolean);
               
+              // Calculate total quantity served
+              const totalQuantityServed = tablesUsingPackage.reduce((total, table) => {
+                const tableGuests = guests.filter(g => g && g.table_id === table.table_id);
+                return total + tableGuests.length;
+              }, 0);
+              
               return (
                 <div className="space-y-4 py-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -7123,7 +7322,25 @@ const WeddingDetail = () => {
                     </div>
                     <div>
                       <Label className="text-xs text-muted-foreground">Package Price</Label>
-                      <p className="font-semibold">{formatCurrency(selectedPackage.package_price || selectedPackage.packagePrice || 0)}</p>
+                      <p className="font-semibold">
+                        {formatCurrency(
+                          typeof selectedPackage.selling_price === 'number' 
+                            ? selectedPackage.selling_price 
+                            : parseFloat(selectedPackage.selling_price || selectedPackage.package_price || selectedPackage.packagePrice || '0') || 0
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Total Quantity Served</Label>
+                      <p className="font-semibold text-lg">
+                        {totalQuantityServed} {totalQuantityServed === 1 ? 'guest' : 'guests'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Assigned To</Label>
+                      <p className="font-semibold">
+                        {tablesUsingPackage.length} {tablesUsingPackage.length === 1 ? 'table' : 'tables'}
+                      </p>
                     </div>
                   </div>
                   
@@ -7189,17 +7406,46 @@ const WeddingDetail = () => {
                   </div>
                   
                   <div>
-                    <Label className="text-xs text-muted-foreground mb-2 block">Assigned To Tables ({tablesUsingPackage.length})</Label>
+                    <Label className="text-xs text-muted-foreground mb-2 block">
+                      Assigned To Tables ({tablesUsingPackage.length})
+                    </Label>
                     {tablesUsingPackage.length > 0 ? (
-                      <div className="flex flex-wrap gap-2">
-                        {tablesUsingPackage.map((t: any, idx: number) => (
-                          <div key={idx} className="flex items-center gap-1">
-                            <Badge variant="outline" className="text-xs">
-                              Table {t.table_number}
-                            </Badge>
-                            <TableCategoryBadge category={t.category || 'General'} className="text-xs" />
-                          </div>
-                        ))}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {tablesUsingPackage.map((t: any, idx: number) => {
+                          const tableGuests = guests.filter(g => g && g.table_id === t.table_id);
+                          const table = tables.find(tbl => (tbl.id || tbl.table_id) === t.table_id);
+                          const capacity = table?.capacity || 0;
+                          const assignedCount = tableGuests.length;
+                          
+                          return (
+                            <div key={idx} className="p-3 border rounded-lg bg-muted/50 hover:bg-muted transition-colors">
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <Badge variant="outline" className="font-semibold">
+                                    Table {t.table_number}
+                                  </Badge>
+                                  <TableCategoryBadge category={t.category || 'General'} className="text-xs" />
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-4 text-sm">
+                                <div className="flex items-center gap-1.5">
+                                  <Users className="h-4 w-4 text-muted-foreground" />
+                                  <span className="text-muted-foreground">
+                                    <span className="font-semibold text-foreground">{assignedCount}</span>/{capacity} guests
+                                  </span>
+                                </div>
+                                {assignedCount > 0 && (
+                                  <div className="flex items-center gap-1.5">
+                                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                                    <span className="text-green-600 dark:text-green-400 font-medium">
+                                      {assignedCount} served
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">Not assigned to any tables</p>
@@ -7210,6 +7456,215 @@ const WeddingDetail = () => {
             })()}
             <DialogFooter>
               <Button variant="outline" onClick={() => setViewPackageOpen(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* View Menu Item Dialog */}
+        <Dialog open={viewMenuItemOpen} onOpenChange={setViewMenuItemOpen}>
+          <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Menu Item Details</DialogTitle>
+              <DialogDescription>Complete information about this menu item</DialogDescription>
+            </DialogHeader>
+            {menuItemLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                <span className="ml-2 text-muted-foreground">Loading menu item details...</span>
+              </div>
+            ) : selectedMenuItem && (() => {
+              const itemId = selectedMenuItem.menu_item_id || selectedMenuItem.id;
+              const restrictions = selectedMenuItem.restriction_name 
+                ? [{ restriction_name: selectedMenuItem.restriction_name, restriction_type: selectedMenuItem.restriction_type }] 
+                : [];
+              
+              return (
+                <div className="space-y-4 py-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Menu Item ID</Label>
+                      <p className="font-semibold">#{itemId}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Menu Item Name</Label>
+                      <p className="font-semibold">{selectedMenuItem.menu_name || selectedMenuItem.name}</p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Type</Label>
+                      <div className="mt-1">
+                        {(() => {
+                          const menuType = selectedMenuItem.menu_type || 'N/A';
+                          const typeLower = menuType.toLowerCase();
+                          let icon, colorClass;
+                          if (typeLower.includes('appetizer') || typeLower.includes('starter')) {
+                            icon = Utensils;
+                            colorClass = 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700';
+                          } else if (typeLower.includes('main') || typeLower.includes('entree')) {
+                            icon = UtensilsCrossed;
+                            colorClass = 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700';
+                          } else if (typeLower.includes('dessert')) {
+                            icon = Heart;
+                            colorClass = 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700';
+                          } else if (typeLower.includes('drink') || typeLower.includes('beverage')) {
+                            icon = Package;
+                            colorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                          } else {
+                            icon = Utensils;
+                            colorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                          }
+                          const IconComponent = icon;
+                          return (
+                            <Badge variant="outline" className={`${colorClass} border flex items-center gap-1`}>
+                              <IconComponent className="h-3 w-3" />
+                              {menuType}
+                            </Badge>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Unit Cost</Label>
+                      <p className="font-semibold">
+                        {formatCurrency(
+                          typeof selectedMenuItem.unit_cost === 'number' 
+                            ? selectedMenuItem.unit_cost 
+                            : typeof selectedMenuItem.menu_cost === 'number'
+                              ? selectedMenuItem.menu_cost
+                              : parseFloat(selectedMenuItem.unit_cost || selectedMenuItem.menu_cost || '0') || 0
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Selling Price</Label>
+                      <p className="font-semibold">
+                        {formatCurrency(
+                          typeof selectedMenuItem.selling_price === 'number' 
+                            ? selectedMenuItem.selling_price 
+                            : typeof selectedMenuItem.menu_price === 'number'
+                              ? selectedMenuItem.menu_price
+                              : parseFloat(selectedMenuItem.selling_price || selectedMenuItem.menu_price || '0') || 0
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Profit Margin</Label>
+                      <p className="font-semibold text-green-600 dark:text-green-400">
+                        {formatCurrency(
+                          (typeof selectedMenuItem.selling_price === 'number' 
+                            ? selectedMenuItem.selling_price 
+                            : typeof selectedMenuItem.menu_price === 'number'
+                              ? selectedMenuItem.menu_price
+                              : parseFloat(selectedMenuItem.selling_price || selectedMenuItem.menu_price || '0') || 0) -
+                          (typeof selectedMenuItem.unit_cost === 'number' 
+                            ? selectedMenuItem.unit_cost 
+                            : typeof selectedMenuItem.menu_cost === 'number'
+                              ? selectedMenuItem.menu_cost
+                              : parseFloat(selectedMenuItem.unit_cost || selectedMenuItem.menu_cost || '0') || 0)
+                        )}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Makeable Quantity</Label>
+                      <p className="font-semibold">
+                        {selectedMenuItem.makeable_quantity ?? 0}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {restrictions.length > 0 && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-2 block">Dietary Restrictions</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {restrictions.map((r: any, idx: number) => {
+                          const Icon = getTypeIcon(r.restriction_type || '');
+                          return (
+                            <Badge
+                              key={idx}
+                              variant="outline"
+                              className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                            >
+                              <Icon className="h-3 w-3" />
+                              {r.restriction_name}
+                            </Badge>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  <div>
+                    <Label className="text-xs text-muted-foreground mb-2 block">
+                      Recipe / Ingredients ({selectedMenuItemRecipe.length})
+                    </Label>
+                    {selectedMenuItemRecipe.length > 0 ? (
+                      <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                        {selectedMenuItemRecipe.map((ingredient: any, idx: number) => {
+                          const quantity = ingredient.quantity_needed || ingredient.quantity || 0;
+                          const stockQty = parseFloat(ingredient.stock_quantity || 0);
+                          const reorderLevel = parseFloat(ingredient.re_order_level || 0);
+                          const isLowStock = stockQty <= reorderLevel;
+                          
+                          return (
+                            <div key={idx} className="p-3 border rounded-lg">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <Package className="h-4 w-4 text-muted-foreground" />
+                                  <span className="font-medium">{ingredient.ingredient_name}</span>
+                                  <Badge variant="outline" className="text-xs">
+                                    {quantity} {ingredient.unit || 'units'}
+                                  </Badge>
+                                </div>
+                                <div className="flex items-center gap-3 text-sm">
+                                  <div className={`flex items-center gap-1.5 ${isLowStock ? 'text-red-600 dark:text-red-400' : 'text-muted-foreground'}`}>
+                                    <Warehouse className="h-4 w-4" />
+                                    <span>
+                                      Stock: <span className="font-semibold">{stockQty.toLocaleString()}</span> {ingredient.unit || 'units'}
+                                    </span>
+                                  </div>
+                                  {isLowStock && (
+                                    <Badge variant="outline" className="text-xs text-red-600 dark:text-red-400 border-red-300 dark:border-red-700">
+                                      Low Stock
+                                    </Badge>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No recipe/ingredients defined</p>
+                    )}
+                  </div>
+                  
+                  {selectedMenuItem.tables && selectedMenuItem.tables.length > 0 && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-2 block">
+                        Used In Tables/Packages ({selectedMenuItem.tables.length})
+                      </Label>
+                      <div className="space-y-2">
+                        {selectedMenuItem.tables.map((t: any, idx: number) => (
+                          <div key={idx} className="p-2 border rounded-lg bg-muted/50">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-xs">
+                                Table {t.table_number}
+                              </Badge>
+                              <span className="text-sm text-muted-foreground">
+                                Package: {t.package_name} (ID: {t.package_id})
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setViewMenuItemOpen(false)}>
                 Close
               </Button>
             </DialogFooter>

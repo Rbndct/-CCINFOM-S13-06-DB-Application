@@ -27,7 +27,8 @@ async function updateWeddingCosts(weddingId) {
         )
       ), 0) as food_cost
       FROM table_package tp
-      WHERE tp.wedding_id = ?`,
+      JOIN seating_table st ON tp.table_id = st.table_id
+      WHERE st.wedding_id = ?`,
       [weddingId]
     );
     
@@ -84,9 +85,18 @@ router.get('/', async (req, res) => {
     query += ' ORDER BY item_name ASC';
 
     const [rows] = await promisePool.query(query, params);
+    
+    // Ensure numeric values are properly formatted (MySQL DECIMAL returns as strings)
+    const formattedRows = rows.map(row => ({
+      ...row,
+      unit_rental_cost: parseFloat(row.unit_rental_cost) || parseFloat(row.rental_cost) || 0,
+      rental_cost: parseFloat(row.rental_cost) || parseFloat(row.unit_rental_cost) || 0,
+      quantity_available: parseInt(row.quantity_available) || 0
+    }));
+    
     res.json({
       success: true,
-      data: rows
+      data: formattedRows
     });
   } catch (error) {
     console.error('Error fetching inventory items:', error);
@@ -253,7 +263,7 @@ router.get('/allocations/:wedding_id', async (req, res) => {
         ia.wedding_id,
         ia.inventory_id,
         ia.quantity_used,
-        COALESCE(ia.unit_rental_cost, ia.rental_cost) as unit_rental_cost,
+        ia.unit_rental_cost,
         ia.rental_cost,
         ia.created_at,
         ia.updated_at,
@@ -261,7 +271,7 @@ router.get('/allocations/:wedding_id', async (req, res) => {
         ii.category,
         ii.item_condition,
         ii.quantity_available,
-        (ia.quantity_used * COALESCE(ia.unit_rental_cost, ia.rental_cost)) AS total_cost
+        (ia.quantity_used * COALESCE(ia.unit_rental_cost, ia.rental_cost / NULLIF(ia.quantity_used, 0))) AS total_cost
       FROM inventory_allocation ia
       INNER JOIN inventory_items ii ON ia.inventory_id = ii.inventory_id
       WHERE ia.wedding_id = ?
@@ -269,9 +279,56 @@ router.get('/allocations/:wedding_id', async (req, res) => {
       [wedding_id]
     );
 
+    // Ensure numeric values are properly formatted (MySQL DECIMAL returns as strings)
+    const formattedRows = rows.map(row => {
+      // Parse unit_rental_cost - prefer this field as it's the per-unit cost
+      let unitCost = 0;
+      if (row.unit_rental_cost !== null && row.unit_rental_cost !== undefined) {
+        const parsed = parseFloat(row.unit_rental_cost);
+        if (!isNaN(parsed)) {
+          unitCost = parsed;
+        }
+      }
+      
+      // If unit_rental_cost is 0 or null, try rental_cost
+      // Note: rental_cost might be total or unit depending on old data
+      if (unitCost === 0 && row.rental_cost !== null && row.rental_cost !== undefined) {
+        const qty = parseInt(row.quantity_used) || 1;
+        const rentalCostValue = parseFloat(row.rental_cost);
+        if (!isNaN(rentalCostValue)) {
+          // If rental_cost is much larger than typical unit cost and quantity > 1, it's likely a total
+          unitCost = (rentalCostValue > 1000 && qty > 1) ? rentalCostValue / qty : rentalCostValue;
+        }
+      }
+      
+      const qty = parseInt(row.quantity_used) || 0;
+      const totalCostValue = row.total_cost !== null && row.total_cost !== undefined 
+        ? parseFloat(row.total_cost) 
+        : (qty * unitCost);
+      const totalCost = isNaN(totalCostValue) ? (qty * unitCost) : totalCostValue;
+      
+      return {
+        ...row,
+        unit_rental_cost: unitCost,
+        rental_cost: unitCost, // Always use unit cost for rental_cost field
+        total_cost: totalCost,
+        quantity_used: qty
+      };
+    });
+
+    console.log(`[GET ALLOCATIONS] wedding_id: ${wedding_id}, found ${formattedRows.length} allocations`);
+    if (formattedRows.length > 0) {
+      console.log(`[GET ALLOCATIONS] Sample allocation:`, {
+        allocation_id: formattedRows[0].allocation_id,
+        unit_rental_cost: formattedRows[0].unit_rental_cost,
+        rental_cost: formattedRows[0].rental_cost,
+        total_cost: formattedRows[0].total_cost
+      });
+    }
+
     res.json({
       success: true,
-      data: rows
+      data: formattedRows
     });
   } catch (error) {
     console.error('Error fetching inventory allocations:', error);
@@ -291,10 +348,10 @@ router.post('/allocations', async (req, res) => {
     // Support both new (unit_rental_cost) and old (rental_cost) field names
     const providedRentalCost = unit_rental_cost !== undefined ? unit_rental_cost : rental_cost;
 
-    if (!wedding_id || !inventory_id || quantity_used === undefined || providedRentalCost === undefined) {
+    if (!wedding_id || !inventory_id || quantity_used === undefined) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: wedding_id, inventory_id, quantity_used, unit_rental_cost (or rental_cost)'
+        error: 'Missing required fields: wedding_id, inventory_id, quantity_used'
       });
     }
 
@@ -321,16 +378,30 @@ router.post('/allocations', async (req, res) => {
 
     // Use provided rental cost or fallback to item's rental cost
     // Handle both null/undefined and 0 values properly
-    const finalRentalCost = (providedRentalCost !== undefined && providedRentalCost !== null && providedRentalCost !== '') 
-      ? parseFloat(providedRentalCost) 
-      : itemRows[0].unit_rental_cost;
+    let finalRentalCost;
     
-    if (isNaN(finalRentalCost) || finalRentalCost < 0) {
-      return res.status(400).json({
-        success: false,
-        error: 'Invalid rental cost value'
-      });
+    if (providedRentalCost !== undefined && providedRentalCost !== null && providedRentalCost !== '') {
+      finalRentalCost = parseFloat(providedRentalCost);
+      if (isNaN(finalRentalCost) || finalRentalCost < 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid rental cost value provided. Must be a non-negative number.'
+        });
+      }
+    } else {
+      // Fallback to item's rental cost
+      finalRentalCost = itemRows[0].unit_rental_cost || itemRows[0].rental_cost || 0;
+      if (isNaN(finalRentalCost) || finalRentalCost < 0) {
+        finalRentalCost = 0;
+      }
     }
+    
+    // rental_cost is NOT NULL in the database, so ensure it's always a valid number
+    if (finalRentalCost === null || finalRentalCost === undefined || isNaN(finalRentalCost)) {
+      finalRentalCost = 0;
+    }
+
+    console.log(`[CREATE ALLOCATION] wedding_id: ${wedding_id}, inventory_id: ${inventory_id}, quantity: ${quantity_used}, rental_cost: ${finalRentalCost}`);
 
     const [result] = await promisePool.query(
       `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost)
@@ -367,13 +438,29 @@ router.post('/allocations', async (req, res) => {
       WHERE ia.allocation_id = ?`,
       [result.insertId]
     );
+    
+    // Format the response data to ensure numeric values
+    const formattedAllocation = {
+      ...newAllocation[0],
+      unit_rental_cost: parseFloat(newAllocation[0].unit_rental_cost) || 0,
+      rental_cost: parseFloat(newAllocation[0].rental_cost) || 0,
+      total_cost: parseFloat(newAllocation[0].total_cost) || 0,
+      quantity_used: parseInt(newAllocation[0].quantity_used) || 0
+    };
+
+    console.log(`[CREATE ALLOCATION] Created allocation:`, {
+      allocation_id: formattedAllocation.allocation_id,
+      unit_rental_cost: formattedAllocation.unit_rental_cost,
+      rental_cost: formattedAllocation.rental_cost,
+      total_cost: formattedAllocation.total_cost
+    });
 
     // Update wedding costs
     await updateWeddingCosts(wedding_id);
 
     res.status(201).json({
       success: true,
-      data: newAllocation[0],
+      data: formattedAllocation,
       message: 'Inventory allocation created successfully'
     });
   } catch (error) {
