@@ -126,7 +126,6 @@ CREATE TABLE menu_item (
     default_markup_percentage DECIMAL(5,2) DEFAULT 200.00,
     cost_override BOOLEAN DEFAULT FALSE,
     menu_type VARCHAR(100) NOT NULL,
-    stock INT NOT NULL,
     restriction_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
