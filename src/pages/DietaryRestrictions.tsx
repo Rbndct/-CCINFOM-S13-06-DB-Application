@@ -414,6 +414,16 @@ const DietaryRestrictions = () => {
   const uniqueTypes = [...new Set(restrictions.map(r => r.restriction_type))];
   const avgGuestsPerRestriction = restrictions.length > 0 ? (totalAffectedGuests / restrictions.length).toFixed(1) : '0';
   const avgCouplesPerRestriction = restrictions.length > 0 ? (totalAffectedCouples / restrictions.length).toFixed(1) : '0';
+  
+  // Calculate affected couples by severity level
+  // Note: A couple may be counted in multiple severity levels if they have restrictions with different severities
+  // Each restriction's affected_couples already counts unique couples for that restriction
+  const couplesBySeverity = {
+    'Critical': restrictions.filter(r => r.severity_level === 'Critical').reduce((sum, r) => sum + (r.affected_couples || 0), 0),
+    'High': restrictions.filter(r => r.severity_level === 'High').reduce((sum, r) => sum + (r.affected_couples || 0), 0),
+    'Moderate': restrictions.filter(r => r.severity_level === 'Moderate').reduce((sum, r) => sum + (r.affected_couples || 0), 0),
+    'Low': restrictions.filter(r => r.severity_level === 'Low').reduce((sum, r) => sum + (r.affected_couples || 0), 0)
+  };
 
   if (loading) {
     return (
@@ -464,10 +474,22 @@ const DietaryRestrictions = () => {
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{totalAffectedGuests}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  Avg {avgGuestsPerRestriction} guests per restriction
-                </p>
+                <div className="space-y-2">
+                  <div className="text-2xl font-bold">{totalAffectedGuests}</div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">
+                      Individual guests across all weddings who have dietary restrictions assigned
+                    </p>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">Average:</span>
+                      <span className="font-medium">{avgGuestsPerRestriction} guests per restriction</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs">
+                      <span className="text-muted-foreground">Across:</span>
+                      <span className="font-medium">{restrictions.length} active restriction{restrictions.length !== 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
             
@@ -477,10 +499,39 @@ const DietaryRestrictions = () => {
                 <Heart className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{totalAffectedCouples}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {totalPreferences} total preference{totalPreferences !== 1 ? 's' : ''} configured
-                </p>
+                <div className="space-y-3">
+                  <div className="text-2xl font-bold">{totalAffectedCouples}</div>
+                  <div className="space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      Unique couples with preferences containing dietary restrictions
+                    </p>
+                    <div className="space-y-1.5 pt-1 border-t">
+                      <p className="text-xs font-medium text-muted-foreground mb-1">By Severity Level:</p>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-red-600 dark:text-red-400">Critical:</span>
+                          <span className="font-semibold">{couplesBySeverity.Critical}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-orange-600 dark:text-orange-400">High:</span>
+                          <span className="font-semibold">{couplesBySeverity.High}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-yellow-600 dark:text-yellow-400">Moderate:</span>
+                          <span className="font-semibold">{couplesBySeverity.Moderate}</span>
+                        </div>
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-blue-600 dark:text-blue-400">Low:</span>
+                          <span className="font-semibold">{couplesBySeverity.Low}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-xs pt-1 border-t">
+                      <span className="text-muted-foreground">Total preferences:</span>
+                      <span className="font-medium">{totalPreferences} preference{totalPreferences !== 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
             
