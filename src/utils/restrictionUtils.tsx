@@ -5,7 +5,8 @@ import {
   Wheat,
   Heart,
   Shield,
-  Info
+  Info,
+  Circle
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 
@@ -140,5 +141,24 @@ export const ensureNoneRestriction = (restrictionIds: number[], noneId: number |
 // Filter "None" from display lists (for dropdowns, tables, etc.)
 export const filterNoneFromDisplay = (restrictions: DietaryRestriction[]): DietaryRestriction[] => {
   return restrictions.filter(r => r.restriction_name !== 'None');
+};
+
+// Get "None" restriction badge styling (consistent across all views)
+export const getNoneRestrictionBadge = (showNoRestrictionsText: boolean = true) => {
+  return (
+    <Badge
+      variant="outline"
+      className="bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700 flex items-center gap-1 w-fit"
+    >
+      <Circle className="h-3 w-3" />
+      <span>None</span>
+      {showNoRestrictionsText && <span className="ml-1 text-[10px] opacity-75">(No restrictions)</span>}
+    </Badge>
+  );
+};
+
+// Check if a restriction is "None"
+export const isNoneRestriction = (restriction: any): boolean => {
+  return restriction?.restriction_name === 'None' || restriction?.name === 'None' || restriction === 'None';
 };
 
