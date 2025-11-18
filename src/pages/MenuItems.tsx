@@ -21,7 +21,8 @@ import {
   ChevronRight,
   Calculator,
   Package,
-  Loader2
+  Loader2,
+  Minus
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -1303,115 +1304,130 @@ const MenuItems = () => {
                   </span>
                 </div>
                 
-                {/* Selected Ingredients */}
-                {recipe.length > 0 && (
-                  <div className="space-y-2 p-3 border rounded-lg bg-muted/30 dark:bg-[#1a1a1a] dark:border-[#2a2a2a]">
-                    {recipe.map((recipeItem) => {
-                      const ingredient = availableIngredients.find(ing => 
-                        (ing.ingredient_id || ing.id) === recipeItem.ingredient_id
-                      );
-                      if (!ingredient) return null;
-                      
-                      return (
-                        <div key={recipeItem.ingredient_id} className="flex items-center gap-3 p-2 bg-background dark:bg-[#0f0f0f] rounded border dark:border-[#2a2a2a]">
-                          <div className="flex-1">
-                            <p className="font-medium text-sm">{ingredient.ingredient_name}</p>
-                            <p className="text-xs text-muted-foreground">ID: #{ingredient.ingredient_id || ingredient.id}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <Label className="text-xs text-muted-foreground">Qty:</Label>
-                            <Input
-                              type="number"
-                              min="0.01"
-                              step="0.01"
-                              value={recipeItem.quantity}
-                              onChange={(e) => handleUpdateRecipeQuantity(recipeItem.ingredient_id, parseFloat(e.target.value) || 0)}
-                              className="w-20 h-8 text-sm dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
-                            />
-                            <span className="text-xs text-muted-foreground w-12">{ingredient.unit}</span>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleRemoveIngredientFromRecipe(recipeItem.ingredient_id)}
-                              className="h-8 w-8 p-0 text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Available Ingredients List */}
-                <div className="border rounded-lg max-h-[200px] overflow-y-auto dark:border-[#2a2a2a]">
-                  <Table>
-                    <TableHeader>
-                      <TableRow className="dark:border-[#2a2a2a]">
-                        <TableHead className="w-12 dark:bg-[#1a1a1a] dark:text-[#e5e5e5]"></TableHead>
-                        <TableHead className="dark:bg-[#1a1a1a] dark:text-[#e5e5e5]">Ingredient</TableHead>
-                        <TableHead className="dark:bg-[#1a1a1a] dark:text-[#e5e5e5]">Unit</TableHead>
-                        <TableHead className="dark:bg-[#1a1a1a] dark:text-[#e5e5e5]">Stock</TableHead>
-                        <TableHead className="w-20 dark:bg-[#1a1a1a] dark:text-[#e5e5e5]"></TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {availableIngredients.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground text-sm py-4">
-                            No ingredients available
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        availableIngredients.map((ingredient: any) => {
-                          const isSelected = recipe.some(r => r.ingredient_id === (ingredient.ingredient_id || ingredient.id));
+                {/* Ingredients List - Card-based with quantity controls */}
+                <div className="border rounded-lg p-4 max-h-[300px] overflow-y-auto dark:border-[#2a2a2a]">
+                  {availableIngredients.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No ingredients available</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {(() => {
+                        // Sort ingredients: selected items (in recipe) first, then unselected items
+                        const sortedIngredients = [...availableIngredients].sort((a, b) => {
+                          const aId = a.ingredient_id || a.id;
+                          const bId = b.ingredient_id || b.id;
+                          const aInRecipe = recipe.some(r => r.ingredient_id === aId);
+                          const bInRecipe = recipe.some(r => r.ingredient_id === bId);
+                          
+                          // Selected items (in recipe) come first
+                          if (aInRecipe && !bInRecipe) return -1;
+                          if (!aInRecipe && bInRecipe) return 1;
+                          
+                          // If both selected or both unselected, sort alphabetically by name
+                          const aName = (a.ingredient_name || '').toLowerCase();
+                          const bName = (b.ingredient_name || '').toLowerCase();
+                          return aName.localeCompare(bName);
+                        });
+                        
+                        return sortedIngredients.map((ingredient: any) => {
                           const ingredientId = ingredient.ingredient_id || ingredient.id;
+                          const recipeItem = recipe.find(r => r.ingredient_id === ingredientId);
+                          const quantity = recipeItem?.quantity || 0;
+                          const isSelected = quantity > 0;
+                          const stockQuantity = parseFloat(ingredient.stock_quantity || 0);
+                          const reorderLevel = parseFloat(ingredient.re_order_level || 0);
+                          const isLowStock = stockQuantity <= reorderLevel;
+                          
+                          const handleIncrement = () => {
+                            if (isSelected) {
+                              handleUpdateRecipeQuantity(ingredientId, quantity + 0.01);
+                            } else {
+                              handleAddIngredientToRecipe(ingredientId);
+                            }
+                          };
+                          
+                          const handleDecrement = () => {
+                            if (quantity > 0.01) {
+                              handleUpdateRecipeQuantity(ingredientId, Math.max(0.01, quantity - 0.01));
+                            } else if (quantity === 0.01) {
+                              handleRemoveIngredientFromRecipe(ingredientId);
+                            }
+                          };
                           
                           return (
-                            <TableRow 
-                              key={ingredientId}
-                              className={`${isSelected ? 'bg-muted/50 dark:bg-[#1a1a1a]' : ''} dark:border-[#2a2a2a] hover:dark:bg-[#1a1a1a]`}
+                            <div 
+                              key={ingredientId} 
+                              className={`flex items-center space-x-3 p-3 rounded-lg border transition-all ${
+                                isSelected 
+                                  ? 'bg-primary/5 dark:bg-primary/10 border-primary/30 shadow-sm' 
+                                  : 'border-border hover:bg-muted/50'
+                              }`}
                             >
-                              <TableCell>
-                                <Checkbox
-                                  checked={isSelected}
-                                  onCheckedChange={(checked) => {
-                                    if (checked) {
-                                      handleAddIngredientToRecipe(ingredientId);
-                                    } else {
-                                      handleRemoveIngredientFromRecipe(ingredientId);
-                                    }
-                                  }}
-                                  className="dark:border-[#2a2a2a] dark:data-[state=checked]:bg-primary dark:data-[state=checked]:border-primary"
-                                />
-                              </TableCell>
-                              <TableCell className="font-medium dark:text-[#e5e5e5]">{ingredient.ingredient_name}</TableCell>
-                              <TableCell className="text-sm text-muted-foreground dark:text-[#a0a0a0]">{ingredient.unit}</TableCell>
-                              <TableCell className="text-sm dark:text-[#e5e5e5]">
-                                <span className={parseFloat(ingredient.stock_quantity || 0) <= parseFloat(ingredient.re_order_level || 0) ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
-                                  {parseFloat(ingredient.stock_quantity || 0).toLocaleString()}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                {isSelected && (
-                                  <Input
-                                    type="number"
-                                    min="0.01"
-                                    step="0.01"
-                                    value={recipe.find(r => r.ingredient_id === ingredientId)?.quantity || 1}
-                                    onChange={(e) => handleUpdateRecipeQuantity(ingredientId, parseFloat(e.target.value) || 0)}
-                                    className="w-16 h-7 text-xs dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
-                                  />
-                                )}
-                              </TableCell>
-                            </TableRow>
+                              <div className="flex items-center gap-2 flex-shrink-0">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleDecrement}
+                                  disabled={!isSelected}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Minus className="h-4 w-4" />
+                                </Button>
+                                <div className="w-16 text-center">
+                                  {isSelected ? (
+                                    <Input
+                                      type="number"
+                                      min="0.01"
+                                      step="0.01"
+                                      value={quantity.toFixed(2)}
+                                      onChange={(e) => handleUpdateRecipeQuantity(ingredientId, parseFloat(e.target.value) || 0.01)}
+                                      className="h-8 text-sm text-center dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
+                                    />
+                                  ) : (
+                                    <span className={`text-lg font-semibold ${isSelected ? 'text-primary' : 'text-muted-foreground'}`}>
+                                      0
+                                    </span>
+                                  )}
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={handleIncrement}
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <Plus className="h-4 w-4" />
+                                </Button>
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center justify-between gap-2">
+                                  <span className={`font-medium truncate ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                    {ingredient.ingredient_name}
+                                  </span>
+                                  <span className={`text-sm flex-shrink-0 ${isSelected ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
+                                    {ingredient.unit}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                  <Badge variant="outline" className="text-xs">
+                                    ID: #{ingredientId}
+                                  </Badge>
+                                  <span className={`text-xs ${isLowStock ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
+                                    Stock: {stockQuantity.toLocaleString()} {ingredient.unit}
+                                  </span>
+                                  {ingredient.unit_cost && parseFloat(ingredient.unit_cost) > 0 && (
+                                    <span className="text-xs text-muted-foreground">
+                                      {formatCurrency(parseFloat(ingredient.unit_cost))}/{ingredient.unit}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
                           );
-                        })
-                      )}
-                    </TableBody>
-                  </Table>
+                        });
+                      })()}
+                    </div>
+                  )}
                 </div>
                 {recipe.length === 0 && (
                   <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
