@@ -22,7 +22,10 @@ import {
   Hash,
   Heart,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Package,
+  Warehouse,
+  UtensilsCrossed
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -61,7 +64,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { weddingsAPI, couplesAPI, guestsAPI } from '@/api';
+import { weddingsAPI, couplesAPI, guestsAPI, packagesAPI, inventoryAllocationAPI, menuItemsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, formatRestrictionsList, getRestrictionCountText } from '@/utils/restrictionUtils';
 import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
@@ -167,44 +170,112 @@ const Weddings = () => {
       });
       const weddingsData = response.data || [];
       
-      // Calculate total guests by fetching actual guest counts and update wedding data
+      // Calculate total guests and expenses by fetching additional data
       let total = 0;
       try {
-        const weddingsWithGuestCounts = await Promise.all(weddingsData.map(async (wedding: any) => {
+        const weddingsWithData = await Promise.all(weddingsData.map(async (wedding: any) => {
+          const weddingId = wedding.wedding_id || wedding.id;
+          
           // Use actualGuestCount from backend if available, otherwise fetch it
-          if (wedding.actualGuestCount !== undefined && wedding.actualGuestCount !== null) {
-            total += wedding.actualGuestCount;
-            return {
-              ...wedding,
-              guest_count: wedding.actualGuestCount,
-              guestCount: wedding.actualGuestCount
-            };
+          let guestCount = wedding.actualGuestCount;
+          if (guestCount === undefined || guestCount === null) {
+            try {
+              const guestsResponse = await guestsAPI.getAll({ wedding_id: weddingId });
+              guestCount = (guestsResponse.data || []).length;
+            } catch (e) {
+              guestCount = wedding.guest_count || wedding.guestCount || 0;
+            }
           }
+          total += guestCount;
+          
+          // Fetch package assignments and inventory allocations for expense calculation
+          let packageExpenses = 0;
+          let inventoryExpenses = 0;
+          let totalPackagesServed = 0;
+          let totalMenuItemsServed = 0;
+          
           try {
-            const guestsResponse = await guestsAPI.getAll({ wedding_id: wedding.wedding_id || wedding.id });
-            const guestCount = (guestsResponse.data || []).length;
-            total += guestCount;
-            return {
-              ...wedding,
-              guest_count: guestCount,
-              guestCount: guestCount,
-              actualGuestCount: guestCount
-            };
+            // Fetch table package assignments for this wedding (getTableAssignments takes weddingId)
+            // The response already includes selling_price, so we don't need to fetch each package
+            try {
+              const assignmentsResponse = await packagesAPI.getTableAssignments(weddingId);
+              const packageAssignments = (assignmentsResponse as any)?.data || [];
+              
+              // Count total packages served (each assignment is one package)
+              totalPackagesServed = packageAssignments.length;
+              
+              // Calculate package expenses: sum of (package selling_price × quantity)
+              // Each assignment represents one package assignment, so we sum all selling_price values
+              packageExpenses = packageAssignments.reduce((sum: number, assignment: any) => {
+                const price = typeof assignment.selling_price === 'number' 
+                  ? assignment.selling_price 
+                  : parseFloat(assignment.selling_price || '0') || 0;
+                return sum + price;
+              }, 0);
+              
+              // Count menu items from all packages (including duplicates)
+              for (const assignment of packageAssignments) {
+                const pkgId = assignment.packageId || assignment.package_id;
+                if (!pkgId) continue;
+                
+                try {
+                  const pkgResponse = await packagesAPI.getById(pkgId);
+                  const pkg = (pkgResponse as any)?.data || pkgResponse;
+                  if (pkg && pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                    // Count each menu item in this package (including duplicates)
+                    pkg.menu_items.forEach((item: any) => {
+                      const quantity = item.quantity || 1;
+                      totalMenuItemsServed += quantity;
+                    });
+                  }
+                } catch (e) {
+                  // Skip if error fetching package details
+                }
+              }
+            } catch (e) {
+              console.error(`Error fetching package assignments for wedding ${weddingId}:`, e);
+              // Skip if error fetching assignments
+            }
+            
+            // Fetch inventory allocations
+            try {
+              const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(weddingId);
+              const allocations = (allocationsResponse as any)?.data || [];
+              
+              inventoryExpenses = allocations.reduce((sum: number, allocation: any) => {
+                const totalCost = parseFloat(allocation.total_cost || 0);
+                if (!totalCost || isNaN(totalCost)) {
+                  const qty = parseFloat(allocation.quantity_used || 0);
+                  const unitCost = parseFloat(allocation.unit_rental_cost || allocation.rental_cost || 0);
+                  return sum + (qty * unitCost);
+                }
+                return sum + totalCost;
+              }, 0);
+            } catch (e) {
+              console.error(`Error fetching inventory allocations for wedding ${weddingId}:`, e);
+              // Skip if error fetching allocations
+            }
           } catch (e) {
-            const fallbackCount = wedding.guest_count || wedding.guestCount || 0;
-            total += fallbackCount;
-            return {
-              ...wedding,
-              guest_count: fallbackCount,
-              guestCount: fallbackCount,
-              actualGuestCount: fallbackCount
-            };
+            console.error(`Error calculating expenses for wedding ${weddingId}:`, e);
+            // Skip expense calculation if error
           }
+          
+          return {
+            ...wedding,
+            guest_count: guestCount,
+            guestCount: guestCount,
+            actualGuestCount: guestCount,
+            calculatedPackageExpenses: packageExpenses,
+            calculatedInventoryExpenses: inventoryExpenses,
+            calculatedTotalCost: packageExpenses + inventoryExpenses,
+            totalPackagesServed: totalPackagesServed,
+            totalMenuItemsServed: totalMenuItemsServed
+          };
         }));
-        return weddingsWithGuestCounts;
+        return weddingsWithData;
       } catch (e) {
-        console.error('Error calculating guest counts:', e);
-        // Fallback to guest_count field if available
+        console.error('Error calculating wedding data:', e);
+        // Fallback to original data
         return weddingsData;
       }
     },
@@ -456,14 +527,31 @@ const Weddings = () => {
           
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Meals Served</CardTitle>
+              <CardTitle className="text-sm font-medium">Total Meals & Packages Served</CardTitle>
               <Utensils className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">
-                {weddings.reduce((sum, wedding) => sum + (wedding.actualGuestCount || wedding.guestCount || 0), 0)}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <UtensilsCrossed className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <div className="text-xl font-bold">
+                      {weddings.reduce((sum, wedding) => sum + (wedding.totalMenuItemsServed || 0), 0)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Menu Items</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 pt-1 border-t">
+                  <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <div>
+                    <div className="text-xl font-bold">
+                      {weddings.reduce((sum, wedding) => sum + (wedding.totalPackagesServed || 0), 0)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">Packages</p>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-1">
+              <p className="text-xs text-muted-foreground mt-2">
                 Across all weddings
               </p>
             </CardContent>
@@ -756,12 +844,30 @@ const Weddings = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div>
-                        <div className="font-semibold">{formatCurrency(wedding.equipmentRentalCost || wedding.equipment_rental_cost || wedding.totalCost || wedding.total_cost || 0)}</div>
-                        <div className="text-sm text-muted-foreground">
-                          Food: {formatCurrency(wedding.foodCost || wedding.food_cost || wedding.productionCost || wedding.production_cost || 0)}
-                        </div>
-                      </div>
+                      {(() => {
+                        const packageExpenses = wedding.calculatedPackageExpenses ?? 0;
+                        const inventoryExpenses = wedding.calculatedInventoryExpenses ?? 0;
+                        const totalCost = wedding.calculatedTotalCost ?? (packageExpenses + inventoryExpenses);
+                        
+                        return (
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                              <span className="font-semibold">{formatCurrency(totalCost)}</span>
+                            </div>
+                            <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                              <div className="flex items-center gap-1">
+                                <Package className="h-3 w-3" />
+                                <span>{formatCurrency(packageExpenses)}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Warehouse className="h-3 w-3" />
+                                <span>{formatCurrency(inventoryExpenses)}</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
                       {getPaymentStatusBadge(wedding.paymentStatus || wedding.payment_status || 'pending')}
