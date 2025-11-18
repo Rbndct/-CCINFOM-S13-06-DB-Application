@@ -1094,8 +1094,18 @@ const WeddingDetail = () => {
           }));
         }
         
-        // Invalidate weddings query to refresh the weddings list page
-        queryClient.invalidateQueries({ queryKey: ['weddings'] });
+      // Refresh wedding data to update guest count
+      try {
+        const weddingResponse = await weddingsAPI.getById(id || '0');
+        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
+          setWedding(weddingResponse.data);
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing wedding data:', refreshError);
+      }
+      
+      // Invalidate weddings query to refresh the weddings list page
+      queryClient.invalidateQueries({ queryKey: ['weddings'] });
       
       // Reset form
       setFirstName('');
@@ -1193,6 +1203,19 @@ const WeddingDetail = () => {
         setGuests(transformedGuests);
       }
       
+      // Refresh wedding data to update guest count
+      try {
+        const weddingResponse = await weddingsAPI.getById(id || '0');
+        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
+          setWedding(weddingResponse.data);
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing wedding data:', refreshError);
+      }
+      
+      // Invalidate weddings query to refresh the weddings list page
+      queryClient.invalidateQueries({ queryKey: ['weddings'] });
+      
       setEditGuestOpen(false);
       setEditingGuest(null);
       toast({
@@ -1252,6 +1275,16 @@ const WeddingDetail = () => {
           };
         });
         setGuests(transformedGuests);
+      }
+      
+      // Refresh wedding data to update guest count
+      try {
+        const weddingResponse = await weddingsAPI.getById(id || '0');
+        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
+          setWedding(weddingResponse.data);
+        }
+      } catch (refreshError) {
+        console.error('Error refreshing wedding data:', refreshError);
       }
       
       // Invalidate weddings query to refresh the weddings list page
@@ -4615,32 +4648,33 @@ const WeddingDetail = () => {
                               <div className="relative">
                                 {/* Calculate table size based on capacity and text content */}
                                 {(() => {
-                                  // Base size calculation - better scaling for different capacities
+                                  // Base size calculation - reduced maximum sizes to prevent covering chairs
                                   // Use a more gradual scaling that works better for common sizes like 8
                                   let baseTableSize: number;
                                   if (capacity <= 2) {
-                                    baseTableSize = 70;
+                                    baseTableSize = 65;
                                   } else if (capacity <= 4) {
-                                    baseTableSize = 85;
+                                    baseTableSize = 75;
                                   } else if (capacity <= 6) {
-                                    baseTableSize = 100;
+                                    baseTableSize = 85;
                                   } else if (capacity <= 8) {
-                                    baseTableSize = 115; // Better size for 8 capacity
+                                    baseTableSize = 95; // Reduced from 115 to prevent covering chairs
                                   } else if (capacity <= 10) {
-                                    baseTableSize = 130;
+                                    baseTableSize = 105; // Reduced from 130
                                   } else if (capacity <= 12) {
-                                    baseTableSize = 145;
+                                    baseTableSize = 115; // Reduced from 145
                                   } else {
-                                    baseTableSize = 160;
+                                    baseTableSize = 125; // Reduced from 160, capped to prevent covering chairs
                                   }
                                   
                                   // Always ensure minimum size for readability
-                                  const tableSize = Math.max(baseTableSize, 80);
+                                  const tableSize = Math.max(baseTableSize, 70);
                                   
-                                  // Calculate chair radius - place chairs further outside the table box with better spacing
-                                  // Constrain chair radius to keep seats within reasonable bounds relative to table
-                                  const maxChairRadius = Math.min((tableSize / 2) + 28, 60); // Max radius to keep within grid
-                                  const chairRadius = maxChairRadius;
+                                  // Calculate chair radius - place chairs further outside the table box
+                                  // Ensure chairs are always outside the table by using tableSize/2 + padding
+                                  // For larger tables, increase the padding to keep chairs visible
+                                  const padding = capacity <= 4 ? 20 : capacity <= 8 ? 24 : 28;
+                                  const chairRadius = (tableSize / 2) + padding;
                                   const chairSize = capacity <= 4 ? 12 : capacity <= 8 ? 11 : 10; // Slightly larger chairs
                                   
                                   // Calculate font sizes - ensure readability even for small tables
@@ -6581,19 +6615,7 @@ const WeddingDetail = () => {
                               {getConditionBadge(allocation.item_condition)}
                             </TableCell>
                             <TableCell>
-                              <div className="flex flex-col gap-0.5">
-                                <span>{allocation.quantity_used}</span>
-                                {(() => {
-                                  const item = availableInventoryItems.find(i => i.inventory_id === allocation.inventory_id);
-                                  const stockAvailable = item?.quantity_available || 0;
-                                  const remainingStock = stockAvailable - (allocation.quantity_used || 0);
-                                  return (
-                                    <span className={`text-xs ${remainingStock < 0 ? 'text-red-600 dark:text-red-400' : remainingStock < 5 ? 'text-yellow-600 dark:text-yellow-400' : 'text-muted-foreground'}`}>
-                                      Stock: {stockAvailable} (Remaining: {remainingStock})
-                                    </span>
-                                  );
-                                })()}
-                              </div>
+                              <span>{allocation.quantity_used}</span>
                             </TableCell>
                             <TableCell>
                               {(() => {
@@ -7384,18 +7406,29 @@ const WeddingDetail = () => {
                   id="allocation_quantity"
                   type="number"
                   min="1"
+                  step="1"
                   value={allocationFormData.quantity_used}
                   onChange={(e) => {
                     const qty = e.target.value;
-                    setAllocationFormData({ ...allocationFormData, quantity_used: qty });
-                    if (allocationFormData.inventory_id) {
-                      const selectedItem = availableInventoryItems.find(item => 
-                        item.inventory_id?.toString() === allocationFormData.inventory_id
-                      );
-                      if (selectedItem && qty) {
-                        const total = parseFloat(qty) * (selectedItem.unit_rental_cost || selectedItem.rental_cost || 0);
-                        // Don't auto-update rental_cost if user has manually set it
+                    // Prevent negative values
+                    if (qty === '' || (parseFloat(qty) >= 0 && !isNaN(parseFloat(qty)))) {
+                      setAllocationFormData({ ...allocationFormData, quantity_used: qty });
+                      if (allocationFormData.inventory_id) {
+                        const selectedItem = availableInventoryItems.find(item => 
+                          item.inventory_id?.toString() === allocationFormData.inventory_id
+                        );
+                        if (selectedItem && qty) {
+                          const total = parseFloat(qty) * (selectedItem.unit_rental_cost || selectedItem.rental_cost || 0);
+                          // Don't auto-update rental_cost if user has manually set it
+                        }
                       }
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Ensure value is at least 1 if not empty
+                    const qty = e.target.value;
+                    if (qty && parseFloat(qty) < 1) {
+                      setAllocationFormData({ ...allocationFormData, quantity_used: '1' });
                     }
                   }}
                   className={allocationFormErrors.quantity_used ? 'border-red-500' : ''}
@@ -7480,8 +7513,22 @@ const WeddingDetail = () => {
                     id="edit_allocation_quantity"
                     type="number"
                     min="1"
+                    step="1"
                     value={allocationFormData.quantity_used}
-                    onChange={(e) => setAllocationFormData({ ...allocationFormData, quantity_used: e.target.value })}
+                    onChange={(e) => {
+                      const qty = e.target.value;
+                      // Prevent negative values
+                      if (qty === '' || (parseFloat(qty) >= 0 && !isNaN(parseFloat(qty)))) {
+                        setAllocationFormData({ ...allocationFormData, quantity_used: qty });
+                      }
+                    }}
+                    onBlur={(e) => {
+                      // Ensure value is at least 1 if not empty
+                      const qty = e.target.value;
+                      if (qty && parseFloat(qty) < 1) {
+                        setAllocationFormData({ ...allocationFormData, quantity_used: '1' });
+                      }
+                    }}
                     className={allocationFormErrors.quantity_used ? 'border-red-500' : ''}
                     disabled={allocationFormLoading}
                   />
