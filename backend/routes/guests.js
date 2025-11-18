@@ -353,6 +353,7 @@ router.put('/:id', async (req, res) => {
     }
 
     await connection.commit();
+    
     res.json({success: true, message: 'Guest updated successfully'});
   } catch (error) {
     await connection.rollback();

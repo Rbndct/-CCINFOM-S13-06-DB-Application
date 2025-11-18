@@ -66,6 +66,116 @@ async function calculatePackageCost(packageId, connection = null) {
   return parseFloat(rows[0]?.total_cost || 0);
 }
 
+// Helper function to calculate ingredient usage for a package
+// Based on package_menu_items quantities only (not guest count or capacity)
+async function calculateIngredientUsageForPackage(packageId, connection = null) {
+  const pool = connection || promisePool;
+  const usage = new Map(); // ingredient_id -> total_quantity_needed
+  
+  try {
+    // Get all menu items in the package with their quantities
+    const [menuItems] = await pool.query(
+      `SELECT pmi.menu_item_id, pmi.quantity as package_quantity
+       FROM package_menu_items pmi
+       WHERE pmi.package_id = ?`,
+      [packageId]
+    );
+    
+    // For each menu item, get its recipe ingredients and calculate usage
+    for (const menuItem of menuItems) {
+      const menuItemId = menuItem.menu_item_id;
+      const packageQuantity = menuItem.package_quantity || 1;
+      
+      // Get recipe ingredients for this menu item
+      const [recipeIngredients] = await pool.query(
+        `SELECT ingredient_id, quantity_needed
+         FROM recipe
+         WHERE menu_item_id = ?`,
+        [menuItemId]
+      );
+      
+      // Calculate usage for each ingredient
+      for (const recipeIngredient of recipeIngredients) {
+        const ingredientId = recipeIngredient.ingredient_id;
+        const quantityNeeded = parseFloat(recipeIngredient.quantity_needed) || 0;
+        
+        // Calculate total quantity needed: quantity_needed * package_quantity
+        // This is based on the package allocation, not guest count
+        const totalNeeded = quantityNeeded * packageQuantity;
+        
+        if (totalNeeded > 0) {
+          const current = usage.get(ingredientId) || 0;
+          usage.set(ingredientId, current + totalNeeded);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error calculating ingredient usage:', error);
+    throw error;
+  }
+  
+  return usage;
+}
+
+// Helper function to deduct ingredient stock when package is assigned to table
+// Stock is deducted based on package menu item quantities only
+async function deductIngredientStockForPackage(tableId, packageId, connection = null) {
+  const pool = connection || promisePool;
+  
+  try {
+    // Calculate ingredient usage based on package menu items only
+    const ingredientUsage = await calculateIngredientUsageForPackage(packageId, connection);
+    
+    // Deduct stock for each ingredient
+    for (const [ingredientId, totalToDeduct] of ingredientUsage.entries()) {
+      if (totalToDeduct > 0) {
+        // Deduct from ingredient stock (ensure it doesn't go below 0)
+        await pool.query(
+          `UPDATE ingredient 
+           SET stock_quantity = GREATEST(0, stock_quantity - ?)
+           WHERE ingredient_id = ?`,
+          [totalToDeduct, ingredientId]
+        );
+        
+        console.log(`Deducted ${totalToDeduct} from ingredient ${ingredientId} for package ${packageId} allocated to table ${tableId}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error deducting ingredient stock:', error);
+    throw error;
+  }
+}
+
+// Helper function to restore ingredient stock when package is removed from table
+// Stock is restored based on package menu item quantities only
+async function restoreIngredientStockForPackage(tableId, packageId, connection = null) {
+  const pool = connection || promisePool;
+  
+  try {
+    // Calculate ingredient usage based on package menu items only
+    const ingredientUsage = await calculateIngredientUsageForPackage(packageId, connection);
+    
+    // Restore stock for each ingredient
+    for (const [ingredientId, totalToRestore] of ingredientUsage.entries()) {
+      if (totalToRestore > 0) {
+        // Restore to ingredient stock
+        await pool.query(
+          `UPDATE ingredient 
+           SET stock_quantity = stock_quantity + ?
+           WHERE ingredient_id = ?`,
+          [totalToRestore, ingredientId]
+        );
+        
+        console.log(`Restored ${totalToRestore} to ingredient ${ingredientId} for package ${packageId} removed from table ${tableId}`);
+      }
+    }
+  } catch (error) {
+    console.error('Error restoring ingredient stock:', error);
+    throw error;
+  }
+}
+
+
 // Get all packages (with optional filters)
 router.get('/', async (req, res) => {
   try {
@@ -539,6 +649,15 @@ router.post('/assign', async (req, res) => {
     );
     const wedding_id = tableRows[0]?.wedding_id;
 
+    // Deduct ingredient stock for this package assignment
+    try {
+      await deductIngredientStockForPackage(table_id, package_id, connection);
+    } catch (stockError) {
+      console.error('Error deducting ingredient stock:', stockError);
+      // Log error but don't fail the assignment - stock deduction is important but shouldn't block assignment
+      // You may want to make this more strict depending on business requirements
+    }
+
     await connection.commit();
 
     // Update wedding costs after assignment
@@ -582,6 +701,14 @@ router.delete('/assign/:table_id/:package_id', async (req, res) => {
       [table_id]
     );
     const wedding_id = tableRows[0]?.wedding_id;
+
+    // Restore ingredient stock before deleting assignment
+    try {
+      await restoreIngredientStockForPackage(table_id, package_id, connection);
+    } catch (stockError) {
+      console.error('Error restoring ingredient stock:', stockError);
+      // Log error but continue with deletion
+    }
 
     // Delete assignment
     await connection.query(
@@ -657,5 +784,9 @@ router.get('/wedding/:wedding_id/assignments', async (req, res) => {
   }
 });
 
+// Export helper functions for use in other routes
 module.exports = router;
+module.exports.deductIngredientStockForPackage = deductIngredientStockForPackage;
+module.exports.restoreIngredientStockForPackage = restoreIngredientStockForPackage;
+module.exports.calculateIngredientUsageForPackage = calculateIngredientUsageForPackage;
 
