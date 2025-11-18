@@ -106,6 +106,9 @@ const Weddings = () => {
   
   // Validation errors
   const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  // Form submission loading state
+  const [formLoading, setFormLoading] = useState(false);
 
   // Fetch couples list
   useEffect(() => {
@@ -333,7 +336,7 @@ const Weddings = () => {
       return;
     }
 
-    setLoading(true);
+    setFormLoading(true);
 
     try {
       if (editingWeddingId) {
@@ -384,7 +387,7 @@ const Weddings = () => {
         variant: 'destructive',
       });
     } finally {
-      setLoading(false);
+      setFormLoading(false);
     }
   };
 
@@ -1117,20 +1120,20 @@ const Weddings = () => {
                   type="button"
                   variant="outline"
                   onClick={() => setDialogOpen(false)}
-                  disabled={loading}
+                  disabled={formLoading}
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={loading}>
-                  {loading ? (
+                <Button type="submit" disabled={formLoading}>
+                  {formLoading ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Creating...
+                      {editingWeddingId ? 'Updating...' : 'Creating...'}
                     </>
                   ) : (
                     <>
                       <Plus className="w-4 h-4 mr-2" />
-                      Create Wedding
+                      {editingWeddingId ? 'Update Wedding' : 'Create Wedding'}
                     </>
                   )}
                 </Button>

@@ -17,14 +17,14 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5] px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
+      "flex h-10 w-full items-center justify-between rounded-md border border-input bg-background dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5] px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 overflow-hidden min-w-0 [&>span[data-placeholder]]:text-muted-foreground [&>span:not([data-placeholder])]:truncate [&>span:not([data-placeholder])]:block [&>span:not([data-placeholder])]:min-w-0 [&>span:not([data-placeholder])]:flex-1 [&>span:not([data-placeholder])]:overflow-hidden [&>span:not([data-placeholder])]:text-ellipsis [&>span:not([data-placeholder])]:whitespace-nowrap",
       className,
     )}
     {...props}
   >
     {children}
     <SelectPrimitive.Icon asChild>
-      <ChevronDown className="h-4 w-4 opacity-50" />
+      <ChevronDown className="h-4 w-4 opacity-50 flex-shrink-0 ml-2" />
     </SelectPrimitive.Icon>
   </SelectPrimitive.Trigger>
 ));

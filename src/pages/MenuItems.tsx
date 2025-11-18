@@ -469,35 +469,61 @@ const MenuItems = () => {
   const handleConfirmDelete = async () => {
     if (!selectedItem) return;
     
-    setFormLoading(true);
-    try {
-      await menuItemsAPI.delete(selectedItem.menu_item_id || selectedItem.id);
-      toast({ title: 'Success', description: 'Menu item deleted successfully' });
-      setDeleteDialogOpen(false);
-      
-      // Refresh menu items
-      const response = await menuItemsAPI.getAll();
-      if (response && response.success && response.data) {
-        const items = response.data.map((item: any) => ({
-          id: item.menu_item_id,
-          menu_item_id: item.menu_item_id,
-          menu_name: item.menu_name,
-          menu_cost: parseFloat(item.menu_cost) || 0,
-          menu_price: parseFloat(item.menu_price) || 0,
-          menu_type: item.menu_type,
-          makeable_quantity: item.makeable_quantity ?? 0,
-          restriction_id: item.restriction_id,
-          restriction_name: item.restriction_name,
-          profit_margin: parseFloat(item.profit_margin) || 0,
-          is_template: true,
-          usage_count: item.usage_count || 0
-        }));
-        setMenuItems(items);
-      }
-    } catch (error: any) {
+    const menuItemId = selectedItem.menu_item_id || selectedItem.id;
+    if (!menuItemId) {
       toast({
         title: 'Error',
-        description: error.response?.data?.error || 'Failed to delete menu item',
+        description: 'Invalid menu item ID',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
+    setFormLoading(true);
+    try {
+      const deleteResponse = await menuItemsAPI.delete(menuItemId);
+      
+      // Check if the response indicates success
+      if (deleteResponse?.data?.success !== false) {
+        toast({ title: 'Success', description: 'Menu item deleted successfully' });
+        setDeleteDialogOpen(false);
+        setSelectedItem(null);
+        
+        // Refresh menu items
+        const response = await menuItemsAPI.getAll();
+        if (response && response.data) {
+          const items = Array.isArray(response.data) 
+            ? response.data 
+            : (response.data.data || []);
+          
+          const mappedItems = items.map((item: any) => ({
+            id: item.menu_item_id,
+            menu_item_id: item.menu_item_id,
+            menu_name: item.menu_name,
+            menu_cost: parseFloat(item.unit_cost || item.menu_cost) || 0,
+            menu_price: parseFloat(item.selling_price || item.menu_price) || 0,
+            menu_type: item.menu_type,
+            makeable_quantity: item.makeable_quantity ?? 0,
+            restriction_id: item.restriction_id,
+            restriction_name: item.restriction_name,
+            profit_margin: parseFloat(item.profit_margin) || 0,
+            is_template: true,
+            usage_count: item.usage_count || 0
+          }));
+          setMenuItems(mappedItems);
+        }
+      } else {
+        throw new Error(deleteResponse?.data?.error || 'Delete failed');
+      }
+    } catch (error: any) {
+      console.error('Delete error:', error);
+      const errorMessage = error.response?.data?.error 
+        || error.response?.data?.message 
+        || error.message 
+        || 'Failed to delete menu item';
+      toast({
+        title: 'Error',
+        description: errorMessage,
         variant: 'destructive'
       });
     } finally {

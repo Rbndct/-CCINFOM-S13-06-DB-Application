@@ -79,7 +79,6 @@ export interface MenuItem {
   menu_cost: number;
   menu_price: number;
   menu_type: string;
-  stock: number;
   restriction_id?: number;
   restriction_name?: string;
   profit_margin?: number;

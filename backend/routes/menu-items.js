@@ -77,7 +77,7 @@ router.get('/', async (req, res) => {
         LEFT JOIN table_package tp ON pmi.package_id = tp.package_id
         LEFT JOIN seating_table st ON tp.table_id = st.table_id
         WHERE st.wedding_id = ?
-        GROUP BY m.menu_item_id
+        GROUP BY m.menu_item_id, m.menu_name, m.unit_cost, m.selling_price, m.default_markup_percentage, m.cost_override, m.menu_type, m.restriction_id, dr.restriction_name, dr.restriction_type, dr.severity_level
       `;
       params.push(wedding_id);
     }
@@ -116,10 +116,12 @@ router.get('/', async (req, res) => {
     res.json({success: true, data: itemsWithRestrictions});
   } catch (error) {
     console.error('Error fetching menu items:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch menu items',
-      message: error.message
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 });
@@ -321,13 +323,47 @@ router.post('/', async (req, res) => {
 
     // Insert recipe items
     for (const recipeItem of recipe) {
+      // Validate recipe item
+      if (!recipeItem.ingredient_id) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          error: 'Recipe item missing ingredient_id',
+          details: recipeItem
+        });
+      }
+      
+      const quantity = recipeItem.quantity || recipeItem.quantity_needed;
+      if (!quantity && quantity !== 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          error: 'Recipe item missing quantity',
+          details: recipeItem
+        });
+      }
+
+      // Verify ingredient exists
+      const [ingredientCheck] = await connection.query(
+        'SELECT ingredient_id FROM ingredient WHERE ingredient_id = ?',
+        [recipeItem.ingredient_id]
+      );
+      
+      if (ingredientCheck.length === 0) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          error: `Ingredient with ID ${recipeItem.ingredient_id} not found`
+        });
+      }
+
       await connection.query(
           `INSERT INTO recipe (menu_item_id, ingredient_id, quantity_needed)
          VALUES (?, ?, ?)
          ON DUPLICATE KEY UPDATE quantity_needed = ?`,
           [
-            menuItemId, recipeItem.ingredient_id, recipeItem.quantity,
-            recipeItem.quantity
+            menuItemId, recipeItem.ingredient_id, quantity,
+            quantity
           ]);
     }
 
@@ -484,6 +520,7 @@ router.delete('/:id', async (req, res) => {
     await connection.beginTransaction();
 
     const menuItemId = req.params.id;
+    console.log(`[DELETE] Attempting to delete menu item with ID: ${menuItemId}`);
 
     // Check if menu item exists
     const [checkRows] = await connection.query(
@@ -492,13 +529,16 @@ router.delete('/:id', async (req, res) => {
 
     if (checkRows.length === 0) {
       await connection.rollback();
+      console.log(`[DELETE] Menu item ${menuItemId} not found`);
       return res.status(404).json(
           {success: false, error: 'Menu item not found'});
     }
 
     // Delete menu item (cascade will handle related records)
-    await connection.query(
+    const [deleteResult] = await connection.query(
         'DELETE FROM menu_item WHERE menu_item_id = ?', [menuItemId]);
+    
+    console.log(`[DELETE] Deleted menu item ${menuItemId}, affected rows: ${deleteResult.affectedRows}`);
 
     await connection.commit();
 
@@ -506,10 +546,12 @@ router.delete('/:id', async (req, res) => {
   } catch (error) {
     await connection.rollback();
     console.error('Error deleting menu item:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Failed to delete menu item',
-      message: error.message
+      message: error.message,
+      ...(process.env.NODE_ENV === 'development' && { details: error.stack })
     });
   } finally {
     connection.release();
