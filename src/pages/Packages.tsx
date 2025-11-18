@@ -1142,11 +1142,29 @@ const Packages = () => {
                   <p className="text-sm text-muted-foreground">No menu items available</p>
                 ) : (
                   <div className="space-y-2">
-                    {availableMenuItems.map((item: any) => {
-                      const itemId = item.menu_item_id || item.id;
-                      const quantity = (formData.menu_item_quantities && formData.menu_item_quantities[itemId]) || 0;
-                      const restrictionName = item.restriction_name || item.dietary_restriction || null;
-                      const restrictionType = item.restriction_type || 'Dietary';
+                    {(() => {
+                      // Sort menu items: selected items (quantity > 0) first, then unselected items
+                      const sortedMenuItems = [...availableMenuItems].sort((a, b) => {
+                        const aId = a.menu_item_id || a.id;
+                        const bId = b.menu_item_id || b.id;
+                        const aQuantity = (formData.menu_item_quantities && formData.menu_item_quantities[aId]) || 0;
+                        const bQuantity = (formData.menu_item_quantities && formData.menu_item_quantities[bId]) || 0;
+                        
+                        // Selected items (quantity > 0) come first
+                        if (aQuantity > 0 && bQuantity === 0) return -1;
+                        if (aQuantity === 0 && bQuantity > 0) return 1;
+                        
+                        // If both selected or both unselected, sort alphabetically by name
+                        const aName = (a.menu_name || a.name || '').toLowerCase();
+                        const bName = (b.menu_name || b.name || '').toLowerCase();
+                        return aName.localeCompare(bName);
+                      });
+                      
+                      return sortedMenuItems.map((item: any) => {
+                        const itemId = item.menu_item_id || item.id;
+                        const quantity = (formData.menu_item_quantities && formData.menu_item_quantities[itemId]) || 0;
+                        const restrictionName = item.restriction_name || item.dietary_restriction || null;
+                        const restrictionType = item.restriction_type || 'Dietary';
                       
                       const handleIncrement = () => {
                         setFormData({
@@ -1179,8 +1197,15 @@ const Packages = () => {
                       };
                       
                       return (
-                        <div key={itemId} className={`flex items-center space-x-3 p-3 hover:bg-muted/50 rounded border ${quantity > 0 ? 'bg-muted/30 border-primary/20' : 'border-border'}`}>
-                          <div className="flex items-center gap-2">
+                        <div 
+                          key={itemId} 
+                          className={`flex items-center space-x-3 p-3 rounded-lg border transition-all ${
+                            quantity > 0 
+                              ? 'bg-primary/5 dark:bg-primary/10 border-primary/30 shadow-sm' 
+                              : 'border-border hover:bg-muted/50'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <Button
                               type="button"
                               variant="outline"
@@ -1192,7 +1217,9 @@ const Packages = () => {
                               <Minus className="h-4 w-4" />
                             </Button>
                             <div className="w-12 text-center">
-                              <span className="text-lg font-semibold">{quantity}</span>
+                              <span className={`text-lg font-semibold ${quantity > 0 ? 'text-primary' : 'text-muted-foreground'}`}>
+                                {quantity}
+                              </span>
                             </div>
                             <Button
                               type="button"
@@ -1204,17 +1231,19 @@ const Packages = () => {
                               <Plus className="h-4 w-4" />
                             </Button>
                           </div>
-                          <div className="flex-1">
-                            <div className="flex items-center justify-between">
-                              <span className="font-medium">{item.menu_name || item.name}</span>
-                              <span className="text-sm text-muted-foreground">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`font-medium truncate ${quantity > 0 ? 'text-foreground' : 'text-muted-foreground'}`}>
+                                {item.menu_name || item.name}
+                              </span>
+                              <span className={`text-sm flex-shrink-0 ${quantity > 0 ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
                                 {formatCurrency(item.selling_price || item.menu_price || 0)}
                               </span>
                             </div>
                             <div className="flex items-center gap-2 mt-1 flex-wrap">
-                              <span className="text-xs text-muted-foreground">
+                              <Badge variant="outline" className="text-xs">
                                 {item.menu_type || 'N/A'}
-                              </span>
+                              </Badge>
                               {restrictionName && restrictionName !== 'None' && (
                                 <Badge 
                                   variant="outline" 
@@ -1231,7 +1260,8 @@ const Packages = () => {
                           </div>
                         </div>
                       );
-                    })}
+                    });
+                    })()}
                   </div>
                 )}
               </div>
