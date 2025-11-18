@@ -63,7 +63,7 @@ const Reports = () => {
 
   useEffect(() => {
     (async () => {
-      const res = await weddingsAPI.getAll().catch(() => ({ data: [] }));
+      const res = await weddingsAPI.getAll({}).catch(() => ({ data: [] }));
       const list = res?.data || res || [];
       setWeddings(Array.isArray(list) ? list : []);
     })();
