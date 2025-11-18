@@ -650,7 +650,9 @@ const Packages = () => {
                       <TableHead>Package ID</TableHead>
                       <TableHead>Package Name</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead>Price</TableHead>
+                      <TableHead className="text-right">Cost</TableHead>
+                      <TableHead className="text-right">Selling Price</TableHead>
+                      <TableHead className="text-right">Profit Margin</TableHead>
                       <TableHead>Menu Items</TableHead>
                       <TableHead>Used in Weddings</TableHead>
                       <TableHead>Revenue</TableHead>
@@ -660,14 +662,14 @@ const Packages = () => {
                   <TableBody>
                     {loading ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={10} className="text-center py-8">
                           <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                           <p className="text-sm text-muted-foreground mt-2">Loading packages...</p>
                         </TableCell>
                       </TableRow>
                     ) : filteredAndSortedPackages.length === 0 ? (
                       <TableRow>
-                        <TableCell colSpan={8} className="text-center py-8">
+                        <TableCell colSpan={10} className="text-center py-8">
                           <p className="text-sm text-muted-foreground">No packages found</p>
                         </TableCell>
                       </TableRow>
@@ -690,10 +692,55 @@ const Packages = () => {
                           <TableCell>
                             {getTypeBadge(pkg.package_type)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-right">
+                            {(() => {
+                              // Calculate package cost: sum of (menu item unit_cost × quantity) for all menu items in package
+                              let packageCost = 0;
+                              if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                                packageCost = pkg.menu_items.reduce((sum: number, item: any) => {
+                                  const unitCost = parseFloat(item.unit_cost || item.menu_cost || 0);
+                                  const quantity = parseFloat(item.quantity || 1);
+                                  return sum + (unitCost * quantity);
+                                }, 0);
+                              }
+                              // Fallback to unit_cost if available
+                              if (packageCost === 0 && pkg.unit_cost) {
+                                packageCost = parseFloat(pkg.unit_cost) || 0;
+                              }
+                              return (
+                                <div className="text-sm font-medium">
+                                  {formatCurrency(packageCost)}
+                                </div>
+                              );
+                            })()}
+                          </TableCell>
+                          <TableCell className="text-right">
                             <div className="text-sm font-medium">
                               {formatCurrency(pkg.selling_price || pkg.package_price || 0)}
                             </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            {(() => {
+                              // Calculate profit margin: selling_price - cost
+                              let packageCost = 0;
+                              if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                                packageCost = pkg.menu_items.reduce((sum: number, item: any) => {
+                                  const unitCost = parseFloat(item.unit_cost || item.menu_cost || 0);
+                                  const quantity = parseFloat(item.quantity || 1);
+                                  return sum + (unitCost * quantity);
+                                }, 0);
+                              }
+                              if (packageCost === 0 && pkg.unit_cost) {
+                                packageCost = parseFloat(pkg.unit_cost) || 0;
+                              }
+                              const sellingPrice = parseFloat(pkg.selling_price || pkg.package_price || 0);
+                              const profitMargin = sellingPrice - packageCost;
+                              return (
+                                <div className="text-sm font-medium text-green-600">
+                                  {formatCurrency(profitMargin)}
+                                </div>
+                              );
+                            })()}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1">
