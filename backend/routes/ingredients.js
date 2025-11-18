@@ -12,13 +12,12 @@ router.get('/', async (req, res) => {
         i.unit,
         i.stock_quantity,
         i.re_order_level,
-        COALESCE(i.unit_cost, 0) as unit_cost,
         i.created_at,
         i.updated_at,
         COUNT(DISTINCT r.menu_item_id) as usage_count
       FROM ingredient i
       LEFT JOIN recipe r ON i.ingredient_id = r.ingredient_id
-      GROUP BY i.ingredient_id, i.ingredient_name, i.unit, i.stock_quantity, i.re_order_level, i.unit_cost, i.created_at, i.updated_at
+      GROUP BY i.ingredient_id, i.ingredient_name, i.unit, i.stock_quantity, i.re_order_level, i.created_at, i.updated_at
       ORDER BY i.ingredient_name ASC
     `);
     res.json({ success: true, data: rows });
@@ -91,7 +90,7 @@ router.post('/', async (req, res) => {
     const nextId = (maxIdRows[0].max_id || 0) + 1;
 
     const [result] = await connection.query(
-      `INSERT INTO ingredient (ingredient_id, ingredient_name, unit, stock_quantity, re_order_level, unit_cost) VALUES (?, ?, ?, ?, ?, 0)`,
+      `INSERT INTO ingredient (ingredient_id, ingredient_name, unit, stock_quantity, re_order_level) VALUES (?, ?, ?, ?, ?)`,
       [nextId, ingredient_name, unit, stock_quantity, re_order_level]
     );
 

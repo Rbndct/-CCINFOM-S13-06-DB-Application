@@ -141,10 +141,8 @@ CREATE TABLE ingredient (
     unit VARCHAR(50) NOT NULL,
     stock_quantity DECIMAL(10,2) NOT NULL,
     re_order_level VARCHAR(50) NOT NULL,
-    unit_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    INDEX idx_ingredient_unit_cost (unit_cost)
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
 -- Create recipe table
