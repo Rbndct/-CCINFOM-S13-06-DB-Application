@@ -54,7 +54,7 @@ import {
 import { guestsAPI, dietaryRestrictionsAPI, weddingsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
-import { getTypeIcon, getTypeColor, filterNoneFromDisplay } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, filterNoneFromDisplay, getNoneRestrictionBadge, isNoneRestriction } from '@/utils/restrictionUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 
 type Guest = {
@@ -317,10 +317,7 @@ const Guests = () => {
       setFormErrors({ weddingId: 'Wedding is required' });
       return;
     }
-    if (formData.restrictionIds.length === 0) {
-      setFormErrors({ restrictionIds: 'At least one dietary restriction is required' });
-      return;
-    }
+    // Allow empty restriction array - backend will auto-assign "None" (ID 1)
 
     setFormLoading(true);
     try {
@@ -403,10 +400,7 @@ const Guests = () => {
       setFormErrors({ lastName: 'Last name is required' });
       return;
     }
-    if (formData.restrictionIds.length === 0) {
-      setFormErrors({ restrictionIds: 'At least one dietary restriction is required' });
-      return;
-    }
+    // Allow empty restriction array - backend will auto-assign "None" (ID 1)
 
     setFormLoading(true);
     try {
@@ -720,7 +714,7 @@ const Guests = () => {
                                 })}
                               </div>
                             ) : (
-                              <span className="text-muted-foreground">None</span>
+                              getNoneRestrictionBadge(false)
                             )}
                           </TableCell>
                           <TableCell>{getRsvpStatusBadge(guest.rsvpStatus || guest.rsvp_status)}</TableCell>
@@ -883,14 +877,17 @@ const Guests = () => {
                 {formErrors.weddingId && <p className="text-sm text-red-500">{formErrors.weddingId}</p>}
               </div>
               <div className="space-y-2">
-                <Label>Dietary Restrictions *</Label>
+                <div className="flex items-center gap-2">
+                  <Label>Dietary Restrictions</Label>
+                  <span className="text-xs text-muted-foreground">(Optional - defaults to "None" if not selected)</span>
+                </div>
                 <MultiSelectRestrictions
                   restrictions={dietaryRestrictions}
                   selectedIds={formData.restrictionIds}
                   onSelectionChange={(ids) => setFormData({ ...formData, restrictionIds: ids })}
                   disabled={formLoading}
                   error={formErrors.restrictionIds}
-                  placeholder="Select dietary restrictions (at least one required)"
+                  placeholder="Select dietary restrictions (defaults to 'None' if not selected)"
                 />
               </div>
               <div className="space-y-2">
@@ -967,13 +964,17 @@ const Guests = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label>Dietary Restrictions *</Label>
+                <div className="flex items-center gap-2">
+                  <Label>Dietary Restrictions</Label>
+                  <span className="text-xs text-muted-foreground">(Optional - defaults to "None" if not selected)</span>
+                </div>
                 <MultiSelectRestrictions
                   restrictions={dietaryRestrictions}
                   selectedIds={formData.restrictionIds}
                   onSelectionChange={(ids) => setFormData({ ...formData, restrictionIds: ids })}
                   disabled={formLoading}
                   error={formErrors.restrictionIds}
+                  placeholder="Select dietary restrictions (defaults to 'None' if not selected)"
                 />
               </div>
               <div className="space-y-2">

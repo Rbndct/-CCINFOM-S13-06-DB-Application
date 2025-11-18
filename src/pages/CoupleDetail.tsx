@@ -56,7 +56,7 @@ import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI, guestsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
-import { getTypeIcon, getTypeColor, getSeverityBadge, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, getSeverityBadge, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay, getNoneRestrictionBadge, isNoneRestriction } from '@/utils/restrictionUtils';
 import { CeremonyTypeBadge, getCeremonyTypeIcon, getCeremonyTypeColor } from '@/utils/ceremonyTypeUtils';
 import { useDateFormat } from '@/context/DateFormatContext';
 import { useTimeFormat } from '@/context/TimeFormatContext';
@@ -320,50 +320,12 @@ const CoupleDetail = () => {
       return;
     }
 
-    // Ensure at least one restriction is selected (including "None")
-    if (preferenceForm.restriction_ids.length === 0) {
-      toast({
-        title: 'Validation Error',
-        description: 'Please select at least one dietary restriction',
-        variant: 'destructive',
-      });
-      return;
-    }
-
     // Use the selected restrictions directly (MultiSelectRestrictions handles "None" logic)
+    // Backend will auto-assign "None" (ID 1) if empty array is sent
     let finalRestrictionIds = preferenceForm.restriction_ids;
     
-    // If no restrictions selected and "None" ID not found, try to fetch it again
-    if (finalRestrictionIds.length === 0 && noneRestrictionId === null) {
-      try {
-        const restrictionsResponse = await dietaryRestrictionsAPI.getAll();
-        const allRestrictions = restrictionsResponse.data || [];
-        const noneId = getNoneRestrictionId(allRestrictions);
-        if (noneId !== null) {
-          setNoneRestrictionId(noneId);
-          finalRestrictionIds = [noneId];
-        } else {
-          toast({
-            title: 'Validation Error',
-            description: 'Unable to assign default restriction. Please try again.',
-            variant: 'destructive',
-          });
-          return;
-        }
-      } catch (error) {
-        toast({
-          title: 'Validation Error',
-          description: 'Unable to assign default restriction. Please try again.',
-          variant: 'destructive',
-        });
-        return;
-      }
-    }
-    
-    // Final check - if still empty, use "None" if available
-    if (finalRestrictionIds.length === 0 && noneRestrictionId !== null) {
-      finalRestrictionIds = [noneRestrictionId];
-    }
+    // If no restrictions selected, send empty array - backend will auto-assign "None"
+    // No need to fetch or assign "None" on frontend, backend handles it
 
     setPreferenceLoading(true);
     try {
@@ -1031,22 +993,27 @@ const CoupleDetail = () => {
                         }] : []);
                     return restrictions.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
-                        {restrictions.map((r) => (
-                          <Badge
-                            key={r.restriction_id}
-                            variant="outline"
-                            className={`${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
-                          >
-                            {(() => {
-                              const Icon = getTypeIcon(r.restriction_type || '');
-                              return <Icon className="h-3 w-3" />;
-                            })()}
-                            {r.restriction_name}
-                            {r.severity_level && (
-                              <span className="ml-1">- {r.severity_level}</span>
-                            )}
-                          </Badge>
-                        ))}
+                        {restrictions.map((r) => {
+                          if (isNoneRestriction(r)) {
+                            return <div key={r.restriction_id}>{getNoneRestrictionBadge()}</div>;
+                          }
+                          return (
+                            <Badge
+                              key={r.restriction_id}
+                              variant="outline"
+                              className={`${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                            >
+                              {(() => {
+                                const Icon = getTypeIcon(r.restriction_type || '');
+                                return <Icon className="h-3 w-3" />;
+                              })()}
+                              {r.restriction_name}
+                              {r.severity_level && (
+                                <span className="ml-1">- {r.severity_level}</span>
+                              )}
+                            </Badge>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">No dietary restrictions</p>
@@ -1150,13 +1117,16 @@ const CoupleDetail = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Dietary Restrictions *</Label>
+                <div className="flex items-center gap-2">
+                  <Label>Dietary Restrictions</Label>
+                  <span className="text-xs text-muted-foreground">(Optional - defaults to "None" if not selected)</span>
+                </div>
                 <MultiSelectRestrictions
                   restrictions={dietaryRestrictions}
                   selectedIds={preferenceForm.restriction_ids}
                   onSelectionChange={(ids) => setPreferenceForm({ ...preferenceForm, restriction_ids: ids })}
                   disabled={preferenceLoading}
-                  placeholder="Select dietary restrictions (at least one required)"
+                  placeholder="Select dietary restrictions (defaults to 'None' if not selected)"
                 />
               </div>
             </div>
