@@ -86,7 +86,6 @@ const Weddings = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingWeddingId, setEditingWeddingId] = useState<number | null>(null);
   const [couples, setCouples] = useState([]);
-  const [totalGuests, setTotalGuests] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
   
@@ -199,13 +198,10 @@ const Weddings = () => {
             };
           }
         }));
-        setTotalGuests(total);
         return weddingsWithGuestCounts;
       } catch (e) {
         console.error('Error calculating guest counts:', e);
         // Fallback to guest_count field if available
-        total = weddingsData.reduce((sum: number, w: any) => sum + (w.guest_count || w.guestCount || 0), 0);
-        setTotalGuests(total);
         return weddingsData;
       }
     },
@@ -254,6 +250,13 @@ const Weddings = () => {
       return sortOrder === 'asc' ? aId - bId : bId - aId;
     });
   }, [weddings, searchTerm, filterStatus, sortOrder, filterWeddingType]);
+
+  // Calculate total guests from weddings data (always in sync, even with cached data)
+  const totalGuests = useMemo(() => {
+    return weddings.reduce((sum, wedding) => {
+      return sum + (wedding.actualGuestCount || wedding.guestCount || wedding.guest_count || 0);
+    }, 0);
+  }, [weddings]);
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredWeddings.length / itemsPerPage);

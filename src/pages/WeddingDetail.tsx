@@ -274,8 +274,16 @@ const WeddingDetail = () => {
     const stored = localStorage.getItem('default_table_sort_order');
     return (stored as 'asc' | 'desc') || 'desc';
   });
-  const [guestCurrentPage, setGuestCurrentPage] = useState(1);
+  const [guestCurrentPage, setGuestCurrentPage] = useState(() => {
+    const stored = localStorage.getItem('guest_current_page');
+    return stored ? parseInt(stored, 10) : 1;
+  });
   const guestsPerPage = 10;
+
+  // Save guest current page to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem('guest_current_page', guestCurrentPage.toString());
+  }, [guestCurrentPage]);
 
   useEffect(() => {
     const fetchWeddingData = async () => {
@@ -2795,6 +2803,14 @@ const WeddingDetail = () => {
 
   const filteredAndSortedGuests = getFilteredAndSortedGuests();
   const totalPages = Math.ceil(filteredAndSortedGuests.length / guestsPerPage);
+  
+  // Ensure current page doesn't exceed total pages (in case filters changed)
+  useEffect(() => {
+    if (totalPages > 0 && guestCurrentPage > totalPages) {
+      setGuestCurrentPage(1);
+    }
+  }, [totalPages, guestCurrentPage]);
+  
   const startIndex = (guestCurrentPage - 1) * guestsPerPage;
   const endIndex = startIndex + guestsPerPage;
   const paginatedGuests = filteredAndSortedGuests.slice(startIndex, endIndex);
