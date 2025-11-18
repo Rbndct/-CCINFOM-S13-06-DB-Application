@@ -721,8 +721,22 @@ const Inventory = () => {
                   id="quantity_available"
                   type="number"
                   min="0"
+                  step="1"
                   value={formData.quantity_available}
-                  onChange={(e) => setFormData({ ...formData, quantity_available: e.target.value })}
+                  onChange={(e) => {
+                    const qty = e.target.value;
+                    // Prevent negative values
+                    if (qty === '' || (parseFloat(qty) >= 0 && !isNaN(parseFloat(qty)))) {
+                      setFormData({ ...formData, quantity_available: qty });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    // Ensure value is at least 0 if not empty
+                    const qty = e.target.value;
+                    if (qty && parseFloat(qty) < 0) {
+                      setFormData({ ...formData, quantity_available: '0' });
+                    }
+                  }}
                   placeholder="0"
                   disabled={formLoading}
                 />
@@ -851,8 +865,22 @@ const Inventory = () => {
                         id="view_quantity_available"
                         type="number"
                         min="0"
+                        step="1"
                         value={formData.quantity_available}
-                        onChange={(e) => setFormData({ ...formData, quantity_available: e.target.value })}
+                        onChange={(e) => {
+                          const qty = e.target.value;
+                          // Prevent negative values
+                          if (qty === '' || (parseFloat(qty) >= 0 && !isNaN(parseFloat(qty)))) {
+                            setFormData({ ...formData, quantity_available: qty });
+                          }
+                        }}
+                        onBlur={(e) => {
+                          // Ensure value is at least 0 if not empty
+                          const qty = e.target.value;
+                          if (qty && parseFloat(qty) < 0) {
+                            setFormData({ ...formData, quantity_available: '0' });
+                          }
+                        }}
                         placeholder="0"
                         disabled={formLoading}
                       />
