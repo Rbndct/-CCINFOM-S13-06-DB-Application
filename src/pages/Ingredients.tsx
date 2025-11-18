@@ -19,7 +19,11 @@ import {
   TrendingDown,
   PackagePlus,
   AlertCircle,
-  Info
+  Info,
+  Warehouse,
+  Scale,
+  ChevronUp,
+  ChevronDown
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -419,15 +423,48 @@ const Ingredients = () => {
     return CheckCircle; // Good - well above reorder level
   };
 
+  // Format unit for consistent display
+  const formatUnit = (unit: string): string => {
+    if (!unit) return '';
+    // Map of unit values to display format
+    const unitMap: Record<string, string> = {
+      'kg': 'kg',
+      'g': 'g',
+      'L': 'L',
+      'ml': 'ml',
+      'pieces': 'pieces',
+      'pcs': 'pcs',
+      'cup': 'cup',
+      'tbsp': 'tbsp',
+      'tsp': 'tsp',
+      'oz': 'oz',
+      'lb': 'lb'
+    };
+    // If unit is already in the map, return it
+    if (unitMap[unit.toLowerCase()]) {
+      return unitMap[unit.toLowerCase()];
+    }
+    // If it contains parentheses, extract the short form
+    const match = unit.match(/^(\w+)\s*\(/);
+    if (match) {
+      return match[1];
+    }
+    // Otherwise return as is
+    return unit;
+  };
+
   return (
     <DashboardLayout>
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-3xl font-bold tracking-tight">Ingredients Directory</h1>
-            <p className="text-muted-foreground">
-              Manage ingredient inventory and stock levels
+            <h1 className="text-3xl font-bold tracking-tight flex items-center gap-2">
+              <Package className="h-8 w-8 text-primary" />
+              Ingredients Overview
+            </h1>
+            <p className="text-muted-foreground mt-1">
+              Manage ingredient inventory, track stock levels, and monitor usage across menu items
             </p>
           </div>
           <Button onClick={handleAddIngredient}>
@@ -444,28 +481,58 @@ const Ingredients = () => {
               <Package className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalIngredients}</div>
-              <p className="text-xs text-muted-foreground mt-1">Active ingredients</p>
+              <div className="space-y-2">
+                <div className="text-2xl font-bold">{totalIngredients}</div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Unique ingredients in inventory
+                  </p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <CheckCircle className="h-3 w-3 text-green-600" />
+                    <span className="text-muted-foreground">All active and tracked</span>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Low Stock Items</CardTitle>
-              <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+              <AlertTriangle className="h-4 w-4 text-red-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-red-600">{lowStockCount}</div>
-              <p className="text-xs text-muted-foreground mt-1">Need restocking</p>
+              <div className="space-y-2">
+                <div className="text-2xl font-bold text-red-600">{lowStockCount}</div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Ingredients at or below re-order level
+                  </p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <AlertCircle className="h-3 w-3 text-yellow-600" />
+                    <span className="text-muted-foreground">Require immediate attention</span>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Stock Units</CardTitle>
-              <TrendingUp className="h-4 w-4 text-muted-foreground" />
+              <Warehouse className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{totalStockValue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground mt-1">Across all ingredients</p>
+              <div className="space-y-2">
+                <div className="text-2xl font-bold">{totalStockValue.toLocaleString()}</div>
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Combined stock quantity across all ingredients
+                  </p>
+                  <div className="flex items-center gap-2 text-xs">
+                    <TrendingUp className="h-3 w-3 text-green-600" />
+                    <span className="text-muted-foreground">Total inventory value</span>
+                  </div>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -474,7 +541,15 @@ const Ingredients = () => {
         <Card>
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle>Ingredients</CardTitle>
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Scale className="h-5 w-5 text-muted-foreground" />
+                  Ingredients Directory
+                </CardTitle>
+                <CardDescription className="mt-1">
+                  View and manage all ingredients in your inventory
+                </CardDescription>
+              </div>
               <div className="flex items-center gap-2">
                 <div className="relative">
                   <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -505,33 +580,37 @@ const Ingredients = () => {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Sort By</Label>
-                    <select
+                    <Select
                       value={sortBy}
-                      onChange={(e) => {
-                        setSortBy(e.target.value as any);
-                        localStorage.setItem('ingredients_sort_by', e.target.value);
+                      onValueChange={(value: any) => {
+                        setSortBy(value);
+                        localStorage.setItem('ingredients_sort_by', value);
                       }}
-                      className="w-full mt-1 px-3 py-2 border rounded-md"
                     >
-                      <option value="id">ID</option>
-                      <option value="name">Name</option>
-                      <option value="stock">Stock Quantity</option>
-                      <option value="reorder">Re-order Level</option>
-                    </select>
+                      <SelectTrigger className="mt-1">
+                        <SelectValue placeholder="Sort by" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="id">ID</SelectItem>
+                        <SelectItem value="name">Name</SelectItem>
+                        <SelectItem value="stock">Stock Quantity</SelectItem>
+                        <SelectItem value="reorder">Re-order Level</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label>Sort Order</Label>
-                    <select
-                      value={sortOrder}
-                      onChange={(e) => {
-                        setSortOrder(e.target.value as any);
-                        localStorage.setItem('ingredients_sort_order', e.target.value);
+                    <Button
+                      variant="outline"
+                      className="w-full mt-1"
+                      onClick={() => {
+                        const newOrder = sortOrder === 'asc' ? 'desc' : 'asc';
+                        setSortOrder(newOrder);
+                        localStorage.setItem('ingredients_sort_order', newOrder);
                       }}
-                      className="w-full mt-1 px-3 py-2 border rounded-md"
                     >
-                      <option value="asc">Ascending</option>
-                      <option value="desc">Descending</option>
-                    </select>
+                      {sortOrder === 'asc' ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                    </Button>
                   </div>
                 </div>
               </div>
@@ -642,12 +721,24 @@ const Ingredients = () => {
                               #{ingredient.ingredient_id || ingredient.id}
                             </Badge>
                           </TableCell>
-                          <TableCell className="font-medium">{ingredient.ingredient_name}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{ingredient.unit}</Badge>
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                              {ingredient.ingredient_name}
+                            </div>
                           </TableCell>
                           <TableCell>
-                            <span className="font-semibold">{stock.toLocaleString()}</span>
+                            <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                              <Scale className="h-3 w-3" />
+                              {formatUnit(ingredient.unit)}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Warehouse className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-semibold">{stock.toLocaleString()}</span>
+                              <span className="text-xs text-muted-foreground">{formatUnit(ingredient.unit)}</span>
+                            </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-1.5">
@@ -656,6 +747,7 @@ const Ingredients = () => {
                                 return <ReorderIcon className="h-3.5 w-3.5 text-muted-foreground" />;
                               })()}
                               <span className="text-muted-foreground">{reorder.toLocaleString()}</span>
+                              <span className="text-xs text-muted-foreground">{formatUnit(ingredient.unit)}</span>
                             </div>
                           </TableCell>
                           <TableCell>
@@ -765,13 +857,16 @@ const Ingredients = () => {
                   <div>
                     <Label className="text-xs text-muted-foreground">Unit</Label>
                     <div className="font-semibold">
-                      <Badge variant="outline">{selectedIngredient.unit}</Badge>
+                      <Badge variant="outline" className="flex items-center gap-1 w-fit">
+                        <Scale className="h-3 w-3" />
+                        {formatUnit(selectedIngredient.unit)}
+                      </Badge>
                     </div>
                   </div>
                   <div>
                     <Label className="text-xs text-muted-foreground">Stock Quantity</Label>
                     <p className="font-semibold text-lg">
-                      {(parseFloat(selectedIngredient.stock_quantity) || 0).toLocaleString()} {selectedIngredient.unit}
+                      {(parseFloat(selectedIngredient.stock_quantity) || 0).toLocaleString()} {formatUnit(selectedIngredient.unit)}
                     </p>
                   </div>
                   <div>
@@ -784,7 +879,7 @@ const Ingredients = () => {
                         return (
                           <>
                             <ReorderIcon className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-semibold">{(parseFloat(selectedIngredient.re_order_level) || 0).toLocaleString()} {selectedIngredient.unit}</span>
+                            <span className="font-semibold">{(parseFloat(selectedIngredient.re_order_level) || 0).toLocaleString()} {formatUnit(selectedIngredient.unit)}</span>
                           </>
                         );
                       })()}
@@ -835,7 +930,7 @@ const Ingredients = () => {
                               <p className="text-xs text-muted-foreground">{item.menu_type}</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-sm font-semibold">{item.quantity_needed} {selectedIngredient.unit}</p>
+                              <p className="text-sm font-semibold">{item.quantity_needed} {formatUnit(selectedIngredient.unit)}</p>
                               <p className="text-xs text-muted-foreground">
                                 Can make: {item.makeable_quantity || 0}
                               </p>
@@ -896,27 +991,32 @@ const Ingredients = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="unit">Unit *</Label>
+                <Label htmlFor="unit" className="flex items-center gap-2">
+                  <Scale className="h-4 w-4 text-muted-foreground" />
+                  Unit *
+                </Label>
                 <Select
                   value={formData.unit || ''}
                   onValueChange={(value) => setFormData({ ...formData, unit: value || '' })}
                   disabled={formLoading}
                 >
                   <SelectTrigger id="unit" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
-                    <SelectValue placeholder="Select unit" />
+                    <SelectValue placeholder="Select unit">
+                      {formData.unit ? formatUnit(formData.unit) : 'Select unit'}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
-                    <SelectItem value="kg" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">kg (Kilogram)</SelectItem>
-                    <SelectItem value="g" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">g (Gram)</SelectItem>
-                    <SelectItem value="L" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">L (Liter)</SelectItem>
-                    <SelectItem value="ml" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">ml (Milliliter)</SelectItem>
+                    <SelectItem value="kg" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">kg</SelectItem>
+                    <SelectItem value="g" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">g</SelectItem>
+                    <SelectItem value="L" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">L</SelectItem>
+                    <SelectItem value="ml" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">ml</SelectItem>
                     <SelectItem value="pieces" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">pieces</SelectItem>
                     <SelectItem value="pcs" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">pcs</SelectItem>
                     <SelectItem value="cup" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">cup</SelectItem>
-                    <SelectItem value="tbsp" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">tbsp (Tablespoon)</SelectItem>
-                    <SelectItem value="tsp" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">tsp (Teaspoon)</SelectItem>
-                    <SelectItem value="oz" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">oz (Ounce)</SelectItem>
-                    <SelectItem value="lb" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">lb (Pound)</SelectItem>
+                    <SelectItem value="tbsp" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">tbsp</SelectItem>
+                    <SelectItem value="tsp" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">tsp</SelectItem>
+                    <SelectItem value="oz" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">oz</SelectItem>
+                    <SelectItem value="lb" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">lb</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -947,7 +1047,7 @@ const Ingredients = () => {
                 {formData.stock_quantity && !isNaN(parseFloat(formData.stock_quantity)) && (
                   <div className="p-2 bg-muted/50 dark:bg-[#1a1a1a] rounded text-sm">
                     <span className="text-muted-foreground">Calculated Re-order Level: </span>
-                    <span className="font-semibold">{Math.max(1, Math.floor(parseFloat(formData.stock_quantity) * 0.2))} {formData.unit || 'units'}</span>
+                    <span className="font-semibold">{Math.max(1, Math.floor(parseFloat(formData.stock_quantity) * 0.2))} {formatUnit(formData.unit) || 'units'}</span>
                   </div>
                 )}
               </div>
@@ -1118,7 +1218,7 @@ const Ingredients = () => {
                               <p className="text-2xl font-bold">
                                 {(parseFloat(selectedIngredient.stock_quantity) || 0).toLocaleString()}
                               </p>
-                              <p className="text-xs text-muted-foreground">{selectedIngredient.unit}</p>
+                              <p className="text-xs text-muted-foreground">{formatUnit(selectedIngredient.unit)}</p>
                             </div>
                             {(() => {
                               const stockQty = parseFloat(selectedIngredient.stock_quantity || 0);
@@ -1137,7 +1237,7 @@ const Ingredients = () => {
                           </div>
                           <div className="mt-2 pt-2 border-t dark:border-[#2a2a2a]">
                             <p className="text-xs text-muted-foreground">
-                              Re-order Level: <span className="font-semibold">{parseFloat(selectedIngredient.re_order_level || 0).toLocaleString()} {selectedIngredient.unit}</span>
+                              Re-order Level: <span className="font-semibold">{parseFloat(selectedIngredient.re_order_level || 0).toLocaleString()} {formatUnit(selectedIngredient.unit)}</span>
                             </p>
                           </div>
                         </div>
@@ -1171,7 +1271,7 @@ const Ingredients = () => {
                               <p className="text-2xl font-bold">
                                 {Math.max(0, (parseFloat(selectedIngredient.stock_quantity) || 0) + parseFloat(restockAmount)).toLocaleString()}
                               </p>
-                              <p className="text-xs text-muted-foreground">{selectedIngredient.unit}</p>
+                              <p className="text-xs text-muted-foreground">{formatUnit(selectedIngredient.unit)}</p>
                             </div>
                             {(() => {
                               const newStock = Math.max(0, (parseFloat(selectedIngredient.stock_quantity) || 0) + parseFloat(restockAmount));
