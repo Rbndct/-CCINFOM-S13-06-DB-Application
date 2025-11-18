@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import { 
   ArrowLeft,
   Calendar, 
@@ -74,7 +75,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, menuItemsAPI, packagesAPI, inventoryAPI, inventoryAllocationAPI } from '@/api';
 import { getTypeIcon, getTypeColor, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
 import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
-import { TableCategoryBadge, getTableCategoryIcon } from '@/utils/tableCategoryUtils';
+import { TableCategoryBadge, getTableCategoryIcon, getTableCategoryColor } from '@/utils/tableCategoryUtils';
 import { PackageTypeBadge } from '@/utils/packageTypeUtils';
 import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 import { useDateFormat } from '@/context/DateFormatContext';
@@ -94,6 +95,7 @@ const WeddingDetail = () => {
   const { formatDate } = useDateFormat();
   const { formatTime } = useTimeFormat();
   const { formatCurrency } = useCurrencyFormat();
+  const queryClient = useQueryClient();
   
   // Helper function to safely parse and format dates
   const safeFormatDate = (dateValue: any): string => {
@@ -188,6 +190,8 @@ const WeddingDetail = () => {
     guest_count: '',
     total_cost: '',
     production_cost: '',
+    equipment_rental_cost: '',
+    food_cost: '',
     payment_status: 'pending',
     preference_id: ''
   });
@@ -308,12 +312,13 @@ const WeddingDetail = () => {
         console.log('Wedding API response:', weddingResponse);
         
         // Handle both direct data and wrapped response formats
-        let weddingData = null;
+        // Note: axios interceptor returns response.data directly
+        let weddingData: any = null;
         if (weddingResponse) {
-          if (weddingResponse.success && weddingResponse.data) {
-            weddingData = weddingResponse.data;
+          if ((weddingResponse as any).success && (weddingResponse as any).data) {
+            weddingData = (weddingResponse as any).data;
             console.log('Extracted wedding data from success.data:', weddingData);
-          } else if (weddingResponse.id || weddingResponse.wedding_id) {
+          } else if ((weddingResponse as any).id || (weddingResponse as any).wedding_id) {
             // If response is already the data object
             weddingData = weddingResponse;
             console.log('Using response as direct data:', weddingData);
@@ -366,12 +371,12 @@ const WeddingDetail = () => {
           // Fetch couple preferences for edit form
           if (weddingData.couple_id) {
             try {
-              const prefResponse = await couplesAPI.getPreferences(weddingData.couple_id);
+              const prefResponse: any = await couplesAPI.getPreferences(weddingData.couple_id);
               if (prefResponse && prefResponse.data) {
                 setCouplePreferences(prefResponse.data);
               }
               // Fetch couple data for dietary restrictions
-              const coupleResp = await couplesAPI.getById(weddingData.couple_id);
+              const coupleResp: any = await couplesAPI.getById(weddingData.couple_id);
               if (coupleResp && coupleResp.data) {
                 setCoupleData(coupleResp.data);
               }
@@ -380,7 +385,7 @@ const WeddingDetail = () => {
             }
           }
         } else {
-          const errorMsg = weddingResponse?.error || weddingResponse?.message || 'Wedding not found or invalid response';
+          const errorMsg = (weddingResponse as any)?.error || (weddingResponse as any)?.message || 'Wedding not found or invalid response';
           console.error('Wedding fetch failed - no data extracted. Response:', weddingResponse);
           setError(errorMsg);
           toast({
@@ -395,10 +400,11 @@ const WeddingDetail = () => {
         
         // Fetch guests for this wedding
         try {
-          const guestsResponse = await guestsAPI.getAll({ wedding_id: id });
-          if (guestsResponse && guestsResponse.success && guestsResponse.data) {
+          const guestsResponse: any = await guestsAPI.getAll({ wedding_id: id });
+          if (guestsResponse && (guestsResponse.success || guestsResponse.data)) {
+            const guestsData = guestsResponse.data || (Array.isArray(guestsResponse) ? guestsResponse : []);
             // Transform guest data to match expected format
-            const transformedGuests = (guestsResponse.data || []).map((g: any) => {
+            const transformedGuests = (guestsData || []).map((g: any) => {
               try {
                 const guestName = g.guest_name || g.name || '';
                 // Parse restrictions - handle both array and JSON string formats
@@ -467,9 +473,8 @@ const WeddingDetail = () => {
             const noneId = getNoneRestrictionId(restrictionsResponse.data);
             setNoneRestrictionId(noneId);
             
-            // Filter out "None" from the display (it's a system restriction)
-            const displayableRestrictions = filterNoneFromDisplay(restrictionsResponse.data);
-            setDietaryRestrictions(displayableRestrictions);
+            // Include "None" in the restrictions list so it can be displayed and selected
+            setDietaryRestrictions(restrictionsResponse.data);
           }
         } catch (e) {
           console.error('Error fetching dietary restrictions:', e);
@@ -478,11 +483,10 @@ const WeddingDetail = () => {
         // Fetch menu items for this wedding
         try {
           setMenuItemsLoading(true);
-          const menuItemsResponse = await menuItemsAPI.getAll({ wedding_id: id });
-          if (menuItemsResponse && menuItemsResponse.success && menuItemsResponse.data) {
-            setMenuItems(menuItemsResponse.data || []);
-          } else if (menuItemsResponse && menuItemsResponse.data) {
-            setMenuItems(menuItemsResponse.data || []);
+          const menuItemsResponse: any = await menuItemsAPI.getAll({ wedding_id: id });
+          if (menuItemsResponse) {
+            const menuItemsData = menuItemsResponse.data || (Array.isArray(menuItemsResponse) ? menuItemsResponse : []);
+            setMenuItems(menuItemsData);
           }
         } catch (e) {
           console.error('Error fetching menu items:', e);
@@ -529,7 +533,7 @@ const WeddingDetail = () => {
             tablesData = resp.data;
           } else if (Array.isArray(resp)) {
             tablesData = resp;
-          } else if (resp.success && resp.data && Array.isArray(resp.data)) {
+          } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
             tablesData = resp.data;
           }
         }
@@ -564,7 +568,7 @@ const WeddingDetail = () => {
                 updatedTables = updatedResp.data;
               } else if (Array.isArray(updatedResp)) {
                 updatedTables = updatedResp;
-              } else if (updatedResp.success && updatedResp.data && Array.isArray(updatedResp.data)) {
+              } else if ((updatedResp as any).success && (updatedResp as any).data && Array.isArray((updatedResp as any).data)) {
                 updatedTables = updatedResp.data;
               }
             }
@@ -589,8 +593,10 @@ const WeddingDetail = () => {
             );
             if (coupleTable && coupleTableResp && coupleTableResp.data) {
               const coupleTableId = coupleTable.id || coupleTable.table_id;
-              const partner1Name = weddingData.partner1 || weddingData.partner1_name;
-              const partner2Name = weddingData.partner2 || weddingData.partner2_name;
+              // Get couple data from wedding state or coupleData state
+              const currentWedding = wedding;
+              const partner1Name = currentWedding?.partner1 || currentWedding?.partner1_name || coupleData?.partner1_name || '';
+              const partner2Name = currentWedding?.partner2 || currentWedding?.partner2_name || coupleData?.partner2_name || '';
               
               // Check if partners are already guests, if not create them
               const existingGuests = await guestsAPI.getByWedding(id);
@@ -675,11 +681,10 @@ const WeddingDetail = () => {
       // Fetch menu items for this wedding
       try {
         setMenuItemsLoading(true);
-        const menuItemsResponse = await menuItemsAPI.getAll({ wedding_id: id });
-        if (menuItemsResponse && menuItemsResponse.success && menuItemsResponse.data) {
-          setMenuItems(menuItemsResponse.data || []);
-        } else if (menuItemsResponse && menuItemsResponse.data) {
-          setMenuItems(menuItemsResponse.data || []);
+        const menuItemsResponse: any = await menuItemsAPI.getAll({ wedding_id: id });
+        if (menuItemsResponse) {
+          const menuItemsData = menuItemsResponse.data || (Array.isArray(menuItemsResponse) ? menuItemsResponse : []);
+          setMenuItems(menuItemsData);
         } else {
           setMenuItems([]);
         }
@@ -694,21 +699,17 @@ const WeddingDetail = () => {
       try {
         setPackagesLoading(true);
         // Fetch all packages from the database
-        const packagesResponse = await packagesAPI.getAll({});
-        if (packagesResponse && packagesResponse.success && packagesResponse.data) {
-          const packagesData = packagesResponse.data || [];
-          setPackages(packagesData);
-          setAvailablePackages(packagesData);
-        } else if (packagesResponse && packagesResponse.data) {
-          const packagesData = packagesResponse.data || [];
+        const packagesResponse: any = await packagesAPI.getAll({});
+        if (packagesResponse) {
+          const packagesData = packagesResponse.data || (Array.isArray(packagesResponse) ? packagesResponse : []);
           setPackages(packagesData);
           setAvailablePackages(packagesData);
         } else {
           // Fallback: try without parameters
           try {
-            const fallbackResponse = await packagesAPI.getAll();
-            if (fallbackResponse && fallbackResponse.data) {
-              const packagesData = Array.isArray(fallbackResponse.data) ? fallbackResponse.data : (fallbackResponse.success && fallbackResponse.data ? [fallbackResponse.data] : []);
+            const fallbackResponse: any = await packagesAPI.getAll({});
+            if (fallbackResponse) {
+              const packagesData = fallbackResponse.data || (Array.isArray(fallbackResponse) ? fallbackResponse : []);
               setPackages(packagesData);
               setAvailablePackages(packagesData);
             } else {
@@ -732,7 +733,7 @@ const WeddingDetail = () => {
       // Fetch table-package assignments for this wedding
       try {
         const assignmentsResponse = await packagesAPI.getTableAssignments(id);
-        if (assignmentsResponse && (assignmentsResponse.success || assignmentsResponse.data)) {
+        if (assignmentsResponse && ((assignmentsResponse as any).success || (assignmentsResponse as any).data)) {
           const assignmentsData = assignmentsResponse.data || [];
           // Ensure all assignment data is properly formatted
           const formattedAssignments = Array.isArray(assignmentsData) ? assignmentsData.map((a: any) => ({
@@ -766,7 +767,7 @@ const WeddingDetail = () => {
       try {
         setInventoryAllocationLoading(true);
         const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
-        if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+        if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
           setInventoryAllocations(allocationsResponse.data || []);
         } else if (allocationsResponse && allocationsResponse.data) {
           setInventoryAllocations(allocationsResponse.data || []);
@@ -781,7 +782,7 @@ const WeddingDetail = () => {
       // Fetch available inventory items
       try {
         const itemsResponse = await inventoryAPI.getAll({});
-        if (itemsResponse && itemsResponse.success && itemsResponse.data) {
+        if (itemsResponse && (itemsResponse as any).success && (itemsResponse as any).data) {
           setAvailableInventoryItems(itemsResponse.data || []);
         } else if (itemsResponse && itemsResponse.data) {
           setAvailableInventoryItems(itemsResponse.data || []);
@@ -840,7 +841,7 @@ const WeddingDetail = () => {
           tablesData = resp.data;
         } else if (Array.isArray(resp)) {
           tablesData = resp;
-        } else if (resp.success && resp.data && Array.isArray(resp.data)) {
+        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
           tablesData = resp.data;
         }
       }
@@ -874,7 +875,7 @@ const WeddingDetail = () => {
           tablesData = resp.data;
         } else if (Array.isArray(resp)) {
           tablesData = resp;
-        } else if (resp.success && resp.data && Array.isArray(resp.data)) {
+        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
           tablesData = resp.data;
         }
       }
@@ -961,9 +962,9 @@ const WeddingDetail = () => {
       try {
         const weddingResponse = await weddingsAPI.getById(id);
         let weddingData = null;
-        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
           weddingData = weddingResponse.data;
-        } else if (weddingResponse && weddingResponse.id) {
+        } else if (weddingResponse && ((weddingResponse as any).id || (weddingResponse as any).wedding_id)) {
           weddingData = weddingResponse;
         }
         
@@ -1019,7 +1020,9 @@ const WeddingDetail = () => {
     
     if (!firstName.trim()) newErrors.firstName = 'First name is required';
     if (!lastName.trim()) newErrors.lastName = 'Last name is required';
-    // Removed validation requiring at least one restriction - will auto-assign "None" if empty
+    if (guestRestrictionIds.length === 0) {
+      newErrors.dietaryRestriction = 'Please select at least one dietary restriction';
+    }
     
     setGuestFormErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
@@ -1034,8 +1037,8 @@ const WeddingDetail = () => {
     setGuestFormLoading(true);
     
     try {
-      // Auto-assign "None" if no restrictions selected
-      const finalRestrictionIds = ensureNoneRestriction(guestRestrictionIds, noneRestrictionId);
+      // Use selected restrictions directly (MultiSelectRestrictions handles "None" logic)
+      const finalRestrictionIds = guestRestrictionIds;
       
       // Create guest via API
       const fullName = `${firstName.trim()} ${lastName.trim()}`;
@@ -1046,10 +1049,10 @@ const WeddingDetail = () => {
         restriction_ids: finalRestrictionIds // Send array of restriction IDs (will include "None" if empty)
       });
       
-      if (response && response.success) {
+      if (response && (response as any).success) {
         // Refresh guests list
         const guestsResponse = await guestsAPI.getAll({ wedding_id: id });
-        if (guestsResponse && guestsResponse.success && guestsResponse.data) {
+        if (guestsResponse && (guestsResponse as any).success && (guestsResponse as any).data) {
           const transformedGuests = guestsResponse.data.map((g: any) => {
             const guestName = g.guest_name || g.name || '';
             // Parse restrictions - handle both array and JSON string formats
@@ -1092,6 +1095,9 @@ const WeddingDetail = () => {
             pendingRSVPs: pending
           }));
         }
+        
+        // Invalidate weddings query to refresh the weddings list page
+        queryClient.invalidateQueries({ queryKey: ['weddings'] });
       
       // Reset form
       setFirstName('');
@@ -1145,8 +1151,8 @@ const WeddingDetail = () => {
     
     setEditGuestLoading(true);
     try {
-      // Auto-assign "None" if no restrictions selected
-      const finalRestrictionIds = ensureNoneRestriction(editGuestRestrictionIds, noneRestrictionId);
+      // Use selected restrictions directly (MultiSelectRestrictions handles "None" logic)
+      const finalRestrictionIds = editGuestRestrictionIds;
       
       const fullName = `${editGuestFirstName.trim()} ${editGuestLastName.trim()}`;
       await guestsAPI.update(editingGuest.id, {
@@ -1157,7 +1163,7 @@ const WeddingDetail = () => {
       
       // Refresh guests list
       const guestsResponse = await guestsAPI.getAll({ wedding_id: id });
-      if (guestsResponse && guestsResponse.success && guestsResponse.data) {
+      if (guestsResponse && (guestsResponse as any).success && (guestsResponse as any).data) {
         const transformedGuests = guestsResponse.data.map((g: any) => {
           const guestName = g.guest_name || g.name || '';
           let restrictions = [];
@@ -1218,7 +1224,7 @@ const WeddingDetail = () => {
       
       // Refresh guests list
       const guestsResponse = await guestsAPI.getAll({ wedding_id: id });
-      if (guestsResponse && guestsResponse.success && guestsResponse.data) {
+      if (guestsResponse && (guestsResponse as any).success && (guestsResponse as any).data) {
         const transformedGuests = guestsResponse.data.map((g: any) => {
           const guestName = g.guest_name || g.name || '';
           let restrictions = [];
@@ -1249,6 +1255,9 @@ const WeddingDetail = () => {
         });
         setGuests(transformedGuests);
       }
+      
+      // Invalidate weddings query to refresh the weddings list page
+      queryClient.invalidateQueries({ queryKey: ['weddings'] });
       
       toast({
         title: 'Guest Deleted',
@@ -1313,7 +1322,7 @@ const WeddingDetail = () => {
           tablesData = resp.data;
         } else if (Array.isArray(resp)) {
           tablesData = resp;
-        } else if (resp.success && resp.data && Array.isArray(resp.data)) {
+        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
           tablesData = resp.data;
         }
       }
@@ -1334,7 +1343,7 @@ const WeddingDetail = () => {
       // Refresh inventory allocations to show the auto-created table allocation
       try {
         const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
-        if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+        if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
           setInventoryAllocations(allocationsResponse.data || []);
         } else if (allocationsResponse && allocationsResponse.data) {
           setInventoryAllocations(allocationsResponse.data || []);
@@ -1342,7 +1351,7 @@ const WeddingDetail = () => {
         
         // Refresh wedding data to update costs
         const weddingResponse = await weddingsAPI.getById(id);
-        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
           setWedding(weddingResponse.data);
         }
       } catch (allocError) {
@@ -1505,7 +1514,7 @@ const WeddingDetail = () => {
           tablesData = tablesResp.data;
         } else if (Array.isArray(tablesResp)) {
           tablesData = tablesResp;
-        } else if (tablesResp.success && tablesResp.data && Array.isArray(tablesResp.data)) {
+        } else if ((tablesResp as any).success && (tablesResp as any).data && Array.isArray((tablesResp as any).data)) {
           tablesData = tablesResp.data;
         }
         tablesData = tablesData.map((t: any) => ({
@@ -1767,7 +1776,7 @@ const WeddingDetail = () => {
           tablesData = tablesResp.data;
         } else if (Array.isArray(tablesResp)) {
           tablesData = tablesResp;
-        } else if (tablesResp.success && tablesResp.data && Array.isArray(tablesResp.data)) {
+        } else if ((tablesResp as any).success && (tablesResp as any).data && Array.isArray((tablesResp as any).data)) {
           tablesData = tablesResp.data;
         }
         tablesData = tablesData.map((t: any) => ({
@@ -2060,7 +2069,7 @@ const WeddingDetail = () => {
       // Handle different response structures
       let allocations = [];
       if (allocationsResponse) {
-        if (allocationsResponse.success && allocationsResponse.data) {
+        if ((allocationsResponse as any).success && (allocationsResponse as any).data) {
           allocations = allocationsResponse.data || [];
         } else if (Array.isArray(allocationsResponse)) {
           allocations = allocationsResponse;
@@ -2087,7 +2096,7 @@ const WeddingDetail = () => {
       
       // Refresh wedding data to update costs
       const weddingResponse = await weddingsAPI.getById(id || '0');
-      if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+      if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
         setWedding(weddingResponse.data);
       }
     } catch (error: any) {
@@ -2175,13 +2184,13 @@ const WeddingDetail = () => {
       
       // Refresh allocations
       const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id || '0');
-      if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+      if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
         setInventoryAllocations(allocationsResponse.data || []);
       }
       
       // Refresh wedding data to update costs
       const weddingResponse = await weddingsAPI.getById(id || '0');
-      if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+      if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
         setWedding(weddingResponse.data);
       }
     } catch (error: any) {
@@ -2207,13 +2216,13 @@ const WeddingDetail = () => {
       
       // Refresh allocations
       const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
-      if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+      if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
         setInventoryAllocations(allocationsResponse.data || []);
       }
       
       // Refresh wedding data to update costs
       const weddingResponse = await weddingsAPI.getById(id || '0');
-      if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+      if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
         setWedding(weddingResponse.data);
       }
     } catch (error: any) {
@@ -2258,6 +2267,47 @@ const WeddingDetail = () => {
       localStorage.setItem(`wedding_${id}_table_positions`, JSON.stringify(tablePositions));
     }
   }, [tablePositions, id]);
+  
+  // Initialize table positions when tables are loaded
+  useEffect(() => {
+    if (tables && tables.length > 0 && id) {
+      const savedPositions = localStorage.getItem(`wedding_${id}_table_positions`);
+      let positions: Record<number, { x: number; y: number }> = {};
+      
+      if (savedPositions) {
+        try {
+          positions = JSON.parse(savedPositions);
+        } catch (e) {
+          console.error('Error parsing saved positions:', e);
+        }
+      }
+      
+      // Initialize positions for tables that don't have saved positions
+      let hasNewPositions = false;
+      tables.forEach((table, index) => {
+        const tableId = table.id || table.table_id;
+        if (tableId && !positions[tableId]) {
+          const gridCols = 6;
+          const gridSpacing = 15;
+          const startX = 10;
+          const startY = 10;
+          // Constrain initial positions within grid boundaries
+          const initialX = startX + (index % gridCols) * gridSpacing;
+          const initialY = startY + Math.floor(index / gridCols) * 20;
+          positions[tableId] = {
+            x: Math.max(5, Math.min(95, initialX)),
+            y: Math.max(5, Math.min(95, initialY))
+          };
+          hasNewPositions = true;
+        }
+      });
+      
+      if (hasNewPositions) {
+        setTablePositions(positions);
+        localStorage.setItem(`wedding_${id}_table_positions`, JSON.stringify(positions));
+      }
+    }
+  }, [tables, id]);
 
   // Edit table handler
   const handleEditTable = (table: any) => {
@@ -2330,7 +2380,7 @@ const WeddingDetail = () => {
           tablesData = resp.data;
         } else if (Array.isArray(resp)) {
           tablesData = resp;
-        } else if (resp.success && resp.data && Array.isArray(resp.data)) {
+        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
           tablesData = resp.data;
         }
       }
@@ -2353,7 +2403,7 @@ const WeddingDetail = () => {
       // Refresh inventory allocations after table update
       try {
         const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
-        if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+        if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
           setInventoryAllocations(allocationsResponse.data || []);
         } else if (allocationsResponse && allocationsResponse.data) {
           setInventoryAllocations(allocationsResponse.data || []);
@@ -2361,7 +2411,7 @@ const WeddingDetail = () => {
         
         // Refresh wedding data to update costs
         const weddingResponse = await weddingsAPI.getById(id);
-        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
           setWedding(weddingResponse.data);
         }
       } catch (allocError) {
@@ -2414,7 +2464,7 @@ const WeddingDetail = () => {
           tablesData = resp.data;
         } else if (Array.isArray(resp)) {
           tablesData = resp;
-        } else if (resp.success && resp.data && Array.isArray(resp.data)) {
+        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
           tablesData = resp.data;
         }
       }
@@ -2437,7 +2487,7 @@ const WeddingDetail = () => {
       // Refresh inventory allocations after table deletion
       try {
         const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
-        if (allocationsResponse && allocationsResponse.success && allocationsResponse.data) {
+        if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
           setInventoryAllocations(allocationsResponse.data || []);
         } else if (allocationsResponse && allocationsResponse.data) {
           setInventoryAllocations(allocationsResponse.data || []);
@@ -2445,7 +2495,7 @@ const WeddingDetail = () => {
         
         // Refresh wedding data to update costs
         const weddingResponse = await weddingsAPI.getById(id);
-        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
           setWedding(weddingResponse.data);
         }
       } catch (allocError) {
@@ -2477,18 +2527,18 @@ const WeddingDetail = () => {
   };
 
   // Package assignment handler
-  const handleAssignPackage = async (tableIdParam?: number, packageIdParam?: number) => {
+  const handleAssignPackage = async (tableIdParam?: number | null, packageIdParam?: number | null) => {
     // Ignore event objects that might be passed accidentally
-    if (tableIdParam && typeof tableIdParam === 'object' && 'target' in tableIdParam) {
-      tableIdParam = undefined;
+    if (tableIdParam != null && typeof tableIdParam === 'object' && 'target' in (tableIdParam as any)) {
+      tableIdParam = undefined as any;
     }
-    if (packageIdParam && typeof packageIdParam === 'object' && 'target' in packageIdParam) {
-      packageIdParam = undefined;
+    if (packageIdParam != null && typeof packageIdParam === 'object' && 'target' in (packageIdParam as any)) {
+      packageIdParam = undefined as any;
     }
     
     // Safely extract table ID - ensure it's always a number
     let tableId: number | null = null;
-    if (tableIdParam !== undefined && tableIdParam !== null && typeof tableIdParam === 'number') {
+    if (tableIdParam !== undefined && tableIdParam !== null && typeof tableIdParam === 'number' && !isNaN(tableIdParam) && tableIdParam > 0) {
       tableId = Number(tableIdParam);
       if (isNaN(tableId)) tableId = null;
     } else if (packageAssignTableId) {
@@ -2505,7 +2555,7 @@ const WeddingDetail = () => {
     
     // Safely extract package ID - ensure it's always a number
     let packageId: number | null = null;
-    if (packageIdParam !== undefined && packageIdParam !== null && typeof packageIdParam === 'number') {
+    if (packageIdParam !== undefined && packageIdParam !== null && typeof packageIdParam === 'number' && !isNaN(packageIdParam) && packageIdParam > 0) {
       packageId = Number(packageIdParam);
       if (isNaN(packageId)) packageId = null;
     } else if (packageAssignPackageId) {
@@ -2632,8 +2682,8 @@ const WeddingDetail = () => {
       }
       
       // Refresh assignments - always fetch from API to ensure consistency
-      const assignmentsResponse = await packagesAPI.getTableAssignments(id || '0');
-      if (assignmentsResponse && (assignmentsResponse.success || assignmentsResponse.data)) {
+      const assignmentsResponse: any = await packagesAPI.getTableAssignments(id || '0');
+      if (assignmentsResponse && ((assignmentsResponse as any).success || (assignmentsResponse as any).data)) {
         const assignmentsData = assignmentsResponse.data || [];
         // Ensure all assignment data is properly formatted
         const formattedAssignments = Array.isArray(assignmentsData) ? assignmentsData.map((a: any) => ({
@@ -2664,9 +2714,17 @@ const WeddingDetail = () => {
       
       // Refresh wedding data to update costs
       try {
-        const weddingResponse = await weddingsAPI.getById(id || '0');
-        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
-          setWedding(weddingResponse.data);
+        const weddingResponse: any = await weddingsAPI.getById(id || '0');
+        if (weddingResponse) {
+          const weddingData = (weddingResponse as any).data || weddingResponse;
+          if (weddingData) {
+            setWedding((prev: any) => ({
+              ...prev,
+              ...weddingData,
+              food_cost: weddingData.food_cost || weddingData.foodCost || prev?.food_cost || 0,
+              equipment_rental_cost: weddingData.equipment_rental_cost || weddingData.equipmentRentalCost || prev?.equipment_rental_cost || 0
+            }));
+          }
         }
       } catch (weddingError) {
         console.error('Error refreshing wedding data:', weddingError);
@@ -2705,8 +2763,8 @@ const WeddingDetail = () => {
       await packagesAPI.removeFromTable(tableId, packageId);
       
       // Refresh assignments
-      const assignmentsResponse = await packagesAPI.getTableAssignments(id);
-      if (assignmentsResponse && (assignmentsResponse.success || assignmentsResponse.data)) {
+      const assignmentsResponse: any = await packagesAPI.getTableAssignments(id);
+      if (assignmentsResponse && ((assignmentsResponse as any).success || (assignmentsResponse as any).data)) {
         const assignmentsData = assignmentsResponse.data || [];
         const formattedAssignments = Array.isArray(assignmentsData) ? assignmentsData.map((a: any) => ({
           ...a,
@@ -2722,9 +2780,17 @@ const WeddingDetail = () => {
       
       // Refresh wedding data to update costs
       try {
-        const weddingResponse = await weddingsAPI.getById(id);
-        if (weddingResponse && weddingResponse.success && weddingResponse.data) {
-          setWedding(weddingResponse.data);
+        const weddingResponse: any = await weddingsAPI.getById(id || '0');
+        if (weddingResponse) {
+          const weddingData = (weddingResponse as any).data || weddingResponse;
+          if (weddingData) {
+            setWedding((prev: any) => ({
+              ...prev,
+              ...weddingData,
+              food_cost: weddingData.food_cost || weddingData.foodCost || prev?.food_cost || 0,
+              equipment_rental_cost: weddingData.equipment_rental_cost || weddingData.equipmentRentalCost || prev?.equipment_rental_cost || 0
+            }));
+          }
         }
       } catch (weddingError) {
         console.error('Error refreshing wedding data:', weddingError);
@@ -3058,108 +3124,133 @@ const WeddingDetail = () => {
 
         {/* Key Info Cards */}
         <div className="grid gap-4 md:grid-cols-4">
-          <Card>
+          <Card className="flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Wedding Date</CardTitle>
+              <CardTitle className="text-sm font-medium">Wedding Date & Venue</CardTitle>
               <Calendar className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {safeFormatDate(wedding?.weddingDate || wedding?.wedding_date)}
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-lg font-bold">
+                    {safeFormatDate(wedding?.weddingDate || wedding?.wedding_date)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-sm text-muted-foreground">{safeFormatTime(wedding?.weddingTime || wedding?.wedding_time)}</span>
+                </div>
               </div>
-              <p className="text-xs text-muted-foreground">{safeFormatTime(wedding?.weddingTime || wedding?.wedding_time)}</p>
+              <div className="flex items-center gap-2 pt-2 border-t mt-2">
+                <MapPin className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm font-medium truncate">{wedding?.venue || 'N/A'}</span>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Venue</CardTitle>
-              <MapPin className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-lg font-bold">{wedding?.venue || 'N/A'}</div>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Guests</CardTitle>
+              <CardTitle className="text-sm font-medium">Guests & Tables</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{wedding?.guestCount || wedding?.guest_count || guests.length || 0}</div>
-              <p className="text-xs text-muted-foreground">
-                {wedding?.acceptedGuests || 0} accepted, {wedding?.pendingRSVPs || 0} pending, {wedding?.declinedGuests || 0} declined
-              </p>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                  <span className="text-lg font-bold">{wedding?.guestCount || wedding?.guest_count || guests.length || 0}</span>
+                  <span className="text-xs text-muted-foreground">guests</span>
+                </div>
+                
+                <div className="grid grid-cols-3 gap-1 pt-2 border-t">
+                  <div className="flex flex-col items-center">
+                    <CheckCircle className="h-3 w-3 text-green-600 dark:text-green-400 mb-0.5" />
+                    <span className="text-sm font-semibold">{wedding?.acceptedGuests || 0}</span>
+                    <span className="text-[10px] text-muted-foreground">Accepted</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <Clock className="h-3 w-3 text-yellow-600 dark:text-yellow-400 mb-0.5" />
+                    <span className="text-sm font-semibold">{wedding?.pendingRSVPs || 0}</span>
+                    <span className="text-[10px] text-muted-foreground">Pending</span>
+                  </div>
+                  <div className="flex flex-col items-center">
+                    <XCircle className="h-3 w-3 text-red-600 dark:text-red-400 mb-0.5" />
+                    <span className="text-sm font-semibold">{wedding?.declinedGuests || 0}</span>
+                    <span className="text-[10px] text-muted-foreground">Declined</span>
+                  </div>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 pt-2 border-t mt-2">
+                <LayoutGrid className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <span className="text-sm font-semibold">{tables.length}</span>
+                <span className="text-xs text-muted-foreground">{tables.length === 1 ? 'table' : 'tables'}</span>
+              </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
+              <CardTitle className="text-sm font-medium">Menu Items & Packages</CardTitle>
+              <Utensils className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
+            <CardContent className="flex-1 flex flex-col justify-between">
               {(() => {
-                // Calculate total package cost (package price * quantity served per package)
-                // Group by package ID to avoid double counting
-                const packageCostMap = new Map<number, { price: number; quantity: number }>();
+                // Count unique packages assigned
+                const uniquePackages = new Set(
+                  tablePackageAssignments.map(a => a.packageId || a.package_id).filter(Boolean)
+                );
                 
+                // Count menu items from assigned packages
+                const menuItemsFromPackages = new Set<number>();
                 tablePackageAssignments.forEach(assignment => {
                   const packageId = assignment.packageId || assignment.package_id;
                   if (!packageId) return;
                   
                   const pkg = packages.find(p => (p.package_id || p.id) === packageId);
-                  if (!pkg) return;
-                  
-                  const packagePrice = typeof pkg.selling_price === 'number' 
-                    ? pkg.selling_price 
-                    : parseFloat(pkg.selling_price || pkg.package_price || pkg.packagePrice || '0') || 0;
-                  
-                  // Get table ID for this assignment
-                  const tableId = assignment.tableId || assignment.table_id;
-                  if (!tableId) return;
-                  
-                  // Count guests at this table
-                  const tableGuests = guests.filter(g => g && (g.table_id || g.tableId) === tableId);
-                  const guestCount = tableGuests.length;
-                  
-                  // Accumulate quantity for this package
-                  if (!packageCostMap.has(packageId)) {
-                    packageCostMap.set(packageId, { price: packagePrice, quantity: 0 });
+                  if (pkg && pkg.menu_items && Array.isArray(pkg.menu_items)) {
+                    pkg.menu_items.forEach((item: any) => {
+                      const itemId = item.menu_item_id || item.id;
+                      if (itemId) menuItemsFromPackages.add(itemId);
+                    });
                   }
-                  const packageData = packageCostMap.get(packageId)!;
-                  packageData.quantity += guestCount;
                 });
-                
-                // Calculate total package cost
-                const totalPackageCost = Array.from(packageCostMap.values()).reduce((total, pkgData) => {
-                  return total + (pkgData.price * pkgData.quantity);
-                }, 0);
-                
-                // Calculate total inventory cost
-                const totalInventoryCost = inventoryAllocations.reduce((total, allocation) => {
-                  const cost = typeof allocation.total_cost === 'number' 
-                    ? allocation.total_cost 
-                    : parseFloat(String(allocation.total_cost || '0')) || 0;
-                  return total + cost;
-                }, 0);
-                
-                // Combined total
-                const combinedTotal = totalPackageCost + totalInventoryCost;
                 
                 return (
                   <>
-                    <div className="text-2xl font-bold mb-1">
-                      {formatCurrency(combinedTotal)}
+                    <div className="text-lg font-bold mb-1">
+                      {uniquePackages.size} {uniquePackages.size === 1 ? 'Package' : 'Packages'}
                     </div>
-                    <div className="text-xs text-muted-foreground space-y-0.5">
-                      <div>Packages: {formatCurrency(totalPackageCost)}</div>
-                      <div>Inventory: {formatCurrency(totalInventoryCost)}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {menuItemsFromPackages.size} {menuItemsFromPackages.size === 1 ? 'menu item' : 'menu items'}
                     </div>
                   </>
                 );
               })()}
+            </CardContent>
+          </Card>
+
+          <Card className="flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+              <DollarSign className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent className="flex-1 flex flex-col justify-between">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Food Cost</span>
+                  <span className="text-sm font-semibold">{formatCurrency(wedding?.food_cost || wedding?.foodCost || 0)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">Rental Cost</span>
+                  <span className="text-sm font-semibold">{formatCurrency(wedding?.equipment_rental_cost || wedding?.equipmentRentalCost || 0)}</span>
+                </div>
+              </div>
+              <div className="pt-2 border-t mt-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Total</span>
+                  <span className="text-base font-bold">{formatCurrency((wedding?.food_cost || wedding?.foodCost || 0) + (wedding?.equipment_rental_cost || wedding?.equipmentRentalCost || 0))}</span>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -3244,6 +3335,7 @@ const WeddingDetail = () => {
                       onSelectionChange={setGuestRestrictionIds}
                       disabled={guestFormLoading}
                       error={guestFormErrors.dietaryRestriction}
+                      placeholder="Select dietary restrictions (at least one required)"
                     />
                   </div>
                   <div className="space-y-2">
@@ -3531,7 +3623,7 @@ const WeddingDetail = () => {
                       </Button>
                       <div className="flex items-center gap-1">
                         {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                          let page;
+                          let page: number;
                           if (totalPages <= 5) {
                             page = i + 1;
                           } else if (guestCurrentPage <= 3) {
@@ -3606,7 +3698,6 @@ const WeddingDetail = () => {
                       </SelectTrigger>
                           <SelectContent className="max-h-[300px] overflow-y-auto">
                       {[
-                        { value: 'couple', label: 'Couple', icon: getTableCategoryIcon('couple') },
                         { value: 'guest', label: 'Guest', icon: getTableCategoryIcon('guest') },
                         { value: 'family', label: 'Family', icon: getTableCategoryIcon('family') },
                         { value: 'VIP', label: 'VIP', icon: getTableCategoryIcon('VIP') },
@@ -3620,10 +3711,24 @@ const WeddingDetail = () => {
                         { value: 'special_needs', label: 'Special Needs', icon: getTableCategoryIcon('special_needs') },
                       ].map((item) => {
                         const Icon = item.icon;
+                        const colorClass = getTableCategoryColor(item.value);
+                        // Extract icon color from colorClass
+                        const iconColor = colorClass.includes('pink') ? 'text-pink-600 dark:text-pink-400' :
+                                         colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
+                                         colorClass.includes('green') ? 'text-green-600 dark:text-green-400' :
+                                         colorClass.includes('purple') ? 'text-purple-600 dark:text-purple-400' :
+                                         colorClass.includes('indigo') ? 'text-indigo-600 dark:text-indigo-400' :
+                                         colorClass.includes('cyan') ? 'text-cyan-600 dark:text-cyan-400' :
+                                         colorClass.includes('yellow') ? 'text-yellow-600 dark:text-yellow-400' :
+                                         colorClass.includes('orange') ? 'text-orange-600 dark:text-orange-400' :
+                                         colorClass.includes('amber') ? 'text-amber-600 dark:text-amber-400' :
+                                         colorClass.includes('rose') ? 'text-rose-600 dark:text-rose-400' :
+                                         colorClass.includes('red') ? 'text-red-600 dark:text-red-400' :
+                                         'text-muted-foreground';
                         return (
                           <SelectItem key={item.value} value={item.value}>
                             <div className="flex items-center gap-2">
-                              <Icon className="h-3.5 w-3.5 flex-shrink-0" />
+                              <Icon className={`h-3.5 w-3.5 flex-shrink-0 ${iconColor}`} />
                               <span>{item.label}</span>
                             </div>
                           </SelectItem>
@@ -4279,10 +4384,10 @@ const WeddingDetail = () => {
                 <CardDescription>Visual representation of table arrangements</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="bg-muted/30 rounded-lg border p-6 min-h-[500px]">
+                <div className="bg-muted/30 rounded-lg border p-6 min-h-[500px] relative overflow-hidden">
                   <div 
-                    className="relative w-full" 
-                    style={{ minHeight: '400px' }}
+                    className="relative w-full h-full" 
+                    style={{ minHeight: '400px', position: 'relative' }}
                     onDragOver={(e) => {
                       e.preventDefault();
                       e.dataTransfer.dropEffect = 'move';
@@ -4295,9 +4400,24 @@ const WeddingDetail = () => {
                         const x = ((e.clientX - rect.left) / rect.width) * 100;
                         const y = ((e.clientY - rect.top) / rect.height) * 100;
                         
+                        // Grid snapping - snap to 5% grid
+                        const gridSize = 5;
+                        const snappedX = Math.round(x / gridSize) * gridSize;
+                        const snappedY = Math.round(y / gridSize) * gridSize;
+                        
+                        // Constrain within grid boundaries (accounting for table size)
+                        // Tables are approximately 10-15% width, so keep them at least 5% from edges
+                        const minX = 5;
+                        const maxX = 95;
+                        const minY = 5;
+                        const maxY = 95;
+                        
+                        const constrainedX = Math.max(minX, Math.min(maxX, snappedX));
+                        const constrainedY = Math.max(minY, Math.min(maxY, snappedY));
+                        
                         const newPositions = {
                           ...tablePositions,
-                          [draggedTableId]: { x: Math.max(5, Math.min(95, x)), y: Math.max(5, Math.min(95, y)) }
+                          [draggedTableId]: { x: constrainedX, y: constrainedY }
                         };
                         setTablePositions(newPositions);
                         // Save to localStorage immediately
@@ -4349,9 +4469,28 @@ const WeddingDetail = () => {
                               : `T-${tableNum.padStart(3, '0')}`;
                           
                           // Get position from state or use default grid position
-                          const defaultX = 10 + ((tableId || 0) % 6) * 15;
-                          const defaultY = 10 + Math.floor((tableId || 0) / 6) * 20;
-                          const position = tablePositions[tableId] || { x: defaultX, y: defaultY };
+                          // If no saved position, create a grid layout
+                          let position = tablePositions[tableId];
+                          if (!position) {
+                            // Calculate grid position based on table index
+                            const tableIndex = tables.findIndex(t => (t.id || t.table_id) === tableId);
+                            const gridCols = 6;
+                            const gridSpacing = 15;
+                            const startX = 10;
+                            const startY = 10;
+                            const defaultX = startX + (tableIndex % gridCols) * gridSpacing;
+                            const defaultY = startY + Math.floor(tableIndex / gridCols) * 20;
+                            // Constrain default positions within grid boundaries
+                            position = { 
+                              x: Math.max(5, Math.min(95, defaultX)), 
+                              y: Math.max(5, Math.min(95, defaultY)) 
+                            };
+                            // Save default position to state
+                            setTablePositions(prev => ({
+                              ...prev,
+                              [tableId]: position
+                            }));
+                          }
                           
                           // Calculate assigned count including partners for couple tables (for display)
                           const actualAssignedCount = assignedCount; // Already includes partners from line 3648
@@ -4404,7 +4543,9 @@ const WeddingDetail = () => {
                                   const tableSize = Math.max(baseTableSize, 80);
                                   
                                   // Calculate chair radius - place chairs further outside the table box with better spacing
-                                  const chairRadius = (tableSize / 2) + 28; // Increased spacing to prevent overlap
+                                  // Constrain chair radius to keep seats within reasonable bounds relative to table
+                                  const maxChairRadius = Math.min((tableSize / 2) + 28, 60); // Max radius to keep within grid
+                                  const chairRadius = maxChairRadius;
                                   const chairSize = capacity <= 4 ? 12 : capacity <= 8 ? 11 : 10; // Slightly larger chairs
                                   
                                   // Calculate font sizes - ensure readability even for small tables
@@ -5248,7 +5389,7 @@ const WeddingDetail = () => {
                         <SelectTrigger id="packageTableSelect" name="packageTableSelect" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5] max-w-full">
                           <SelectValue placeholder="Select a table" />
                         </SelectTrigger>
-                        <SelectContent className="max-h-[300px] overflow-y-auto dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
+                        <SelectContent className="max-h-[200px] overflow-y-auto dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
                           {tables.map((table) => {
                             if (!table) return null;
                             const tableId = table.id || table.table_id;
@@ -5301,10 +5442,64 @@ const WeddingDetail = () => {
                         }}
                         disabled={packageFormLoading || packages.length === 0}
                       >
-                        <SelectTrigger id="packageSelectDropdown" name="packageSelectDropdown" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5] max-w-full">
-                          <SelectValue placeholder="Select a package" />
+                        <SelectTrigger id="packageSelectDropdown" name="packageSelectDropdown" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5] w-full min-w-[400px] h-auto min-h-[60px] py-2">
+                          <SelectValue placeholder="Select a package">
+                            {packageAssignPackageId && (() => {
+                              const selectedPkg = packages.find(p => (p.package_id || p.id)?.toString() === packageAssignPackageId);
+                              if (!selectedPkg) return null;
+                              const pkgId = selectedPkg.package_id || selectedPkg.id;
+                              const packageRestrictions: any[] = [];
+                              if (selectedPkg.menu_items && Array.isArray(selectedPkg.menu_items)) {
+                                const restrictionSet = new Set<string>();
+                                selectedPkg.menu_items.forEach((item: any) => {
+                                  if (item.restriction_name && item.restriction_name !== 'None') {
+                                    if (!restrictionSet.has(item.restriction_name)) {
+                                      restrictionSet.add(item.restriction_name);
+                                      packageRestrictions.push({
+                                        restriction_name: item.restriction_name,
+                                        restriction_type: item.restriction_type || 'Dietary'
+                                      });
+                                    }
+                                  }
+                                });
+                              }
+                              return (
+                                <div className="flex flex-col gap-1 text-left w-full">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <Package className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                                    <span className="font-medium">{selectedPkg.package_name || selectedPkg.packageName || 'Unknown'}</span>
+                                    <Badge variant="outline" className="text-xs flex-shrink-0">ID: {pkgId}</Badge>
+                                    <PackageTypeBadge type={selectedPkg.package_type || selectedPkg.packageType || 'Standard'} className="text-xs flex-shrink-0" />
+                                  </div>
+                                  {packageRestrictions.length > 0 && (
+                                    <div className="flex items-center gap-1 flex-wrap ml-5">
+                                      <span className="text-xs text-muted-foreground">Restrictions:</span>
+                                      {packageRestrictions.slice(0, 2).map((r: any, idx: number) => {
+                                        const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                        return (
+                                          <Badge 
+                                            key={idx} 
+                                            variant="outline" 
+                                            className={`text-xs ${getTypeColor(r.restriction_type || 'Dietary')} border flex items-center gap-1`}
+                                          >
+                                            <Icon className="h-3 w-3" />
+                                            {r.restriction_name}
+                                          </Badge>
+                                        );
+                                      })}
+                                      {packageRestrictions.length > 2 && (
+                                        <Badge variant="outline" className="text-xs">
+                                          +{packageRestrictions.length - 2} more
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </SelectValue>
                         </SelectTrigger>
-                        <SelectContent className="max-h-[300px] overflow-y-auto dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
+                        <SelectContent className="max-h-[200px] overflow-y-auto dark:bg-[#0f0f0f] dark:border-[#2a2a2a] min-w-[400px]">
                           {packages.map((pkg) => {
                             const pkgId = pkg.package_id || pkg.id;
                             const tableId = packageAssignTableId ? parseInt(packageAssignTableId) : null;
@@ -5499,14 +5694,6 @@ const WeddingDetail = () => {
                     return null;
                   })()}
                   
-                  {/* Debug display - remove after fixing */}
-                  {(packageAssignTableId || packageAssignPackageId) && (
-                    <div className="p-2 bg-gray-100 dark:bg-gray-800 rounded text-xs">
-                      <strong>Debug:</strong> Table ID: "{packageAssignTableId}" (type: {typeof packageAssignTableId}), 
-                      Package ID: "{packageAssignPackageId}" (type: {typeof packageAssignPackageId})
-                    </div>
-                  )}
-                  
                   <Button onClick={(e) => {
                     e.preventDefault();
                     handleAssignPackage();
@@ -5689,7 +5876,7 @@ const WeddingDetail = () => {
                                         await packagesAPI.removeFromTable(assignment.tableId, assignment.packageId);
                                         // Refresh assignments from API
                                         const assignmentsResponse = await packagesAPI.getTableAssignments(id || '0');
-                                        if (assignmentsResponse && (assignmentsResponse.success || assignmentsResponse.data)) {
+                                        if (assignmentsResponse && ((assignmentsResponse as any).success || (assignmentsResponse as any).data)) {
                                           const assignmentsData = assignmentsResponse.data || [];
                                           setTablePackageAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
                                         } else {
@@ -5699,7 +5886,7 @@ const WeddingDetail = () => {
                                         // Refresh wedding data to update costs
                                         try {
                                           const weddingResponse = await weddingsAPI.getById(id || '0');
-                                          if (weddingResponse && weddingResponse.success && weddingResponse.data) {
+                                          if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
                                             setWedding(weddingResponse.data);
                                           }
                                         } catch (weddingError) {
@@ -6022,7 +6209,6 @@ const WeddingDetail = () => {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Package ID</TableHead>
                             <TableHead>Package Name</TableHead>
                             <TableHead>Type</TableHead>
                             <TableHead className="text-right">Price</TableHead>
@@ -6042,6 +6228,7 @@ const WeddingDetail = () => {
                               .map(a => {
                                 const table = tables.find(t => (t.id || t.table_id) === (a.tableId || a.table_id));
                                 return table ? {
+                                  assignment_id: a.id || a.assignment_id || a.table_package_id,
                                   table_id: table.id || table.table_id,
                                   table_number: table.tableNumber || table.table_number,
                                   category: table.category || table.table_category
@@ -6049,19 +6236,16 @@ const WeddingDetail = () => {
                               })
                               .filter(Boolean);
                             
-                            // Calculate quantity served (total guests at tables using this package)
-                            const quantityServed = tablesUsingPackage.reduce((total, table) => {
-                              const tableGuests = guests.filter(g => g && g.table_id === table.table_id);
-                              return total + tableGuests.length;
-                            }, 0);
+                            // Calculate quantity served (number of table assignments, not total guests)
+                            const quantityServed = tablesUsingPackage.length;
                             
                             return (
                               <TableRow key={pkgId}>
-                                <TableCell className="font-medium text-xs text-muted-foreground">#{pkgId}</TableCell>
                                 <TableCell className="font-medium">
                                   <div className="flex items-center gap-2">
                                     <Package className="h-4 w-4 text-muted-foreground" />
-                                    {pkg.package_name || pkg.packageName}
+                                    <span>{pkg.package_name || pkg.packageName}</span>
+                                    <span className="text-xs text-muted-foreground">(ID: {pkgId})</span>
                                   </div>
                                 </TableCell>
                                 <TableCell>
@@ -6083,70 +6267,96 @@ const WeddingDetail = () => {
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <div className="flex flex-wrap gap-1">
+                                  <div className="flex flex-col gap-1 max-w-[300px]">
                                     {menuItemsList.length > 0 ? (
-                                      menuItemsList.slice(0, 3).map((item: any, idx: number) => {
-                                        const menuType = item.menu_type || '';
-                                        const typeLower = menuType.toLowerCase();
-                                        let menuIcon, menuColorClass;
-                                        if (typeLower.includes('appetizer') || typeLower.includes('starter')) {
-                                          menuIcon = Utensils;
-                                          menuColorClass = 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700';
-                                        } else if (typeLower.includes('main') || typeLower.includes('entree')) {
-                                          menuIcon = UtensilsCrossed;
-                                          menuColorClass = 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700';
-                                        } else if (typeLower.includes('dessert')) {
-                                          menuIcon = Heart;
-                                          menuColorClass = 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700';
-                                        } else if (typeLower.includes('drink') || typeLower.includes('beverage')) {
-                                          menuIcon = Package;
-                                          menuColorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
-                                        } else {
-                                          menuIcon = Utensils;
-                                          menuColorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
-                                        }
-                                        const MenuIconComponent = menuIcon;
-                                        const restrictionIcon = getTypeIcon(item.restriction_type || '');
-                                        return (
-                                          <Badge key={idx} variant="outline" className={`text-xs ${menuColorClass} border flex items-center gap-1`}>
-                                            <MenuIconComponent className="h-3 w-3" />
-                                            {item.menu_name || item.name} {item.quantity > 1 ? `x${item.quantity}` : ''}
-                                            {item.restriction_name && item.restriction_name !== 'None' && (() => {
-                                              const RestrictionIcon = restrictionIcon;
-                                              return (
-                                                <span className="ml-1 flex items-center gap-0.5">
-                                                  <RestrictionIcon className="h-2.5 w-2.5" />
-                                                </span>
-                                              );
-                                            })()}
+                                      <>
+                                        {Array.from({ length: Math.ceil(Math.min(menuItemsList.length, 4) / 2) }, (_, rowIdx) => {
+                                          const startIdx = rowIdx * 2;
+                                          const endIdx = Math.min(startIdx + 2, Math.min(menuItemsList.length, 4));
+                                          const rowItems = menuItemsList.slice(startIdx, endIdx);
+                                          return (
+                                            <div key={rowIdx} className="flex flex-wrap gap-1">
+                                              {rowItems.map((item: any, idx: number) => {
+                                                const menuType = item.menu_type || '';
+                                                const typeLower = menuType.toLowerCase();
+                                                let menuIcon, menuColorClass;
+                                                if (typeLower.includes('appetizer') || typeLower.includes('starter')) {
+                                                  menuIcon = Utensils;
+                                                  menuColorClass = 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700';
+                                                } else if (typeLower.includes('main') || typeLower.includes('entree')) {
+                                                  menuIcon = UtensilsCrossed;
+                                                  menuColorClass = 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700';
+                                                } else if (typeLower.includes('dessert')) {
+                                                  menuIcon = Heart;
+                                                  menuColorClass = 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200 border-pink-200 dark:border-pink-700';
+                                                } else if (typeLower.includes('drink') || typeLower.includes('beverage')) {
+                                                  menuIcon = Package;
+                                                  menuColorClass = 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700';
+                                                } else {
+                                                  menuIcon = Utensils;
+                                                  menuColorClass = 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700';
+                                                }
+                                                const MenuIconComponent = menuIcon;
+                                                const restrictionIcon = getTypeIcon(item.restriction_type || '');
+                                                return (
+                                                  <Badge key={startIdx + idx} variant="outline" className={`text-xs ${menuColorClass} border flex items-center gap-1`}>
+                                                    <MenuIconComponent className="h-3 w-3" />
+                                                    {item.menu_name || item.name} {item.quantity > 1 ? `x${item.quantity}` : ''}
+                                                    {item.restriction_name && item.restriction_name !== 'None' && (() => {
+                                                      const RestrictionIcon = restrictionIcon;
+                                                      return (
+                                                        <span className="ml-1 flex items-center gap-0.5">
+                                                          <RestrictionIcon className="h-2.5 w-2.5" />
+                                                        </span>
+                                                      );
+                                                    })()}
+                                                  </Badge>
+                                                );
+                                              })}
+                                            </div>
+                                          );
+                                        })}
+                                        {menuItemsList.length > 4 && (
+                                          <Badge variant="outline" className="text-xs w-fit">
+                                            +{menuItemsList.length - 4} more
                                           </Badge>
-                                        );
-                                      })
+                                        )}
+                                      </>
                                     ) : (
                                       <span className="text-sm text-muted-foreground">No items</span>
-                                    )}
-                                    {menuItemsList.length > 3 && (
-                                      <Badge variant="outline" className="text-xs">
-                                        +{menuItemsList.length - 3} more
-                                      </Badge>
                                     )}
                                   </div>
                                 </TableCell>
                                 <TableCell>
-                                  <div className="flex flex-col gap-1">
+                                  <div className="flex flex-col gap-1.5">
                                     {tablesUsingPackage.length > 0 ? (
                                       <>
-                                        {tablesUsingPackage.slice(0, 2).map((t: any, idx: number) => (
-                                          <div key={idx} className="flex items-center gap-1">
-                                            <Badge variant="outline" className="text-xs">
-                                              Table {t.table_number}
-                                            </Badge>
-                                            <TableCategoryBadge category={t.category || 'General'} className="text-xs" />
-                                          </div>
-                                        ))}
-                                        {tablesUsingPackage.length > 2 && (
-                                          <span className="text-xs text-muted-foreground">+{tablesUsingPackage.length - 2} more</span>
-                                        )}
+                                        {tablesUsingPackage.map((t: any, idx: number) => {
+                                          const CategoryIcon = getTableCategoryIcon(t.category || 'General');
+                                          const colorClass = getTableCategoryColor(t.category || 'General');
+                                          // Extract icon color from colorClass
+                                          const iconColor = colorClass.includes('pink') ? 'text-pink-600 dark:text-pink-400' :
+                                                           colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
+                                                           colorClass.includes('green') ? 'text-green-600 dark:text-green-400' :
+                                                           colorClass.includes('purple') ? 'text-purple-600 dark:text-purple-400' :
+                                                           colorClass.includes('indigo') ? 'text-indigo-600 dark:text-indigo-400' :
+                                                           colorClass.includes('cyan') ? 'text-cyan-600 dark:text-cyan-400' :
+                                                           colorClass.includes('yellow') ? 'text-yellow-600 dark:text-yellow-400' :
+                                                           colorClass.includes('orange') ? 'text-orange-600 dark:text-orange-400' :
+                                                           colorClass.includes('amber') ? 'text-amber-600 dark:text-amber-400' :
+                                                           colorClass.includes('rose') ? 'text-rose-600 dark:text-rose-400' :
+                                                           colorClass.includes('red') ? 'text-red-600 dark:text-red-400' :
+                                                           'text-muted-foreground';
+                                          return (
+                                            <div key={idx} className="flex items-center gap-2">
+                                              <CategoryIcon className={`h-4 w-4 ${iconColor} flex-shrink-0`} />
+                                              <div className="flex flex-col">
+                                                <span className="text-sm font-medium">Table {t.table_number}</span>
+                                                <span className="text-xs text-muted-foreground">Assignment ID: {t.assignment_id || 'N/A'}</span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
                                       </>
                                     ) : (
                                       <span className="text-xs text-muted-foreground">Not assigned</span>
@@ -6938,17 +7148,14 @@ const WeddingDetail = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_guest_restrictions">Dietary Restrictions</Label>
-                <div className="max-h-[200px] overflow-y-auto border rounded-md p-2">
-                  <MultiSelectRestrictions
-                    restrictions={dietaryRestrictions}
-                    selectedIds={editGuestRestrictionIds}
-                    onSelectionChange={setEditGuestRestrictionIds}
-                    disabled={editGuestLoading}
-                    placeholder="Select dietary restrictions"
-                  />
-                </div>
-                <p className="text-xs text-muted-foreground">If no restrictions are selected, "None" will be automatically assigned</p>
+                <Label htmlFor="edit_guest_restrictions">Dietary Restrictions *</Label>
+                <MultiSelectRestrictions
+                  restrictions={dietaryRestrictions}
+                  selectedIds={editGuestRestrictionIds}
+                  onSelectionChange={setEditGuestRestrictionIds}
+                  disabled={editGuestLoading}
+                  placeholder="Select dietary restrictions (at least one required)"
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="edit_guest_rsvp">RSVP Status *</Label>

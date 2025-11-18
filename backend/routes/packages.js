@@ -2,6 +2,54 @@ const express = require('express');
 const router = express.Router();
 const {promisePool} = require('../config/database');
 
+// Import updateWeddingCosts from inventory routes
+async function updateWeddingCosts(weddingId) {
+  try {
+    // Calculate equipment rental cost from inventory allocations
+    const [inventoryCosts] = await promisePool.query(
+      `SELECT COALESCE(SUM(quantity_used * COALESCE(unit_rental_cost, rental_cost)), 0) as equipment_rental_cost
+       FROM inventory_allocation
+       WHERE wedding_id = ?`,
+      [weddingId]
+    );
+    const equipmentRentalCost = parseFloat(inventoryCosts[0]?.equipment_rental_cost || 0);
+
+    // Calculate food cost from table packages
+    const [foodCosts] = await promisePool.query(
+      `SELECT COALESCE(SUM(
+        COALESCE(
+          (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+           FROM package_menu_items pmi
+           JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+           WHERE pmi.package_id = tp.package_id), 0
+        )
+      ), 0) as food_cost
+      FROM table_package tp
+      JOIN seating_table st ON tp.table_id = st.table_id
+      WHERE st.wedding_id = ?`,
+      [weddingId]
+    );
+    
+    const foodCost = parseFloat(foodCosts[0]?.food_cost || 0);
+
+    // Update wedding with calculated costs
+    await promisePool.query(
+      `UPDATE wedding 
+       SET equipment_rental_cost = ?,
+           food_cost = ?,
+           total_cost = ?,
+           production_cost = ?
+       WHERE wedding_id = ?`,
+      [equipmentRentalCost, foodCost, equipmentRentalCost, foodCost, weddingId]
+    );
+
+    return { equipmentRentalCost, foodCost };
+  } catch (error) {
+    console.error('Error updating wedding costs:', error);
+    throw error;
+  }
+}
+
 // Helper function to calculate package unit_cost from menu items
 async function calculatePackageCost(packageId, connection = null) {
   const pool = connection || promisePool;
@@ -484,7 +532,24 @@ router.post('/assign', async (req, res) => {
       [table_id, package_id]
     );
 
+    // Get wedding_id from table
+    const [tableRows] = await connection.query(
+      'SELECT wedding_id FROM seating_table WHERE table_id = ?',
+      [table_id]
+    );
+    const wedding_id = tableRows[0]?.wedding_id;
+
     await connection.commit();
+
+    // Update wedding costs after assignment
+    if (wedding_id) {
+      try {
+        await updateWeddingCosts(wedding_id);
+      } catch (costError) {
+        console.error('Error updating wedding costs:', costError);
+        // Don't fail the request if cost update fails
+      }
+    }
 
     res.json({
       success: true,
@@ -511,6 +576,13 @@ router.delete('/assign/:table_id/:package_id', async (req, res) => {
 
     const {table_id, package_id} = req.params;
 
+    // Get wedding_id before deleting
+    const [tableRows] = await connection.query(
+      'SELECT wedding_id FROM seating_table WHERE table_id = ?',
+      [table_id]
+    );
+    const wedding_id = tableRows[0]?.wedding_id;
+
     // Delete assignment
     await connection.query(
       'DELETE FROM table_package WHERE table_id = ? AND package_id = ?',
@@ -518,6 +590,16 @@ router.delete('/assign/:table_id/:package_id', async (req, res) => {
     );
 
     await connection.commit();
+
+    // Update wedding costs after removal
+    if (wedding_id) {
+      try {
+        await updateWeddingCosts(wedding_id);
+      } catch (costError) {
+        console.error('Error updating wedding costs:', costError);
+        // Don't fail the request if cost update fails
+      }
+    }
 
     res.json({
       success: true,

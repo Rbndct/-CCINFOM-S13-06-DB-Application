@@ -110,11 +110,13 @@ const MenuItems = () => {
   useEffect(() => {
     const fetchRestrictions = async () => {
       try {
-        const response = await dietaryRestrictionsAPI.getAll();
+        const response: any = await dietaryRestrictionsAPI.getAll();
         if (response && response.success && response.data) {
           setDietaryRestrictions(response.data || []);
         } else if (response && response.data) {
           setDietaryRestrictions(response.data || []);
+        } else if (Array.isArray(response)) {
+          setDietaryRestrictions(response);
         }
       } catch (error) {
         console.error('Error fetching dietary restrictions:', error);
@@ -128,11 +130,13 @@ const MenuItems = () => {
     const fetchIngredients = async () => {
       if (addDialogOpen || editDialogOpen) {
         try {
-          const response = await ingredientsAPI.getAll();
+          const response: any = await ingredientsAPI.getAll();
           if (response && response.success && response.data) {
             setAvailableIngredients(response.data || []);
           } else if (response && response.data) {
             setAvailableIngredients(response.data || []);
+          } else if (Array.isArray(response)) {
+            setAvailableIngredients(response);
           }
         } catch (error) {
           console.error('Error fetching ingredients:', error);
@@ -147,7 +151,7 @@ const MenuItems = () => {
     const fetchMenuItems = async () => {
       try {
         setLoading(true);
-        const response = await menuItemsAPI.getAll();
+        const response: any = await menuItemsAPI.getAll({});
         if (response && response.success && response.data) {
           // Transform data to match UI expectations
           const items = response.data.map((item: any) => ({
@@ -212,7 +216,7 @@ const MenuItems = () => {
   // Fetch recipe for selected item
   const fetchItemRecipe = async (itemId: number) => {
     try {
-      const response = await menuItemsAPI.getById(itemId);
+      const response: any = await menuItemsAPI.getById(itemId);
       if (response && response.success && response.data) {
         setSelectedItemRecipe(response.data.recipe || []);
       }
@@ -226,7 +230,7 @@ const MenuItems = () => {
   const handleViewItem = async (item: any) => {
     try {
       // Fetch full item details to get all restrictions
-      const response = await menuItemsAPI.getById(item.menu_item_id || item.id);
+      const response: any = await menuItemsAPI.getById(item.menu_item_id || item.id);
       if (response && response.success && response.data) {
         const fullItem = {
           ...response.data,
@@ -352,7 +356,7 @@ const MenuItems = () => {
     
     // Fetch recipe for this item
     try {
-      const response = await menuItemsAPI.getById(item.menu_item_id || item.id);
+      const response: any = await menuItemsAPI.getById(item.menu_item_id || item.id);
       if (response && response.success && response.data && response.data.recipe) {
         const recipeData = response.data.recipe.map((r: any) => ({
           ingredient_id: r.ingredient_id,
@@ -452,7 +456,7 @@ const MenuItems = () => {
       }
       
       // Refresh menu items
-      const response = await menuItemsAPI.getAll();
+      const response: any = await menuItemsAPI.getAll({});
       if (response && response.success && response.data) {
         const items = response.data.map((item: any) => ({
           id: item.menu_item_id,
@@ -508,7 +512,7 @@ const MenuItems = () => {
         setSelectedItem(null);
         
         // Refresh menu items
-        const response = await menuItemsAPI.getAll();
+        const response: any = await menuItemsAPI.getAll({});
         if (response && response.data) {
           const items = Array.isArray(response.data) 
             ? response.data 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   Heart,
@@ -56,9 +57,10 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { couplesAPI, dietaryRestrictionsAPI, guestsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
 import { getTypeIcon, getTypeColor, getSeverityBadge, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
-import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
+import { CeremonyTypeBadge, getCeremonyTypeIcon, getCeremonyTypeColor } from '@/utils/ceremonyTypeUtils';
 import { useDateFormat } from '@/context/DateFormatContext';
 import { useTimeFormat } from '@/context/TimeFormatContext';
+import { MultiSelectRestrictions } from '@/components/ui/multi-select-restrictions';
 
 type Couple = {
   couple_id: number;
@@ -128,6 +130,7 @@ const CoupleDetail = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
   const { formatCurrency } = useCurrencyFormat();
+  const queryClient = useQueryClient();
   const [couple, setCouple] = useState<Couple | null>(null);
   const [weddings, setWeddings] = useState<Wedding[]>([]);
   const [loading, setLoading] = useState(true);
@@ -272,9 +275,8 @@ const CoupleDetail = () => {
       const noneId = getNoneRestrictionId(allRestrictions);
       setNoneRestrictionId(noneId);
       
-      // Filter out "None" from the displayed list using utility function
-      const displayableRestrictions = filterNoneFromDisplay(allRestrictions);
-      setDietaryRestrictions(displayableRestrictions);
+      // Include "None" in the restrictions list so it can be displayed and selected
+      setDietaryRestrictions(allRestrictions);
     } catch (error: any) {
       console.error('Error fetching dietary restrictions:', error);
     }
@@ -282,7 +284,9 @@ const CoupleDetail = () => {
 
   const handleAddPreference = () => {
     setEditingPreference(null);
-    setPreferenceForm({ ceremony_type: '', restriction_ids: [] });
+    // Initialize with "None" selected by default
+    const initialRestrictionIds = noneRestrictionId ? [noneRestrictionId] : [];
+    setPreferenceForm({ ceremony_type: '', restriction_ids: initialRestrictionIds });
     setPreferenceDialogOpen(true);
   };
 
@@ -316,17 +320,49 @@ const CoupleDetail = () => {
       return;
     }
 
-    // Auto-assign "None" if no restrictions selected using utility function
-    const finalRestrictionIds = ensureNoneRestriction(preferenceForm.restriction_ids, noneRestrictionId);
+    // Ensure at least one restriction is selected (including "None")
+    if (preferenceForm.restriction_ids.length === 0) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select at least one dietary restriction',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Use the selected restrictions directly (MultiSelectRestrictions handles "None" logic)
+    let finalRestrictionIds = preferenceForm.restriction_ids;
     
-    // If no restrictions selected and "None" ID not found, show error
-    if (finalRestrictionIds.length === 0) {
+    // If no restrictions selected and "None" ID not found, try to fetch it again
+    if (finalRestrictionIds.length === 0 && noneRestrictionId === null) {
+      try {
+        const restrictionsResponse = await dietaryRestrictionsAPI.getAll();
+        const allRestrictions = restrictionsResponse.data || [];
+        const noneId = getNoneRestrictionId(allRestrictions);
+        if (noneId !== null) {
+          setNoneRestrictionId(noneId);
+          finalRestrictionIds = [noneId];
+        } else {
+          toast({
+            title: 'Validation Error',
+            description: 'Unable to assign default restriction. Please try again.',
+            variant: 'destructive',
+          });
+          return;
+        }
+      } catch (error) {
         toast({
           title: 'Validation Error',
-        description: 'Unable to assign default restriction. Please try again.',
+          description: 'Unable to assign default restriction. Please try again.',
           variant: 'destructive',
         });
         return;
+      }
+    }
+    
+    // Final check - if still empty, use "None" if available
+    if (finalRestrictionIds.length === 0 && noneRestrictionId !== null) {
+      finalRestrictionIds = [noneRestrictionId];
     }
 
     setPreferenceLoading(true);
@@ -357,6 +393,10 @@ const CoupleDetail = () => {
       }
       setPreferenceDialogOpen(false);
       await fetchCouple();
+      // Invalidate couples query to refresh the couples list page
+      await queryClient.invalidateQueries({ queryKey: ['couples'] });
+      // Also refetch to ensure data is fresh
+      await queryClient.refetchQueries({ queryKey: ['couples'] });
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -376,6 +416,10 @@ const CoupleDetail = () => {
       await couplesAPI.deletePreference(prefId);
       toast({ title: 'Preference deleted successfully' });
       await fetchCouple();
+      // Invalidate couples query to refresh the couples list page
+      await queryClient.invalidateQueries({ queryKey: ['couples'] });
+      // Also refetch to ensure data is fresh
+      await queryClient.refetchQueries({ queryKey: ['couples'] });
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -832,11 +876,11 @@ const CoupleDetail = () => {
                         <div className="flex items-center gap-2 flex-1 min-w-0">
                           <Calendar className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <CardTitle className="text-lg truncate">
-                            {formatDate(new Date(wedding.weddingDate || wedding.wedding_date))}
+                            {formatDate(new Date(wedding.weddingDate || (wedding as any).wedding_date))}
                           </CardTitle>
                         </div>
                         <Badge variant="outline" className="font-mono text-xs flex-shrink-0">
-                          #{wedding.id || wedding.wedding_id}
+                          #{wedding.id || (wedding as any).wedding_id}
                         </Badge>
                       </div>
                     </CardHeader>
@@ -845,7 +889,7 @@ const CoupleDetail = () => {
                         <div className="flex items-center gap-2">
                           <Clock className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                           <span className="truncate">{(() => {
-                            const time = wedding.weddingTime || wedding.wedding_time;
+                            const time = wedding.weddingTime || (wedding as any).wedding_time;
                             if (!time) return 'N/A';
                             try {
                               if (typeof time === 'string' && time.match(/^\d{2}:\d{2}/)) {
@@ -862,7 +906,7 @@ const CoupleDetail = () => {
                         </div>
                         <div className="flex items-center gap-2">
                           <Users className="w-4 h-4 text-muted-foreground flex-shrink-0" />
-                          <span className="truncate">{wedding.guestCount ?? wedding.guest_count ?? 0} guests</span>
+                          <span className="truncate">{wedding.guestCount ?? (wedding as any).guest_count ?? 0} guests</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 text-sm">
@@ -875,19 +919,19 @@ const CoupleDetail = () => {
                             <DollarSign className="w-3 h-3" />
                             Equipment Rental Cost:
                           </span>
-                          <span className="font-semibold">{formatCurrency(wedding.equipmentRentalCost || wedding.equipment_rental_cost || wedding.total_cost || wedding.totalCost || 0)}</span>
+                          <span className="font-semibold">{formatCurrency(wedding.equipmentRentalCost || (wedding as any).equipment_rental_cost || (wedding as any).total_cost || wedding.totalCost || 0)}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground flex items-center gap-1">
                             <Utensils className="w-3 h-3" />
                             Food Cost:
                           </span>
-                          <span className="font-semibold">{formatCurrency(wedding.foodCost || wedding.food_cost || wedding.production_cost || wedding.productionCost || 0)}</span>
+                          <span className="font-semibold">{formatCurrency(wedding.foodCost || (wedding as any).food_cost || (wedding as any).production_cost || wedding.productionCost || 0)}</span>
                         </div>
                       </div>
                       <div className="pt-2 space-y-2">
                         {(() => {
-                          const status = wedding.payment_status || wedding.paymentStatus || 'pending';
+                          const status = (wedding as any).payment_status || wedding.paymentStatus || 'pending';
                           const statusLower = status.toLowerCase();
                           if (statusLower === 'paid') {
                             return (
@@ -1052,67 +1096,68 @@ const CoupleDetail = () => {
                     setPreferenceForm({ ...preferenceForm, ceremony_type: value })
                   }
                 >
-                  <SelectTrigger id="ceremony_type">
-                    <SelectValue placeholder="Select ceremony type" />
+                  <SelectTrigger id="ceremony_type" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
+                    <SelectValue placeholder="Select ceremony type">
+                      {preferenceForm.ceremony_type && (() => {
+                        const Icon = getCeremonyTypeIcon(preferenceForm.ceremony_type);
+                        const colorClass = getCeremonyTypeColor(preferenceForm.ceremony_type);
+                        // Extract color from colorClass for icon
+                        const iconColor = colorClass.includes('rose') ? 'text-rose-600 dark:text-rose-400' :
+                                         colorClass.includes('purple') ? 'text-purple-600 dark:text-purple-400' :
+                                         colorClass.includes('green') ? 'text-green-600 dark:text-green-400' :
+                                         colorClass.includes('slate') ? 'text-slate-600 dark:text-slate-400' :
+                                         colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
+                                         colorClass.includes('emerald') ? 'text-emerald-600 dark:text-emerald-400' :
+                                         colorClass.includes('cyan') ? 'text-cyan-600 dark:text-cyan-400' :
+                                         colorClass.includes('amber') ? 'text-amber-600 dark:text-amber-400' :
+                                         'text-muted-foreground';
+                        return (
+                          <span className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${iconColor}`} />
+                            {preferenceForm.ceremony_type}
+                          </span>
+                        );
+                      })()}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Civil">Civil</SelectItem>
-                    <SelectItem value="Church">Church</SelectItem>
-                    <SelectItem value="Garden">Garden</SelectItem>
-                    <SelectItem value="Beach">Beach</SelectItem>
-                    <SelectItem value="Outdoor">Outdoor</SelectItem>
-                    <SelectItem value="Indoor">Indoor</SelectItem>
+                    {['Civil', 'Church', 'Garden', 'Beach', 'Outdoor', 'Indoor'].map((type) => {
+                      const Icon = getCeremonyTypeIcon(type);
+                      const colorClass = getCeremonyTypeColor(type);
+                      // Extract color from colorClass for icon
+                      const iconColor = colorClass.includes('rose') ? 'text-rose-600 dark:text-rose-400' :
+                                       colorClass.includes('purple') ? 'text-purple-600 dark:text-purple-400' :
+                                       colorClass.includes('green') ? 'text-green-600 dark:text-green-400' :
+                                       colorClass.includes('slate') ? 'text-slate-600 dark:text-slate-400' :
+                                       colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
+                                       colorClass.includes('emerald') ? 'text-emerald-600 dark:text-emerald-400' :
+                                       colorClass.includes('cyan') ? 'text-cyan-600 dark:text-cyan-400' :
+                                       colorClass.includes('amber') ? 'text-amber-600 dark:text-amber-400' :
+                                       'text-muted-foreground';
+                      return (
+                        <SelectItem 
+                          key={type} 
+                          value={type}
+                        >
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${iconColor}`} />
+                            <span>{type}</span>
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Dietary Restrictions (Optional - "None" will be used if none selected)</Label>
-                <div className="border rounded-md p-4 max-h-60 overflow-y-auto">
-                  {dietaryRestrictions.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">No dietary restrictions available</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      {dietaryRestrictions.map((dr) => {
-                        const isSelected = preferenceForm.restriction_ids.includes(dr.restriction_id);
-                        const restrictionType = dr.restriction_type || '';
-                        return (
-                          <Badge
-                            key={dr.restriction_id}
-                            variant={isSelected ? "default" : "outline"}
-                            className={`text-xs cursor-pointer transition-all ${isSelected ? '' : getTypeColor(restrictionType)} border flex items-center gap-1 hover:opacity-80`}
-                            onClick={() => {
-                              if (isSelected) {
-                                setPreferenceForm({
-                                  ...preferenceForm,
-                                  restriction_ids: preferenceForm.restriction_ids.filter(id => id !== dr.restriction_id)
-                                });
-                              } else {
-                                setPreferenceForm({
-                                  ...preferenceForm,
-                                  restriction_ids: [...preferenceForm.restriction_ids, dr.restriction_id]
-                                });
-                              }
-                            }}
-                          >
-                            {(() => {
-                              const Icon = getTypeIcon(restrictionType);
-                              return <Icon className="h-3 w-3" />;
-                            })()}
-                            {dr.restriction_name}
-                            {dr.severity_level && (
-                              <span className="text-xs ml-1">- {dr.severity_level}</span>
-                            )}
-                          </Badge>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-                {preferenceForm.restriction_ids.length > 0 && (
-                  <p className="text-xs text-muted-foreground">
-                    {preferenceForm.restriction_ids.length} restriction(s) selected
-                  </p>
-                )}
+                <Label>Dietary Restrictions *</Label>
+                <MultiSelectRestrictions
+                  restrictions={dietaryRestrictions}
+                  selectedIds={preferenceForm.restriction_ids}
+                  onSelectionChange={(ids) => setPreferenceForm({ ...preferenceForm, restriction_ids: ids })}
+                  disabled={preferenceLoading}
+                  placeholder="Select dietary restrictions (at least one required)"
+                />
               </div>
             </div>
             <DialogFooter>

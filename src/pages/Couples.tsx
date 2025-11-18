@@ -79,7 +79,7 @@ const Couples = () => {
   const { toast } = useToast();
 
   // Fetch couples using React Query with caching
-  const { data: couples = [], isLoading: loading, refetch } = useQuery({
+  const { data: couples = [], isLoading: loading, refetch, error: queryError } = useQuery({
     queryKey: ['couples', ceremonyType, restrictionIds, plannerEmail],
     queryFn: async () => {
       const response = await couplesAPI.getAll({
@@ -94,15 +94,19 @@ const Couples = () => {
       }));
       return transformedCouples;
     },
-    onError: (error: any) => {
-      console.error('Error fetching couples:', error);
+  });
+
+  // Handle query errors
+  useEffect(() => {
+    if (queryError) {
+      console.error('Error fetching couples:', queryError);
       toast({
         title: 'Error',
-        description: error.response?.data?.message || 'Failed to load couples. Make sure backend is running.',
+        description: (queryError as any).response?.data?.message || 'Failed to load couples. Make sure backend is running.',
         variant: 'destructive',
       });
-    },
-  });
+    }
+  }, [queryError, toast]);
 
   useEffect(() => {
     fetchDietaryRestrictions();
@@ -127,7 +131,8 @@ const Couples = () => {
   });
 
   const filteredCouples = useMemo(() => {
-    const filtered = couples.filter(couple => {
+    if (!Array.isArray(couples)) return [];
+    const filtered = couples.filter((couple: any) => {
     const searchLower = searchTerm.toLowerCase();
     return couple.partner1_name.toLowerCase().includes(searchLower) ||
            couple.partner2_name.toLowerCase().includes(searchLower) ||
@@ -233,10 +238,10 @@ const Couples = () => {
               <Heart className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{couples.length}</div>
+              <div className="text-2xl font-bold">{Array.isArray(couples) ? couples.length : 0}</div>
               <p className="text-xs text-muted-foreground mt-1">
-                {couples.filter(c => c.preference_id).length > 0 
-                  ? `${couples.filter(c => c.preference_id).length} couples registered with preferences`
+                {Array.isArray(couples) && couples.filter((c: any) => c.preference_id).length > 0 
+                  ? `${couples.filter((c: any) => c.preference_id).length} couples registered with preferences`
                   : 'No couples with preferences yet'}
               </p>
             </CardContent>
@@ -249,10 +254,10 @@ const Couples = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {couples.filter(c => c.preference_id).length}
+                {Array.isArray(couples) ? couples.filter((c: any) => c.preference_id).length : 0}
               </div>
               <p className="text-xs text-muted-foreground mt-1">
-                {couples.length > 0 ? Math.round((couples.filter(c => c.preference_id).length / couples.length) * 100) : 0}% of total
+                {Array.isArray(couples) && couples.length > 0 ? Math.round((couples.filter((c: any) => c.preference_id).length / couples.length) * 100) : 0}% of total
               </p>
             </CardContent>
           </Card>
@@ -266,7 +271,8 @@ const Couples = () => {
               <div className="text-2xl font-bold">
                 {(() => {
                   // Count couples with multiple restrictions/preferences
-                  return couples.filter(c => {
+                  if (!Array.isArray(couples)) return 0;
+                  return couples.filter((c: any) => {
                     const restrictions = c.all_restrictions || [];
                     return restrictions.length > 1;
                   }).length;
@@ -274,7 +280,8 @@ const Couples = () => {
               </div>
               <p className="text-xs text-muted-foreground mt-1">
                 {(() => {
-                  const multiPrefCouples = couples.filter(c => {
+                  if (!Array.isArray(couples)) return 'No couples with multiple preferences';
+                  const multiPrefCouples = couples.filter((c: any) => {
                     const restrictions = c.all_restrictions || [];
                     return restrictions.length > 1;
                   });
@@ -282,7 +289,7 @@ const Couples = () => {
                   
                   // Get unique restriction types from couples with multiple preferences
                   const types = new Set<string>();
-                  multiPrefCouples.forEach(c => {
+                  multiPrefCouples.forEach((c: any) => {
                     (c.all_restrictions || []).forEach((r: any) => {
                       if (r?.restriction_type) types.add(r.restriction_type);
                     });
@@ -302,8 +309,9 @@ const Couples = () => {
             <CardContent>
               <div className="text-2xl font-bold">
                 {(() => {
+                  if (!Array.isArray(couples)) return 'N/A';
                   const restrictionCounts: Record<string, number> = {};
-                  couples.forEach(c => {
+                  couples.forEach((c: any) => {
                     const restrictions = c.all_restrictions || [];
                     restrictions.forEach((r: any) => {
                       if (r && r.restriction_type) {

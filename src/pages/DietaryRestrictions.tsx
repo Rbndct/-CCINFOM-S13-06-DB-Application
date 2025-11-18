@@ -150,7 +150,7 @@ const DietaryRestrictions = () => {
       const response = await dietaryRestrictionsAPI.getAll();
       const allRestrictions = response.data || [];
       // Filter out "None" from the display (it's a system restriction) using utility function
-      const displayableRestrictions = filterNoneFromDisplay(allRestrictions);
+      const displayableRestrictions = filterNoneFromDisplay(allRestrictions) as DietaryRestriction[];
       setRestrictions(displayableRestrictions);
     } catch (error: any) {
       toast({

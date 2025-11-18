@@ -41,11 +41,34 @@ export const MultiSelectRestrictions = React.forwardRef<
 
   const selectedRestrictions = restrictions.filter(r => selectedIds.includes(r.restriction_id));
 
+  // Find "None" restriction ID
+  const noneRestriction = restrictions.find(r => r.restriction_name === 'None');
+  const noneRestrictionId = noneRestriction?.restriction_id || null;
+  const isNoneSelected = noneRestrictionId !== null && selectedIds.includes(noneRestrictionId);
+
   const handleToggle = (restrictionId: number) => {
-    if (selectedIds.includes(restrictionId)) {
-      onSelectionChange(selectedIds.filter(id => id !== restrictionId));
+    // If clicking "None"
+    if (restrictionId === noneRestrictionId) {
+      if (isNoneSelected) {
+        // Deselect "None"
+        onSelectionChange(selectedIds.filter(id => id !== restrictionId));
+      } else {
+        // Select "None" and clear all others
+        onSelectionChange([restrictionId]);
+      }
     } else {
-      onSelectionChange([...selectedIds, restrictionId]);
+      // If clicking another restriction
+      if (isNoneSelected) {
+        // If "None" is selected, deselect it and select this one
+        onSelectionChange([restrictionId]);
+      } else {
+        // Normal toggle behavior
+        if (selectedIds.includes(restrictionId)) {
+          onSelectionChange(selectedIds.filter(id => id !== restrictionId));
+        } else {
+          onSelectionChange([...selectedIds, restrictionId]);
+        }
+      }
     }
   };
 
@@ -84,21 +107,24 @@ export const MultiSelectRestrictions = React.forwardRef<
                 <span className="text-muted-foreground">{placeholder}</span>
               ) : (
                 <>
-                  {selectedRestrictions.slice(0, 3).map((restriction) => (
-                  <Badge
-                    key={restriction.restriction_id}
-                    variant="outline"
-                    className={cn(
-                      "text-xs flex items-center gap-1 pr-1",
-                      getTypeColor(restriction.restriction_type || '')
-                    )}
-                  >
-                    {(() => {
-                      const Icon = getTypeIcon(restriction.restriction_type || '');
-                      return <Icon className="h-3 w-3" />;
+                  {selectedRestrictions.slice(0, 3).map((restriction) => {
+                    const isNone = restriction.restriction_id === noneRestrictionId;
+                    return (
+                    <Badge
+                      key={restriction.restriction_id}
+                      variant="outline"
+                      className={cn(
+                        "text-xs flex items-center gap-1 pr-1",
+                        isNone ? "bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 border-gray-300 dark:border-gray-700" : getTypeColor(restriction.restriction_type || '')
+                      )}
+                    >
+                      {(() => {
+                        const Icon = getTypeIcon(restriction.restriction_type || '');
+                        return <Icon className="h-3 w-3" />;
                     })()}
                     <span className="max-w-[120px] truncate" title={restriction.restriction_name}>
                       {restriction.restriction_name}
+                      {isNone && <span className="ml-1 text-[10px] opacity-75">(No restrictions)</span>}
                     </span>
                     {!disabled && (
                       <span
@@ -125,7 +151,8 @@ export const MultiSelectRestrictions = React.forwardRef<
                       </span>
                     )}
                   </Badge>
-                  ))}
+                  );
+                  })}
                   {selectedRestrictions.length > 3 && (
                     <Badge
                       variant="outline"
@@ -166,12 +193,15 @@ export const MultiSelectRestrictions = React.forwardRef<
                 )}
                 {filteredRestrictions.map((restriction) => {
                   const isSelected = selectedIds.includes(restriction.restriction_id);
+                  const isNone = restriction.restriction_id === noneRestrictionId;
+                  const isDisabled = isNoneSelected && !isNone && !isSelected;
                   return (
                     <CommandItem
                       key={restriction.restriction_id}
                       value={`${restriction.restriction_name} ${restriction.restriction_type} ${restriction.severity_level}`}
                       onSelect={() => handleToggle(restriction.restriction_id)}
-                      className="cursor-pointer"
+                      className={isDisabled ? "cursor-not-allowed opacity-50" : "cursor-pointer"}
+                      disabled={isDisabled}
                     >
                       <div
                         className={cn(

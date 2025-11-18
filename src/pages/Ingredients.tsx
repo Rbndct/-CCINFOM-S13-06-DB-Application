@@ -95,11 +95,13 @@ const Ingredients = () => {
     const fetchIngredients = async () => {
       try {
         setLoading(true);
-        const response = await ingredientsAPI.getAll();
+        const response: any = await ingredientsAPI.getAll({});
         if (response && response.success && response.data) {
           setIngredients(response.data || []);
         } else if (response && response.data) {
           setIngredients(response.data || []);
+        } else if (Array.isArray(response)) {
+          setIngredients(response);
         } else {
           setIngredients([]);
         }
@@ -216,11 +218,13 @@ const Ingredients = () => {
       }
       
       // Refresh ingredients
-      const response = await ingredientsAPI.getAll();
+      const response: any = await ingredientsAPI.getAll({});
       if (response && response.success && response.data) {
         setIngredients(response.data || []);
       } else if (response && response.data) {
         setIngredients(response.data || []);
+      } else if (Array.isArray(response)) {
+        setIngredients(response);
       }
       
       // Reset form
@@ -253,7 +257,7 @@ const Ingredients = () => {
       setDeleteDialogOpen(false);
       
       // Refresh ingredients
-      const response = await ingredientsAPI.getAll();
+      const response: any = await ingredientsAPI.getAll({});
       if (response && response.success && response.data) {
         setIngredients(response.data || []);
       } else if (response && response.data) {
@@ -292,7 +296,7 @@ const Ingredients = () => {
         description: `Stock ${delta > 0 ? 'increased' : 'decreased'} by ${Math.abs(delta)}` 
       });
       // Refresh ingredients
-      const response = await ingredientsAPI.getAll();
+      const response: any = await ingredientsAPI.getAll({});
       if (response && response.success && response.data) {
         const updatedIngredients = response.data || [];
         setIngredients(updatedIngredients);

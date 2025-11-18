@@ -144,7 +144,7 @@ const Guests = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await guestsAPI.getAll();
+      const response = await guestsAPI.getAll({});
       const data = response.data || [];
       // Transform guests to include dietary restrictions as array
       const transformedGuests = data.map((g: any) => {
@@ -206,7 +206,7 @@ const Guests = () => {
 
   const fetchWeddings = async () => {
     try {
-      const response = await weddingsAPI.getAll();
+      const response = await weddingsAPI.getAll({});
       setWeddings(response.data || []);
     } catch (err: any) {
       console.error('Error fetching weddings:', err);
@@ -890,6 +890,7 @@ const Guests = () => {
                   onSelectionChange={(ids) => setFormData({ ...formData, restrictionIds: ids })}
                   disabled={formLoading}
                   error={formErrors.restrictionIds}
+                  placeholder="Select dietary restrictions (at least one required)"
                 />
               </div>
               <div className="space-y-2">

@@ -50,19 +50,19 @@ const Dashboard = () => {
         
         // Fetch all data in parallel
         const [weddingsRes, couplesRes, guestsRes, menuItemsRes, packagesRes] = await Promise.all([
-          weddingsAPI.getAll().catch(() => ({ success: false, data: [] })),
-          couplesAPI.getAll().catch(() => ({ success: false, data: [] })),
-          guestsAPI.getAll().catch(() => ({ success: false, data: [] })),
-          menuItemsAPI.getAll().catch(() => ({ success: false, data: [] })),
-          packagesAPI.getAll().catch(() => ({ success: false, data: [] }))
+          weddingsAPI.getAll({}).catch(() => ({ success: false, data: [] })),
+          couplesAPI.getAll({}).catch(() => ({ success: false, data: [] })),
+          guestsAPI.getAll({}).catch(() => ({ success: false, data: [] })),
+          menuItemsAPI.getAll({}).catch(() => ({ success: false, data: [] })),
+          packagesAPI.getAll({}).catch(() => ({ success: false, data: [] }))
         ]);
 
         // Extract data from responses
-        const weddings = (weddingsRes?.success && weddingsRes?.data) ? weddingsRes.data : (weddingsRes?.data || []);
-        const couples = (couplesRes?.success && couplesRes?.data) ? couplesRes.data : (couplesRes?.data || []);
-        const guests = (guestsRes?.success && guestsRes?.data) ? guestsRes.data : (guestsRes?.data || []);
-        const menuItems = (menuItemsRes?.success && menuItemsRes?.data) ? menuItemsRes.data : (menuItemsRes?.data || []);
-        const packages = (packagesRes?.success && packagesRes?.data) ? packagesRes.data : (packagesRes?.data || []);
+        const weddings = ((weddingsRes as any)?.success && (weddingsRes as any)?.data) ? (weddingsRes as any).data : ((weddingsRes as any)?.data || []);
+        const couples = ((couplesRes as any)?.success && (couplesRes as any)?.data) ? (couplesRes as any).data : ((couplesRes as any)?.data || []);
+        const guests = ((guestsRes as any)?.success && (guestsRes as any)?.data) ? (guestsRes as any).data : ((guestsRes as any)?.data || []);
+        const menuItems = ((menuItemsRes as any)?.success && (menuItemsRes as any)?.data) ? (menuItemsRes as any).data : ((menuItemsRes as any)?.data || []);
+        const packages = ((packagesRes as any)?.success && (packagesRes as any)?.data) ? (packagesRes as any).data : ((packagesRes as any)?.data || []);
 
         // Calculate statistics
         const totalWeddings = Array.isArray(weddings) ? weddings.length : 0;
