@@ -14,9 +14,10 @@ import {
   Utensils,
   Package as PackageIcon,
   UserCheck,
-  PackagePlus,
+  Scale,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { cn } from '@/lib/utils';
 
 interface DashboardLayoutProps {
@@ -41,9 +42,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     {
       label: 'Menu & Catering',
       items: [
+        { to: '/dashboard/ingredients', label: 'Ingredients', icon: Scale },
         { to: '/dashboard/menu', label: 'Menu Items', icon: Utensils },
         { to: '/dashboard/packages', label: 'Packages', icon: PackageIcon },
-        { to: '/dashboard/ingredients', label: 'Ingredients', icon: PackagePlus },
       ],
     },
     {
@@ -125,52 +126,108 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
 
           {/* Navigation */}
           <nav className="flex-1 space-y-1 p-4 overflow-y-auto">
-            {/* Home Link */}
-            <Link
-              to={homeItem.to}
-              className={cn(
-                "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors mb-4",
-                isActive(homeItem.to)
-                  ? "bg-primary text-primary-foreground"
-                  : "text-foreground hover:bg-muted"
+            <TooltipProvider delayDuration={200}>
+              {/* Home Link */}
+              {sidebarCollapsed ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Link
+                      to={homeItem.to}
+                      className={cn(
+                        "flex items-center justify-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all mb-4 w-full",
+                        isActive(homeItem.to)
+                          ? "bg-primary text-primary-foreground shadow-sm"
+                          : "text-foreground hover:bg-muted"
+                      )}
+                      onClick={() => setSidebarOpen(false)}
+                    >
+                      <Home className="h-4 w-4 flex-shrink-0" />
+                    </Link>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    <p>{homeItem.label}</p>
+                  </TooltipContent>
+                </Tooltip>
+              ) : (
+                <Link
+                  to={homeItem.to}
+                  className={cn(
+                    "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all mb-4",
+                    isActive(homeItem.to)
+                      ? "bg-primary text-primary-foreground shadow-sm"
+                      : "text-foreground hover:bg-muted"
+                  )}
+                  onClick={() => setSidebarOpen(false)}
+                >
+                  <Home className="h-4 w-4 flex-shrink-0" />
+                  <span>{homeItem.label}</span>
+                </Link>
               )}
-              onClick={() => setSidebarOpen(false)}
-            >
-              <Home className="h-4 w-4 flex-shrink-0" />
-              {!sidebarCollapsed && <span>{homeItem.label}</span>}
-            </Link>
 
-            {/* Navigation Sections */}
-            {navigationSections.map((section, sectionIndex) => (
-              <div key={section.label} className={cn("mb-6", sectionIndex === 0 && "mt-2")}>
-                {!sidebarCollapsed && (
-                  <h3 className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {section.label}
-                  </h3>
-                )}
-                <div className="space-y-1">
-                  {section.items.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <Link
-                        key={item.to}
-                        to={item.to}
-                        className={cn(
-                          "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors",
-                          isActive(item.to)
-                            ? "bg-primary text-primary-foreground"
-                            : "text-foreground hover:bg-muted"
-                        )}
-                        onClick={() => setSidebarOpen(false)}
-                      >
-                        <Icon className="h-4 w-4 flex-shrink-0" />
-                        {!sidebarCollapsed && <span>{item.label}</span>}
-                      </Link>
-                    );
-                  })}
+              {/* Navigation Sections */}
+              {navigationSections.map((section, sectionIndex) => (
+                <div key={section.label} className={cn("mb-6", sectionIndex === 0 && "mt-2")}>
+                  {!sidebarCollapsed && (
+                    <h3 className="px-3 mb-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {section.label}
+                    </h3>
+                  )}
+                  {!sidebarCollapsed && sectionIndex > 0 && (
+                    <div className="h-px bg-border mx-3 mb-3" />
+                  )}
+                  <div className="space-y-1">
+                    {section.items.map((item) => {
+                      const Icon = item.icon;
+                      const active = isActive(item.to);
+                      
+                      if (sidebarCollapsed) {
+                        return (
+                          <Tooltip key={item.to}>
+                            <TooltipTrigger asChild>
+                              <Link
+                                to={item.to}
+                                className={cn(
+                                  "flex items-center justify-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all w-full",
+                                  active
+                                    ? "bg-primary text-primary-foreground shadow-sm"
+                                    : "text-foreground hover:bg-muted"
+                                )}
+                                onClick={() => setSidebarOpen(false)}
+                              >
+                                <Icon className="h-4 w-4 flex-shrink-0" />
+                              </Link>
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                              <p>{item.label}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      }
+                      
+                      return (
+                        <Link
+                          key={item.to}
+                          to={item.to}
+                          className={cn(
+                            "flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all relative",
+                            active
+                              ? "bg-primary text-primary-foreground shadow-sm"
+                              : "text-foreground hover:bg-muted"
+                          )}
+                          onClick={() => setSidebarOpen(false)}
+                        >
+                          {active && (
+                            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 bg-primary-foreground rounded-r-full" />
+                          )}
+                          <Icon className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate">{item.label}</span>
+                        </Link>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </TooltipProvider>
           </nav>
         </div>
       </div>
