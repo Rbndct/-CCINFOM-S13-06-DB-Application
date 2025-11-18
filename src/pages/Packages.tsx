@@ -17,14 +17,14 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  Minus
 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
-import { Checkbox } from '@/components/ui/checkbox';
 import { 
   Table, 
   TableBody, 
@@ -89,7 +89,7 @@ const Packages = () => {
     package_type: '',
     selling_price: '',
     package_price: '', // Keep for backward compatibility
-    menu_item_ids: [] as number[]
+    menu_item_quantities: {} as Record<number, number> // menu_item_id -> quantity
   });
   const [formLoading, setFormLoading] = useState(false);
 
@@ -212,12 +212,20 @@ const Packages = () => {
   // Handle edit package
   const handleEditPackage = (pkg: any) => {
     setSelectedPackage(pkg);
+    // Build quantities map from menu items
+    const quantities: Record<number, number> = {};
+    if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
+      pkg.menu_items.forEach((item: any) => {
+        const itemId = item.menu_item_id || item.id;
+        quantities[itemId] = item.quantity || 1;
+      });
+    }
     setFormData({
       package_name: pkg.package_name || '',
       package_type: pkg.package_type || '',
       selling_price: (pkg.selling_price || pkg.package_price || 0).toString(),
       package_price: (pkg.package_price || 0).toString(),
-      menu_item_ids: (pkg.menu_items || []).map((item: any) => item.menu_item_id || item.id)
+      menu_item_quantities: quantities
     });
     setEditDialogOpen(true);
   };
@@ -229,18 +237,16 @@ const Packages = () => {
   };
   
   // Calculate suggested package price based on menu item costs + serving markup
-  const calculateSuggestedPrice = (menuItemIds: number[]): number => {
-    if (!menuItemIds || menuItemIds.length === 0) return 0;
+  const calculateSuggestedPrice = (quantities: Record<number, number> | undefined): number => {
+    if (!quantities || Object.keys(quantities).length === 0) return 0;
     
-    const selectedItems = availableMenuItems.filter((item: any) => 
-      menuItemIds.includes(item.menu_item_id || item.id)
-    );
-    
-    // Sum of menu item costs
-    const totalCost = selectedItems.reduce((sum: number, item: any) => {
+    // Sum of menu item costs with quantities
+    const totalCost = Object.entries(quantities).reduce((sum: number, [itemIdStr, quantity]) => {
+      const itemId = parseInt(itemIdStr);
+      const item = availableMenuItems.find((item: any) => (item.menu_item_id || item.id) === itemId);
+      if (!item) return sum;
       const cost = parseFloat(item.unit_cost || item.menu_cost) || 0;
-      const quantity = 1; // Default quantity per package
-      return sum + (cost * quantity);
+      return sum + (cost * (quantity as number));
     }, 0);
     
     // Add serving cost markup (40% markup for serving, labor, overhead)
@@ -258,7 +264,7 @@ const Packages = () => {
       package_type: '',
       selling_price: '',
       package_price: '', // Keep for backward compatibility
-      menu_item_ids: []
+      menu_item_quantities: {}
     });
     setSelectedPackage(null);
     setAddDialogOpen(true);
@@ -275,15 +281,35 @@ const Packages = () => {
       return;
     }
     
+    // Check if at least one menu item with quantity > 0 is selected
+    const quantities = formData.menu_item_quantities || {};
+    const hasMenuItems = Object.values(quantities).some(qty => qty > 0);
+    if (!hasMenuItems) {
+      toast({
+        title: 'Validation Error',
+        description: 'Please select at least one menu item',
+        variant: 'destructive'
+      });
+      return;
+    }
+    
     setFormLoading(true);
     try {
       const price = parseFloat(formData.selling_price || formData.package_price);
+      // Convert quantities object to array format expected by backend
+      const menu_item_ids = Object.entries(quantities)
+        .filter(([_, quantity]) => quantity > 0)
+        .map(([itemId, quantity]) => ({
+          menu_item_id: parseInt(itemId),
+          quantity: quantity
+        }));
+      
       const data = {
         package_name: formData.package_name,
         package_type: formData.package_type,
         selling_price: price,
         package_price: price, // Keep for backward compatibility
-        menu_item_ids: formData.menu_item_ids
+        menu_item_ids: menu_item_ids
       };
       
       if (selectedPackage) {
@@ -295,6 +321,16 @@ const Packages = () => {
         toast({ title: 'Success', description: 'Package created successfully' });
         setAddDialogOpen(false);
       }
+      
+      // Reset form
+      setFormData({
+        package_name: '',
+        package_type: '',
+        selling_price: '',
+        package_price: '',
+        menu_item_quantities: {}
+      });
+      setSelectedPackage(null);
       
       // Refresh packages
       const response = await packagesAPI.getAll({});
@@ -1046,9 +1082,9 @@ const Packages = () => {
                 onChange={(e) => setFormData({...formData, selling_price: e.target.value})}
                 placeholder="0.00"
               />
-              {formData.menu_item_ids.length > 0 && (
+              {formData.menu_item_quantities && Object.keys(formData.menu_item_quantities).length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  Suggested price: {formatCurrency(calculateSuggestedPrice(formData.menu_item_ids))}
+                  Suggested price: {formatCurrency(calculateSuggestedPrice(formData.menu_item_quantities))}
                 </p>
               )}
             </div>
@@ -1059,78 +1095,102 @@ const Packages = () => {
                   <p className="text-sm text-muted-foreground">No menu items available</p>
                 ) : (
                   <div className="space-y-2">
-                    {(() => {
-                      // Sort items: selected ones first, then unselected
-                      const sortedItems = [...availableMenuItems].sort((a, b) => {
-                        const aId = a.menu_item_id || a.id;
-                        const bId = b.menu_item_id || b.id;
-                        const aSelected = formData.menu_item_ids.includes(aId);
-                        const bSelected = formData.menu_item_ids.includes(bId);
-                        if (aSelected && !bSelected) return -1;
-                        if (!aSelected && bSelected) return 1;
-                        return 0;
-                      });
+                    {availableMenuItems.map((item: any) => {
+                      const itemId = item.menu_item_id || item.id;
+                      const quantity = (formData.menu_item_quantities && formData.menu_item_quantities[itemId]) || 0;
+                      const restrictionName = item.restriction_name || item.dietary_restriction || null;
+                      const restrictionType = item.restriction_type || 'Dietary';
                       
-                      return sortedItems.map((item: any) => {
-                        const itemId = item.menu_item_id || item.id;
-                        const isSelected = formData.menu_item_ids.includes(itemId);
-                        const restrictionName = item.restriction_name || item.dietary_restriction || null;
-                        const restrictionType = item.restriction_type || 'Dietary';
-                        return (
-                          <div key={itemId} className={`flex items-start space-x-2 p-2 hover:bg-muted/50 rounded ${isSelected ? 'bg-muted/30' : ''}`}>
-                            <Checkbox
-                              id={`menu-item-${itemId}`}
-                              checked={isSelected}
-                              onCheckedChange={(checked) => {
-                                if (checked) {
-                                  setFormData({
-                                    ...formData,
-                                    menu_item_ids: [...formData.menu_item_ids, itemId]
-                                  });
-                                } else {
-                                  setFormData({
-                                    ...formData,
-                                    menu_item_ids: formData.menu_item_ids.filter((id: number) => id !== itemId)
-                                  });
-                                }
-                              }}
-                              className="mt-1"
-                            />
-                            <label htmlFor={`menu-item-${itemId}`} className="flex-1 cursor-pointer">
-                              <div className="flex items-center justify-between">
-                                <span className="font-medium">{item.menu_name || item.name}</span>
-                                <span className="text-sm text-muted-foreground">
-                                  {formatCurrency(item.selling_price || item.menu_price || 0)}
-                                </span>
-                              </div>
-                              <div className="flex items-center gap-2 mt-1 flex-wrap">
-                                <span className="text-xs text-muted-foreground">
-                                  {item.menu_type || 'N/A'}
-                                </span>
-                                {restrictionName && restrictionName !== 'None' && (
-                                  <Badge 
-                                    variant="outline" 
-                                    className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
-                                  >
-                                    {(() => {
-                                      const Icon = getTypeIcon(restrictionType);
-                                      return <Icon className="h-3 w-3" />;
-                                    })()}
-                                    {restrictionName}
-                                  </Badge>
-                                )}
-                              </div>
-                            </label>
+                      const handleIncrement = () => {
+                        setFormData({
+                          ...formData,
+                          menu_item_quantities: {
+                            ...(formData.menu_item_quantities || {}),
+                            [itemId]: quantity + 1
+                          }
+                        });
+                      };
+                      
+                      const handleDecrement = () => {
+                        if (quantity > 1) {
+                          setFormData({
+                            ...formData,
+                            menu_item_quantities: {
+                              ...(formData.menu_item_quantities || {}),
+                              [itemId]: quantity - 1
+                            }
+                          });
+                        } else if (quantity === 1) {
+                          // Remove from quantities if decrementing from 1
+                          const newQuantities = { ...(formData.menu_item_quantities || {}) };
+                          delete newQuantities[itemId];
+                          setFormData({
+                            ...formData,
+                            menu_item_quantities: newQuantities
+                          });
+                        }
+                      };
+                      
+                      return (
+                        <div key={itemId} className={`flex items-center space-x-3 p-3 hover:bg-muted/50 rounded border ${quantity > 0 ? 'bg-muted/30 border-primary/20' : 'border-border'}`}>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleDecrement}
+                              disabled={quantity === 0}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Minus className="h-4 w-4" />
+                            </Button>
+                            <div className="w-12 text-center">
+                              <span className="text-lg font-semibold">{quantity}</span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={handleIncrement}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
                           </div>
-                        );
-                      });
-                    })()}
+                          <div className="flex-1">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium">{item.menu_name || item.name}</span>
+                              <span className="text-sm text-muted-foreground">
+                                {formatCurrency(item.selling_price || item.menu_price || 0)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              <span className="text-xs text-muted-foreground">
+                                {item.menu_type || 'N/A'}
+                              </span>
+                              {restrictionName && restrictionName !== 'None' && (
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-xs ${getTypeColor(restrictionType)} border flex items-center gap-1`}
+                                >
+                                  {(() => {
+                                    const Icon = getTypeIcon(restrictionType);
+                                    return <Icon className="h-3 w-3" />;
+                                  })()}
+                                  {restrictionName}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
-              {formData.menu_item_ids.length > 0 && (
+              {formData.menu_item_quantities && Object.keys(formData.menu_item_quantities).length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                  {formData.menu_item_ids.length} menu item{formData.menu_item_ids.length !== 1 ? 's' : ''} selected
+                  {Object.values(formData.menu_item_quantities).reduce((sum, qty) => sum + qty, 0)} menu item{Object.values(formData.menu_item_quantities).reduce((sum, qty) => sum + qty, 0) !== 1 ? 's' : ''} selected
                 </p>
               )}
             </div>
@@ -1139,6 +1199,14 @@ const Packages = () => {
             <Button variant="outline" onClick={() => {
               setAddDialogOpen(false);
               setEditDialogOpen(false);
+              // Reset form
+              setFormData({
+                package_name: '',
+                package_type: '',
+                selling_price: '',
+                package_price: '',
+                menu_item_quantities: {}
+              });
             }}>Cancel</Button>
             <Button onClick={handleSavePackage} disabled={formLoading}>
               {formLoading ? (
