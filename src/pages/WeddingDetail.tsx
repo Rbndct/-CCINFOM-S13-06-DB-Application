@@ -1104,8 +1104,10 @@ const WeddingDetail = () => {
         console.error('Error refreshing wedding data:', refreshError);
       }
       
-      // Invalidate weddings query to refresh the weddings list page
+      // Invalidate all weddings queries to refresh the weddings list page
       queryClient.invalidateQueries({ queryKey: ['weddings'] });
+      // Also refetch to ensure immediate update
+      queryClient.refetchQueries({ queryKey: ['weddings'] });
       
       // Reset form
       setFirstName('');
@@ -1213,8 +1215,10 @@ const WeddingDetail = () => {
         console.error('Error refreshing wedding data:', refreshError);
       }
       
-      // Invalidate weddings query to refresh the weddings list page
+      // Invalidate all weddings queries to refresh the weddings list page
       queryClient.invalidateQueries({ queryKey: ['weddings'] });
+      // Also refetch to ensure immediate update
+      queryClient.refetchQueries({ queryKey: ['weddings'] });
       
       setEditGuestOpen(false);
       setEditingGuest(null);
@@ -1287,8 +1291,10 @@ const WeddingDetail = () => {
         console.error('Error refreshing wedding data:', refreshError);
       }
       
-      // Invalidate weddings query to refresh the weddings list page
+      // Invalidate all weddings queries to refresh the weddings list page
       queryClient.invalidateQueries({ queryKey: ['weddings'] });
+      // Also refetch to ensure immediate update
+      queryClient.refetchQueries({ queryKey: ['weddings'] });
       
       toast({
         title: 'Guest Deleted',
@@ -2891,9 +2897,9 @@ const WeddingDetail = () => {
     };
     const Icon = getCategoryIcon(category);
     return (
-      <Badge className={`${colors[category] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'} border flex items-center gap-1`}>
-        <Icon className="w-3 h-3 dark:text-gray-300" />
-        {category}
+      <Badge className={`${colors[category] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'} border flex items-center gap-0.5 px-1.5 py-0.5 text-xs`}>
+        <Icon className="w-2.5 h-2.5 dark:text-gray-300 flex-shrink-0" />
+        <span className="truncate max-w-[80px]">{category}</span>
       </Badge>
     );
   };
@@ -2901,15 +2907,15 @@ const WeddingDetail = () => {
   const getConditionBadge = (condition: string) => {
     switch (condition) {
       case 'Excellent':
-        return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border flex items-center gap-1"><CheckCircle className="w-3 h-3 dark:text-green-300" />Excellent</Badge>;
+        return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border flex items-center gap-0.5 px-1.5 py-0.5 text-xs"><CheckCircle className="w-2.5 h-2.5 dark:text-green-300 flex-shrink-0" />Excellent</Badge>;
       case 'Good':
-        return <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700 border flex items-center gap-1"><Clock className="w-3 h-3 dark:text-blue-300" />Good</Badge>;
+        return <Badge variant="secondary" className="bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700 border flex items-center gap-0.5 px-1.5 py-0.5 text-xs"><Clock className="w-2.5 h-2.5 dark:text-blue-300 flex-shrink-0" />Good</Badge>;
       case 'Fair':
-        return <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border flex items-center gap-1"><AlertTriangle className="w-3 h-3 dark:text-yellow-300" />Fair</Badge>;
+        return <Badge variant="outline" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border flex items-center gap-0.5 px-1.5 py-0.5 text-xs"><AlertTriangle className="w-2.5 h-2.5 dark:text-yellow-300 flex-shrink-0" />Fair</Badge>;
       case 'Poor':
-        return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border flex items-center gap-1"><AlertTriangle className="w-3 h-3 dark:text-red-300" />Poor</Badge>;
+        return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border flex items-center gap-0.5 px-1.5 py-0.5 text-xs"><AlertTriangle className="w-2.5 h-2.5 dark:text-red-300 flex-shrink-0" />Poor</Badge>;
       default:
-        return <Badge variant="outline">{condition || 'Unknown'}</Badge>;
+        return <Badge variant="outline" className="text-xs px-1.5 py-0.5">{condition || 'Unknown'}</Badge>;
     }
   };
 
@@ -7611,7 +7617,6 @@ const WeddingDetail = () => {
               const costValue = typeof cost === 'number' ? cost : parseFloat(cost?.toString() || '0') || 0;
               const totalCost = (selectedAllocation.quantity_used || 0) * costValue;
               const stockAvailable = item?.quantity_available || 0;
-              const remainingStock = stockAvailable - (selectedAllocation.quantity_used || 0);
               return (
                 <div className="space-y-4 py-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -7642,12 +7647,6 @@ const WeddingDetail = () => {
                     <div>
                       <Label className="text-xs text-muted-foreground">Stock Available</Label>
                       <p className="font-semibold">{stockAvailable}</p>
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground">Remaining Stock</Label>
-                      <p className={`font-semibold ${remainingStock < 0 ? 'text-red-600 dark:text-red-400' : remainingStock < 5 ? 'text-yellow-600 dark:text-yellow-400' : ''}`}>
-                        {remainingStock}
-                      </p>
                     </div>
                   </div>
                 </div>
