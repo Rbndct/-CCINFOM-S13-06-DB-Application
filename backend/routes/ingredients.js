@@ -49,10 +49,10 @@ router.get('/:id', async (req, res) => {
         m.menu_name,
         m.menu_type,
         r.quantity_needed,
-        (FLOOR(i.stock_quantity / NULLIF(r.quantity_needed, 0))) as makeable_quantity
+        (FLOOR(COALESCE(i.stock_quantity, 0) / NULLIF(r.quantity_needed, 0))) as makeable_quantity
       FROM recipe r
-      JOIN menu_item m ON r.menu_item_id = m.menu_item_id
-      JOIN ingredient i ON r.ingredient_id = i.ingredient_id
+      INNER JOIN menu_item m ON r.menu_item_id = m.menu_item_id
+      INNER JOIN ingredient i ON r.ingredient_id = i.ingredient_id
       WHERE r.ingredient_id = ?
       ORDER BY m.menu_name ASC`,
       [id]
