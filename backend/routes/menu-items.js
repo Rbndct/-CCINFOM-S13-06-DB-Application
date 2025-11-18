@@ -237,7 +237,8 @@ router.post('/', async (req, res) => {
       cost_override,
       menu_cost,
       menu_price,
-      recipe
+      recipe,
+      stock
     } = req.body;
 
     // Support both new (unit_cost, selling_price) and old (menu_cost,
@@ -311,12 +312,12 @@ router.post('/', async (req, res) => {
     }
 
     const [result] = await connection.query(
-        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, cost_override, menu_type, restriction_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, cost_override, menu_type, restriction_id, stock)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           menu_name, finalUnitCost, finalSellingPrice,
           default_markup_percentage || 200.00, cost_override || false,
-          menu_type, restriction_id || null
+          menu_type, restriction_id || null, stock !== undefined ? stock : 0
         ]);
 
     const menuItemId = result.insertId;
@@ -411,7 +412,8 @@ router.put('/:id', async (req, res) => {
       cost_override,
       menu_cost,
       menu_price,
-      recipe
+      recipe,
+      stock
     } = req.body;
     const menuItemId = req.params.id;
 
@@ -463,6 +465,10 @@ router.put('/:id', async (req, res) => {
     if (restriction_id !== undefined) {
       updateFields.push('restriction_id = ?');
       updateValues.push(restriction_id || null);
+    }
+    if (stock !== undefined) {
+      updateFields.push('stock = ?');
+      updateValues.push(stock);
     }
 
     if (updateFields.length === 0) {

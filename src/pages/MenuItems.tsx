@@ -412,10 +412,26 @@ const MenuItems = () => {
     
     setFormLoading(true);
     try {
+      // Parse price - use form value if provided and valid, otherwise use suggested price
+      const priceValue = formData.menu_price && formData.menu_price.trim() !== '' 
+        ? parseFloat(formData.menu_price) 
+        : suggestedPrice;
+      
+      // Ensure price is valid
+      if (!priceValue || isNaN(priceValue) || priceValue <= 0) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please enter a valid selling price',
+          variant: 'destructive'
+        });
+        setFormLoading(false);
+        return;
+      }
+      
       const data: any = {
         menu_name: formData.menu_name,
         unit_cost: calculatedCost,
-        selling_price: parseFloat(formData.menu_price) || suggestedPrice,
+        selling_price: priceValue,
         menu_type: formData.menu_type,
         restriction_id: formData.restriction_id && formData.restriction_id !== 'restriction-none' ? parseInt(formData.restriction_id) : null,
         default_markup_percentage: defaultMarkup,
@@ -442,8 +458,10 @@ const MenuItems = () => {
           id: item.menu_item_id,
           menu_item_id: item.menu_item_id,
           menu_name: item.menu_name,
-          menu_cost: parseFloat(item.menu_cost) || 0,
-          menu_price: parseFloat(item.menu_price) || 0,
+          menu_cost: parseFloat(item.unit_cost || item.menu_cost) || 0,
+          menu_price: parseFloat(item.selling_price || item.menu_price) || 0,
+          unit_cost: parseFloat(item.unit_cost) || 0,
+          selling_price: parseFloat(item.selling_price) || 0,
           menu_type: item.menu_type,
           makeable_quantity: item.makeable_quantity ?? 0,
           restriction_id: item.restriction_id,
