@@ -61,7 +61,8 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { menuItemsAPI, dietaryRestrictionsAPI, ingredientsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { useCurrencyFormat } from '@/utils/currency';
-import { getTypeIcon, getTypeColor } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, getNoneRestrictionBadge, isNoneRestriction } from '@/utils/restrictionUtils';
+import { getMenuTypeIcon, getMenuTypeColor } from '@/utils/menuTypeUtils';
 import { Checkbox } from '@/components/ui/checkbox';
 
 const MenuItems = () => {
@@ -477,9 +478,10 @@ const MenuItems = () => {
         setMenuItems(items);
       }
     } catch (error: any) {
+      console.error('Error saving menu item:', error);
       toast({
         title: 'Error',
-        description: error.response?.data?.error || 'Failed to save menu item',
+        description: error.response?.data?.error || error.message || 'Failed to save menu item. Please check all required fields.',
         variant: 'destructive'
       });
     } finally {
@@ -564,22 +566,23 @@ const MenuItems = () => {
 
   const getMakeableStatus = (qty: number) => {
     if (!qty || qty <= 0) {
-      return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border">Unavailable</Badge>;
+      return <Badge variant="destructive" className="bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200 border-red-200 dark:border-red-700 border text-[10px] px-1.5 py-0.5 h-5">Cannot Make</Badge>;
     } else if (qty < 10) {
-      return <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border">Low Availability</Badge>;
+      return <Badge variant="secondary" className="bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 border-yellow-200 dark:border-yellow-700 border text-[10px] px-1.5 py-0.5 h-5">Low Stock</Badge>;
     } else {
-      return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border">Available</Badge>;
+      return <Badge className="bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700 border text-[10px] px-1.5 py-0.5 h-5">In Stock</Badge>;
     }
   };
 
   const getTypeBadge = (type: string) => {
-    const colors = {
-      'Appetizer': 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200 border-blue-200 dark:border-blue-700',
-      'Main Course': 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 border-green-200 dark:border-green-700',
-      'Dessert': 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200 border-purple-200 dark:border-purple-700',
-      'Beverage': 'bg-orange-100 dark:bg-orange-900 text-orange-800 dark:text-orange-200 border-orange-200 dark:border-orange-700'
-    };
-    return <Badge className={`${colors[type] || 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200 border-gray-200 dark:border-gray-700'} border`}>{type}</Badge>;
+    const Icon = getMenuTypeIcon(type);
+    const colorClass = getMenuTypeColor(type);
+    return (
+      <Badge className={`${colorClass} border flex items-center gap-1`}>
+        <Icon className="h-3 w-3" />
+        {type}
+      </Badge>
+    );
   };
 
   // Filter and sort menu items
@@ -795,9 +798,9 @@ const MenuItems = () => {
                       <TableHead>Menu ID</TableHead>
                       <TableHead>Item Name</TableHead>
                       <TableHead>Type</TableHead>
-                      <TableHead>Cost</TableHead>
-                      <TableHead>Price</TableHead>
-                      <TableHead>Profit Margin</TableHead>
+                      <TableHead className="text-right">Cost</TableHead>
+                      <TableHead className="text-right">Selling Price</TableHead>
+                      <TableHead className="text-right">Profit Margin</TableHead>
                       <TableHead>Makeable Qty</TableHead>
                       <TableHead>Restrictions</TableHead>
                       <TableHead>Usage</TableHead>
@@ -837,17 +840,17 @@ const MenuItems = () => {
                           <TableCell>
                             {getTypeBadge(item.menu_type)}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-right">
                             <div className="text-sm font-medium">
                               {formatCurrency(item.unit_cost || item.menu_cost || 0)}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-right">
                             <div className="text-sm font-medium">
                               {formatCurrency(item.selling_price || item.menu_price || 0)}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="text-right">
                             <div className="text-sm font-medium text-green-600">
                               {formatCurrency(item.profit_margin || 0)}
                             </div>
@@ -867,25 +870,65 @@ const MenuItems = () => {
                               }] : []);
                               
                               if (restrictions.length > 0) {
+                                const maxDisplay = 3;
+                                const displayRestrictions = restrictions.slice(0, maxDisplay);
+                                const remainingCount = Math.max(0, restrictions.length - maxDisplay);
+                                
                                 return (
-                                  <div className="flex flex-wrap gap-1">
-                                    {restrictions.map((r: any, idx: number) => (
-                                      <Badge 
-                                        key={idx}
-                                        variant="outline" 
-                                        className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
-                                      >
-                                        {(() => {
-                                          const Icon = getTypeIcon(r.restriction_type || 'Dietary');
-                                          return <Icon className="h-3 w-3" />;
+                                  <div className="flex flex-col gap-1">
+                                    {/* First row - max 2 items */}
+                                    <div className="flex flex-wrap gap-1">
+                                      {displayRestrictions.slice(0, 2).map((r: any, idx: number) => {
+                                        if (isNoneRestriction(r)) {
+                                          return <div key={idx} className="inline-block">{getNoneRestrictionBadge(false)}</div>;
+                                        }
+                                        return (
+                                          <Badge 
+                                            key={idx}
+                                            variant="outline" 
+                                            className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
+                                          >
+                                            {(() => {
+                                              const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                              return <Icon className="h-3 w-3" />;
+                                            })()}
+                                            {r.restriction_name}
+                                          </Badge>
+                                        );
+                                      })}
+                                    </div>
+                                    {/* Second row - 3rd item if exists, plus "+X More" if there are more */}
+                                    {(displayRestrictions.length > 2 || remainingCount > 0) && (
+                                      <div className="flex flex-wrap gap-1">
+                                        {displayRestrictions.length > 2 && (() => {
+                                          const r = displayRestrictions[2];
+                                          if (isNoneRestriction(r)) {
+                                            return <div className="inline-block">{getNoneRestrictionBadge(false)}</div>;
+                                          }
+                                          return (
+                                            <Badge 
+                                              variant="outline" 
+                                              className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
+                                            >
+                                              {(() => {
+                                                const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                                return <Icon className="h-3 w-3" />;
+                                              })()}
+                                              {r.restriction_name}
+                                            </Badge>
+                                          );
                                         })()}
-                                        {r.restriction_name}
-                                      </Badge>
-                                    ))}
+                                        {remainingCount > 0 && (
+                                          <Badge variant="outline" className="text-xs border-muted-foreground/20 text-muted-foreground w-fit">
+                                            +{remainingCount} More
+                                          </Badge>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 );
                               }
-                              return <span className="text-sm text-muted-foreground">None</span>;
+                              return <div className="inline-block">{getNoneRestrictionBadge(false)}</div>;
                             })()}
                           </TableCell>
                           <TableCell>
@@ -1024,25 +1067,65 @@ const MenuItems = () => {
                       }] : []);
                       
                       if (restrictions.length > 0) {
+                        const maxDisplay = 3;
+                        const displayRestrictions = restrictions.slice(0, maxDisplay);
+                        const remainingCount = Math.max(0, restrictions.length - maxDisplay);
+                        
                         return (
-                          <div className="flex flex-wrap gap-1">
-                            {restrictions.map((r: any, idx: number) => (
-                              <Badge 
-                                key={idx}
-                                variant="outline" 
-                                className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
-                              >
-                                {(() => {
-                                  const Icon = getTypeIcon(r.restriction_type || 'Dietary');
-                                  return <Icon className="h-3 w-3" />;
+                          <div className="flex flex-col gap-1">
+                            {/* First row - max 2 items */}
+                            <div className="flex flex-wrap gap-1">
+                              {displayRestrictions.slice(0, 2).map((r: any, idx: number) => {
+                                if (isNoneRestriction(r)) {
+                                  return <div key={idx} className="inline-block">{getNoneRestrictionBadge(false)}</div>;
+                                }
+                                return (
+                                  <Badge 
+                                    key={idx}
+                                    variant="outline" 
+                                    className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
+                                  >
+                                    {(() => {
+                                      const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                      return <Icon className="h-3 w-3" />;
+                                    })()}
+                                    {r.restriction_name}
+                                  </Badge>
+                                );
+                              })}
+                            </div>
+                            {/* Second row - 3rd item if exists, plus "+X More" if there are more */}
+                            {(displayRestrictions.length > 2 || remainingCount > 0) && (
+                              <div className="flex flex-wrap gap-1">
+                                {displayRestrictions.length > 2 && (() => {
+                                  const r = displayRestrictions[2];
+                                  if (isNoneRestriction(r)) {
+                                    return <div className="inline-block">{getNoneRestrictionBadge(false)}</div>;
+                                  }
+                                  return (
+                                    <Badge 
+                                      variant="outline" 
+                                      className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
+                                    >
+                                      {(() => {
+                                        const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                        return <Icon className="h-3 w-3" />;
+                                      })()}
+                                      {r.restriction_name}
+                                    </Badge>
+                                  );
                                 })()}
-                                {r.restriction_name}
-                              </Badge>
-                            ))}
+                                {remainingCount > 0 && (
+                                  <Badge variant="outline" className="text-xs border-muted-foreground/20 text-muted-foreground w-fit">
+                                    +{remainingCount} More
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
                           </div>
                         );
                       }
-                      return <span className="text-sm text-muted-foreground">None</span>;
+                      return <div className="inline-block">{getNoneRestrictionBadge(false)}</div>;
                     })()}
                   </div>
                 </div>
@@ -1162,13 +1245,47 @@ const MenuItems = () => {
                   <Label htmlFor="menu_type">Menu Type *</Label>
                   <Select value={formData.menu_type} onValueChange={(val) => setFormData({...formData, menu_type: val})}>
                     <SelectTrigger id="menu_type" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
-                      <SelectValue placeholder="Select menu type" />
+                      <SelectValue placeholder="Select menu type">
+                        {formData.menu_type && (() => {
+                          const Icon = getMenuTypeIcon(formData.menu_type);
+                          const colorClass = getMenuTypeColor(formData.menu_type);
+                          // Extract icon color from colorClass
+                          const iconColor = colorClass.includes('orange') ? 'text-orange-600 dark:text-orange-400' :
+                                           colorClass.includes('red') ? 'text-red-600 dark:text-red-400' :
+                                           colorClass.includes('pink') ? 'text-pink-600 dark:text-pink-400' :
+                                           colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
+                                           'text-muted-foreground';
+                          return (
+                            <span className="flex items-center gap-2">
+                              <Icon className={`h-4 w-4 ${iconColor}`} />
+                              {formData.menu_type}
+                            </span>
+                          );
+                        })()}
+                      </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
-                      <SelectItem value="Appetizer" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">Appetizer</SelectItem>
-                      <SelectItem value="Main Course" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">Main Course</SelectItem>
-                      <SelectItem value="Dessert" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">Dessert</SelectItem>
-                      <SelectItem value="Beverage" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">Beverage</SelectItem>
+                      {['Appetizer', 'Main Course', 'Dessert', 'Beverage'].map((type) => {
+                        const Icon = getMenuTypeIcon(type);
+                        const colorClass = getMenuTypeColor(type);
+                        const iconColor = colorClass.includes('orange') ? 'text-orange-600 dark:text-orange-400' :
+                                         colorClass.includes('red') ? 'text-red-600 dark:text-red-400' :
+                                         colorClass.includes('pink') ? 'text-pink-600 dark:text-pink-400' :
+                                         colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
+                                         'text-muted-foreground';
+                        return (
+                          <SelectItem 
+                            key={type} 
+                            value={type}
+                            className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Icon className={`h-4 w-4 ${iconColor}`} />
+                              {type}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1232,12 +1349,12 @@ const MenuItems = () => {
                 <div className="border rounded-lg max-h-[200px] overflow-y-auto dark:border-[#2a2a2a]">
                   <Table>
                     <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-12"></TableHead>
-                        <TableHead>Ingredient</TableHead>
-                        <TableHead>Unit</TableHead>
-                        <TableHead>Stock</TableHead>
-                        <TableHead className="w-20"></TableHead>
+                      <TableRow className="dark:border-[#2a2a2a]">
+                        <TableHead className="w-12 dark:bg-[#1a1a1a] dark:text-[#e5e5e5]"></TableHead>
+                        <TableHead className="dark:bg-[#1a1a1a] dark:text-[#e5e5e5]">Ingredient</TableHead>
+                        <TableHead className="dark:bg-[#1a1a1a] dark:text-[#e5e5e5]">Unit</TableHead>
+                        <TableHead className="dark:bg-[#1a1a1a] dark:text-[#e5e5e5]">Stock</TableHead>
+                        <TableHead className="w-20 dark:bg-[#1a1a1a] dark:text-[#e5e5e5]"></TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -1255,7 +1372,7 @@ const MenuItems = () => {
                           return (
                             <TableRow 
                               key={ingredientId}
-                              className={isSelected ? 'bg-muted/50 dark:bg-[#1a1a1a]' : ''}
+                              className={`${isSelected ? 'bg-muted/50 dark:bg-[#1a1a1a]' : ''} dark:border-[#2a2a2a] hover:dark:bg-[#1a1a1a]`}
                             >
                               <TableCell>
                                 <Checkbox
@@ -1270,9 +1387,9 @@ const MenuItems = () => {
                                   className="dark:border-[#2a2a2a] dark:data-[state=checked]:bg-primary dark:data-[state=checked]:border-primary"
                                 />
                               </TableCell>
-                              <TableCell className="font-medium">{ingredient.ingredient_name}</TableCell>
-                              <TableCell className="text-sm text-muted-foreground">{ingredient.unit}</TableCell>
-                              <TableCell className="text-sm">
+                              <TableCell className="font-medium dark:text-[#e5e5e5]">{ingredient.ingredient_name}</TableCell>
+                              <TableCell className="text-sm text-muted-foreground dark:text-[#a0a0a0]">{ingredient.unit}</TableCell>
+                              <TableCell className="text-sm dark:text-[#e5e5e5]">
                                 <span className={parseFloat(ingredient.stock_quantity || 0) <= parseFloat(ingredient.re_order_level || 0) ? 'text-red-600 dark:text-red-400 font-medium' : ''}>
                                   {parseFloat(ingredient.stock_quantity || 0).toLocaleString()}
                                 </span>
@@ -1382,22 +1499,73 @@ const MenuItems = () => {
 
               {/* Dietary Restriction */}
               <div className="space-y-2 border-t pt-4 dark:border-[#2a2a2a]">
-                <Label htmlFor="restriction_id">Dietary Restriction</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="restriction_id">Dietary Restriction</Label>
+                  <span className="text-xs text-muted-foreground">(Optional - defaults to "None" if not selected)</span>
+                </div>
                 <Select value={formData.restriction_id} onValueChange={(val) => setFormData({...formData, restriction_id: val})}>
                   <SelectTrigger id="restriction_id" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
-                    <SelectValue placeholder="Select restriction (optional)" />
+                    <SelectValue placeholder="Select restriction (defaults to 'None' if not selected)">
+                      {formData.restriction_id && formData.restriction_id !== 'restriction-none' && (() => {
+                        const selectedRestriction = dietaryRestrictions.find((r: any) => {
+                          const restrictionValue = r.restriction_id ? r.restriction_id.toString() : `restriction-${r.restriction_name || 'unknown'}`;
+                          return restrictionValue === formData.restriction_id;
+                        });
+                        if (selectedRestriction) {
+                          const Icon = getTypeIcon(selectedRestriction.restriction_type || 'Dietary');
+                          const colorClass = getTypeColor(selectedRestriction.restriction_type || 'Dietary');
+                          const iconColor = colorClass.includes('red') ? 'text-red-600 dark:text-red-400' :
+                                           colorClass.includes('yellow') ? 'text-yellow-600 dark:text-yellow-400' :
+                                           colorClass.includes('orange') ? 'text-orange-600 dark:text-orange-400' :
+                                           colorClass.includes('green') ? 'text-green-600 dark:text-green-400' :
+                                           colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
+                                           colorClass.includes('purple') ? 'text-purple-600 dark:text-purple-400' :
+                                           'text-muted-foreground';
+                          return (
+                            <span className="flex items-center gap-2">
+                              <Icon className={`h-4 w-4 ${iconColor}`} />
+                              {selectedRestriction.restriction_name}
+                            </span>
+                          );
+                        }
+                        return formData.restriction_id;
+                      })()}
+                      {formData.restriction_id === 'restriction-none' && (
+                        <span className="flex items-center gap-2">
+                          <span className="h-4 w-4 rounded-full bg-gray-300 dark:bg-gray-600" />
+                          None
+                        </span>
+                      )}
+                    </SelectValue>
                   </SelectTrigger>
                   <SelectContent className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
-                    <SelectItem value="restriction-none" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">None</SelectItem>
+                    <SelectItem value="restriction-none" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">
+                      <div className="flex items-center gap-2">
+                        <span className="h-4 w-4 rounded-full bg-gray-300 dark:bg-gray-600" />
+                        None
+                      </div>
+                    </SelectItem>
                     {dietaryRestrictions.map((restriction: any) => {
                       const restrictionValue = restriction.restriction_id ? restriction.restriction_id.toString() : `restriction-${restriction.restriction_name || 'unknown'}`;
+                      const Icon = getTypeIcon(restriction.restriction_type || 'Dietary');
+                      const colorClass = getTypeColor(restriction.restriction_type || 'Dietary');
+                      const iconColor = colorClass.includes('red') ? 'text-red-600 dark:text-red-400' :
+                                       colorClass.includes('yellow') ? 'text-yellow-600 dark:text-yellow-400' :
+                                       colorClass.includes('orange') ? 'text-orange-600 dark:text-orange-400' :
+                                       colorClass.includes('green') ? 'text-green-600 dark:text-green-400' :
+                                       colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
+                                       colorClass.includes('purple') ? 'text-purple-600 dark:text-purple-400' :
+                                       'text-muted-foreground';
                       return (
                         <SelectItem 
                           key={restriction.restriction_id || restrictionValue} 
                           value={restrictionValue}
                           className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]"
                         >
-                          {restriction.restriction_name}
+                          <div className="flex items-center gap-2">
+                            <Icon className={`h-4 w-4 ${iconColor}`} />
+                            {restriction.restriction_name}
+                          </div>
                         </SelectItem>
                       );
                     })}
