@@ -237,8 +237,7 @@ router.post('/', async (req, res) => {
       cost_override,
       menu_cost,
       menu_price,
-      recipe,
-      stock
+      recipe
     } = req.body;
 
     // Support both new (unit_cost, selling_price) and old (menu_cost,
@@ -311,13 +310,25 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Auto-assign "None" (ID 1) if no restriction provided
+    let finalRestrictionId = restriction_id;
+    if (!finalRestrictionId) {
+      const [noneRows] = await connection.query(
+          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+          ['None']
+      );
+      if (noneRows.length > 0) {
+        finalRestrictionId = noneRows[0].restriction_id;
+      }
+    }
+
     const [result] = await connection.query(
-        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, cost_override, menu_type, restriction_id, stock)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, cost_override, menu_type, restriction_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
         [
           menu_name, finalUnitCost, finalSellingPrice,
           default_markup_percentage || 200.00, cost_override || false,
-          menu_type, restriction_id || null, stock !== undefined ? stock : 0
+          menu_type, finalRestrictionId || null
         ]);
 
     const menuItemId = result.insertId;
@@ -412,8 +423,7 @@ router.put('/:id', async (req, res) => {
       cost_override,
       menu_cost,
       menu_price,
-      recipe,
-      stock
+      recipe
     } = req.body;
     const menuItemId = req.params.id;
 
@@ -463,12 +473,19 @@ router.put('/:id', async (req, res) => {
       updateValues.push(menu_type);
     }
     if (restriction_id !== undefined) {
+      // Auto-assign "None" (ID 1) if restriction_id is null or undefined
+      let finalRestrictionId = restriction_id;
+      if (!finalRestrictionId) {
+        const [noneRows] = await connection.query(
+            'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+            ['None']
+        );
+        if (noneRows.length > 0) {
+          finalRestrictionId = noneRows[0].restriction_id;
+        }
+      }
       updateFields.push('restriction_id = ?');
-      updateValues.push(restriction_id || null);
-    }
-    if (stock !== undefined) {
-      updateFields.push('stock = ?');
-      updateValues.push(stock);
+      updateValues.push(finalRestrictionId || null);
     }
 
     if (updateFields.length === 0) {

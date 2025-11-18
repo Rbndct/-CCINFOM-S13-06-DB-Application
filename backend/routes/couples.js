@@ -430,7 +430,18 @@ router.put('/preferences/:preference_id', async (req, res) => {
       // Update dietary restrictions if provided
       if (normalizedRestrictionIds !== null) {
         // Remove duplicates
-        const uniqueRestrictionIds = [...new Set(normalizedRestrictionIds)];
+        let uniqueRestrictionIds = [...new Set(normalizedRestrictionIds)];
+
+        // Auto-assign "None" if empty array
+        if (uniqueRestrictionIds.length === 0) {
+          const [noneRows] = await connection.query(
+              'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+              ['None']
+          );
+          if (noneRows.length > 0) {
+            uniqueRestrictionIds = [noneRows[0].restriction_id];
+          }
+        }
 
         // Delete existing restrictions from junction table
         await connection.query(
