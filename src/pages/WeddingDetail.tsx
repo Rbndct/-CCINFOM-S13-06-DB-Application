@@ -73,7 +73,7 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { tablesAPI, weddingsAPI, guestsAPI, dietaryRestrictionsAPI, couplesAPI, menuItemsAPI, packagesAPI, inventoryAPI, inventoryAllocationAPI } from '@/api';
-import { getTypeIcon, getTypeColor, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, getNoneRestrictionId, ensureNoneRestriction, filterNoneFromDisplay, getNoneRestrictionBadge, isNoneRestriction } from '@/utils/restrictionUtils';
 import { CeremonyTypeBadge } from '@/utils/ceremonyTypeUtils';
 import { TableCategoryBadge, getTableCategoryIcon, getTableCategoryColor } from '@/utils/tableCategoryUtils';
 import { PackageTypeBadge } from '@/utils/packageTypeUtils';
@@ -1020,9 +1020,7 @@ const WeddingDetail = () => {
     
     if (!firstName.trim()) newErrors.firstName = 'First name is required';
     if (!lastName.trim()) newErrors.lastName = 'Last name is required';
-    if (guestRestrictionIds.length === 0) {
-      newErrors.dietaryRestriction = 'Please select at least one dietary restriction';
-    }
+    // Allow empty restriction array - backend will auto-assign "None" (ID 1)
     
     setGuestFormErrors(newErrors);
     if (Object.keys(newErrors).length > 0) {
@@ -1842,7 +1840,7 @@ const WeddingDetail = () => {
       coupleData.preferences.forEach((pref: any) => {
         if (pref.dietaryRestrictions && Array.isArray(pref.dietaryRestrictions)) {
           pref.dietaryRestrictions.forEach((r: any) => {
-            if (r && r.restriction_name && r.restriction_name !== 'None') {
+            if (r && r.restriction_name) {
               const restrictionId = r.restriction_id || r.id;
               if (restrictionId && !restrictionSet.has(restrictionId)) {
                 restrictionSet.add(restrictionId);
@@ -1859,7 +1857,7 @@ const WeddingDetail = () => {
     tableGuests.forEach(guest => {
       if (guest.dietaryRestrictions && Array.isArray(guest.dietaryRestrictions)) {
         guest.dietaryRestrictions.forEach((r: any) => {
-          if (r && r.restriction_name && r.restriction_name !== 'None') {
+          if (r && r.restriction_name) {
             const restrictionId = r.restriction_id || r.id;
             if (restrictionId && !restrictionSet.has(restrictionId)) {
               restrictionSet.add(restrictionId);
@@ -1984,6 +1982,29 @@ const WeddingDetail = () => {
     });
   };
 
+  // Helper function to calculate actual available quantity for an inventory item
+  // Takes into account already-allocated quantities for this wedding
+  const getActualAvailableQuantity = (inventoryId: number): number => {
+    const item = availableInventoryItems.find(i => i.inventory_id === inventoryId);
+    if (!item) return 0;
+    
+    const totalStock = item.quantity_available || 0;
+    
+    // Find all allocations for this item in this wedding
+    const allocationsForItem = inventoryAllocations.filter(
+      a => a.inventory_id === inventoryId
+    );
+    
+    // Sum up all allocated quantities
+    const totalAllocated = allocationsForItem.reduce(
+      (sum, allocation) => sum + (allocation.quantity_used || 0),
+      0
+    );
+    
+    // Return actual available (stock - allocated)
+    return Math.max(0, totalStock - totalAllocated);
+  };
+
   // Inventory allocation handlers
   const handleAddAllocation = async () => {
     setAllocationFormErrors({});
@@ -2007,14 +2028,12 @@ const WeddingDetail = () => {
     }
     
     const quantity = parseInt(allocationFormData.quantity_used);
-    // Check stock availability - consider already allocated quantity for this item
-    const existingAllocation = inventoryAllocations.find(a => a.inventory_id === selectedItem.inventory_id);
-    const alreadyAllocated = existingAllocation ? (existingAllocation.quantity_used || 0) : 0;
-    const availableStock = selectedItem.quantity_available + alreadyAllocated; // Add back what's already allocated
+    // Check stock availability - use actual available quantity (stock - already allocated)
+    const actualAvailable = getActualAvailableQuantity(selectedItem.inventory_id);
     
-    if (quantity > availableStock) {
+    if (quantity > actualAvailable) {
       setAllocationFormErrors({ 
-        quantity_used: `Quantity exceeds available stock (${availableStock} available, ${alreadyAllocated} already allocated)` 
+        quantity_used: `Quantity exceeds available stock (${actualAvailable} available)` 
       });
       return;
     }
@@ -2139,11 +2158,13 @@ const WeddingDetail = () => {
     if (selectedItem) {
       const quantity = parseInt(allocationFormData.quantity_used);
       const currentQuantity = selectedAllocation.quantity_used || 0;
-      const effectiveAvailable = selectedItem.quantity_available + currentQuantity;
+      // Get actual available, then add back the current allocation quantity (since we're editing it)
+      const actualAvailable = getActualAvailableQuantity(selectedItem.inventory_id);
+      const effectiveAvailable = actualAvailable + currentQuantity;
       
       if (quantity > effectiveAvailable) {
         setAllocationFormErrors({ 
-          quantity_used: `Quantity exceeds available (${effectiveAvailable})` 
+          quantity_used: `Quantity exceeds available (${effectiveAvailable} available)` 
         });
         return;
       }
@@ -3191,37 +3212,52 @@ const WeddingDetail = () => {
           <Card className="flex flex-col">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Menu Items & Packages</CardTitle>
-              <Utensils className="h-4 w-4 text-muted-foreground" />
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-muted-foreground" />
+                <Utensils className="h-4 w-4 text-muted-foreground" />
+              </div>
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-between">
               {(() => {
-                // Count unique packages assigned
-                const uniquePackages = new Set(
-                  tablePackageAssignments.map(a => a.packageId || a.package_id).filter(Boolean)
-                );
+                // Count total package allocations (each assignment counts)
+                const totalPackageAllocations = tablePackageAssignments.filter(
+                  a => a.packageId || a.package_id
+                ).length;
                 
-                // Count menu items from assigned packages
-                const menuItemsFromPackages = new Set<number>();
+                // Count total menu items allocated (count duplicates - if same menu item in multiple packages, count multiple times)
+                let totalMenuItemsAllocated = 0;
                 tablePackageAssignments.forEach(assignment => {
                   const packageId = assignment.packageId || assignment.package_id;
                   if (!packageId) return;
                   
                   const pkg = packages.find(p => (p.package_id || p.id) === packageId);
                   if (pkg && pkg.menu_items && Array.isArray(pkg.menu_items)) {
-                    pkg.menu_items.forEach((item: any) => {
-                      const itemId = item.menu_item_id || item.id;
-                      if (itemId) menuItemsFromPackages.add(itemId);
-                    });
+                    // Count each menu item in this package (including duplicates across packages)
+                    totalMenuItemsAllocated += pkg.menu_items.length;
                   }
                 });
                 
                 return (
                   <>
-                    <div className="text-lg font-bold mb-1">
-                      {uniquePackages.size} {uniquePackages.size === 1 ? 'Package' : 'Packages'}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      {menuItemsFromPackages.size} {menuItemsFromPackages.size === 1 ? 'menu item' : 'menu items'}
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <div className="text-lg font-bold">
+                            {totalPackageAllocations} {totalPackageAllocations === 1 ? 'Package' : 'Packages'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Total allocated</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 pt-2 border-t">
+                        <Utensils className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                        <div>
+                          <div className="text-lg font-bold">
+                            {totalMenuItemsAllocated} {totalMenuItemsAllocated === 1 ? 'Menu Item' : 'Menu Items'}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Total allocated</div>
+                        </div>
+                      </div>
                     </div>
                   </>
                 );
@@ -3235,22 +3271,70 @@ const WeddingDetail = () => {
               <DollarSign className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent className="flex-1 flex flex-col justify-between">
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Food Cost</span>
-                  <span className="text-sm font-semibold">{formatCurrency(wedding?.food_cost || wedding?.foodCost || 0)}</span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted-foreground">Rental Cost</span>
-                  <span className="text-sm font-semibold">{formatCurrency(wedding?.equipment_rental_cost || wedding?.equipmentRentalCost || 0)}</span>
-                </div>
-              </div>
-              <div className="pt-2 border-t mt-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Total</span>
-                  <span className="text-base font-bold">{formatCurrency((wedding?.food_cost || wedding?.foodCost || 0) + (wedding?.equipment_rental_cost || wedding?.equipmentRentalCost || 0))}</span>
-                </div>
-              </div>
+              {(() => {
+                // Calculate package expenses: sum of (package selling_price × quantity served) for each unique package
+                // Group by package and multiply by quantity served
+                const packageExpensesMap = new Map<number, { price: number; quantity: number }>();
+                
+                tablePackageAssignments.forEach(assignment => {
+                  const pkgId = assignment.packageId || assignment.package_id;
+                  if (!pkgId) return;
+                  
+                  const pkg = packages.find(p => (p.package_id || p.id) === pkgId);
+                  if (pkg) {
+                    const packagePrice = typeof pkg.selling_price === 'number' 
+                      ? pkg.selling_price 
+                      : parseFloat(pkg.selling_price || pkg.package_price || pkg.packagePrice || '0') || 0;
+                    
+                    if (!packageExpensesMap.has(pkgId)) {
+                      packageExpensesMap.set(pkgId, { price: packagePrice, quantity: 1 });
+                    } else {
+                      const existing = packageExpensesMap.get(pkgId)!;
+                      existing.quantity += 1;
+                    }
+                  }
+                });
+                
+                // Calculate total: sum of (price × quantity) for each package
+                let totalPackageExpenses = 0;
+                packageExpensesMap.forEach(({ price, quantity }) => {
+                  totalPackageExpenses += price * quantity;
+                });
+                
+                // Calculate rental cost from inventory allocations
+                // Sum of total_cost from all inventory allocations
+                const totalRentalCost = inventoryAllocations.reduce((sum, allocation) => {
+                  const totalCost = parseFloat(allocation.total_cost || 0);
+                  // If total_cost is not available, calculate it: quantity_used × unit_rental_cost
+                  if (!totalCost || isNaN(totalCost)) {
+                    const qty = parseFloat(allocation.quantity_used || 0);
+                    const unitCost = parseFloat(allocation.unit_rental_cost || allocation.rental_cost || 0);
+                    return sum + (qty * unitCost);
+                  }
+                  return sum + totalCost;
+                }, 0);
+                
+                return (
+                  <>
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Package Expenses</span>
+                        <span className="text-sm font-semibold">{formatCurrency(totalPackageExpenses)}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">Inventory Rental Expenses</span>
+                        <span className="text-sm font-semibold">{formatCurrency(totalRentalCost)}</span>
+                      </div>
+                    </div>
+                    <div className="pt-2 border-t mt-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">Total</span>
+                        <span className="text-base font-bold">{formatCurrency(totalPackageExpenses + totalRentalCost)}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
             </CardContent>
           </Card>
         </div>
@@ -3328,14 +3412,17 @@ const WeddingDetail = () => {
                     </div>
                   </div>
                   <div className="space-y-2">
-                    <Label>Dietary Restrictions *</Label>
+                    <div className="flex items-center gap-2">
+                      <Label>Dietary Restrictions</Label>
+                      <span className="text-xs text-muted-foreground">(Optional - defaults to "None" if not selected)</span>
+                    </div>
                     <MultiSelectRestrictions
                       restrictions={dietaryRestrictions}
                       selectedIds={guestRestrictionIds}
                       onSelectionChange={setGuestRestrictionIds}
                       disabled={guestFormLoading}
                       error={guestFormErrors.dietaryRestriction}
-                      placeholder="Select dietary restrictions (at least one required)"
+                      placeholder="Select dietary restrictions (defaults to 'None' if not selected)"
                     />
                   </div>
                   <div className="space-y-2">
@@ -3529,8 +3616,12 @@ const WeddingDetail = () => {
                             <TableCell>
               {(() => {
                 const validRestrictions = restrictions.filter((r: any) => (r.restriction_name || r.name || r) && (r.restriction_name || r.name || r) !== 'None');
+                const hasNone = restrictions.some((r: any) => isNoneRestriction(r));
+                if (validRestrictions.length === 0 && hasNone) {
+                  return getNoneRestrictionBadge(false);
+                }
                 if (validRestrictions.length === 0) {
-                  return <span className="text-muted-foreground">None</span>;
+                  return getNoneRestrictionBadge(false);
                 }
                 return (
                   <div className="flex items-center gap-1 flex-wrap">
@@ -3554,6 +3645,7 @@ const WeddingDetail = () => {
                         </Badge>
                       );
                     })}
+                    {hasNone && getNoneRestrictionBadge(false)}
                     {validRestrictions.length > 2 && (
                       <Badge variant="outline" className="text-xs">
                         +{validRestrictions.length - 2} more
@@ -4250,6 +4342,9 @@ const WeddingDetail = () => {
                           {tableRestrictions.length > 0 ? (
                             <div className="flex flex-wrap gap-1">
                               {tableRestrictions.map((r: any) => {
+                                if (isNoneRestriction(r)) {
+                                  return <div key={r.restriction_id || r.id}>{getNoneRestrictionBadge()}</div>;
+                                }
                                 const Icon = getTypeIcon(r.restriction_type || '');
                                 return (
                                   <Badge 
@@ -5125,6 +5220,9 @@ const WeddingDetail = () => {
                                 <p className="text-xs font-medium text-muted-foreground mb-2">Total Dietary Restrictions ({tableRestrictions.length}):</p>
                                 <div className="flex flex-wrap gap-1">
                                   {tableRestrictions.map((r: any) => {
+                                    if (isNoneRestriction(r)) {
+                                      return <div key={r.restriction_id || r.id}>{getNoneRestrictionBadge()}</div>;
+                                    }
                                     const Icon = getTypeIcon(r.restriction_type || '');
                                     return (
                                       <Badge 
@@ -5175,6 +5273,9 @@ const WeddingDetail = () => {
                                           <p className="text-xs text-muted-foreground mb-1">Package Dietary Restrictions:</p>
                                           <div className="flex flex-wrap gap-1">
                                             {packageRestrictions.map((r: any, rIdx: number) => {
+                                              if (isNoneRestriction(r)) {
+                                                return <div key={rIdx}>{getNoneRestrictionBadge()}</div>;
+                                              }
                                               const Icon = getTypeIcon(r.restriction_type || 'Dietary');
                                               return (
                                                 <Badge 
@@ -6008,10 +6109,8 @@ const WeddingDetail = () => {
                             <TableHead>Item ID</TableHead>
                             <TableHead>Item Name</TableHead>
                             <TableHead>Type</TableHead>
-                            <TableHead className="text-right">Cost</TableHead>
-                            <TableHead className="text-right">Price</TableHead>
-                            <TableHead className="text-right">Profit Margin</TableHead>
-                            <TableHead>Allocation Count</TableHead>
+                            <TableHead className="text-right">Selling Price</TableHead>
+                            <TableHead className="text-right">Quantity</TableHead>
                             <TableHead>Restrictions</TableHead>
                             <TableHead>Used In Tables/Packages</TableHead>
                           </TableRow>
@@ -6082,10 +6181,10 @@ const WeddingDetail = () => {
                                     );
                                   })()}
                                 </TableCell>
-                                <TableCell className="text-right">{formatCurrency(item.unit_cost || item.menu_cost || 0)}</TableCell>
-                                <TableCell className="text-right">{formatCurrency(item.selling_price || item.menu_price || 0)}</TableCell>
-                                <TableCell className="text-right text-green-600">{formatCurrency((item.selling_price || item.menu_price || 0) - (item.unit_cost || item.menu_cost || 0))}</TableCell>
-                                <TableCell>
+                                <TableCell className="text-right">
+                                  <span className="font-semibold">{formatCurrency(item.selling_price || item.menu_price || 0)}</span>
+                                </TableCell>
+                                <TableCell className="text-right">
                                   <Badge variant="outline" className="font-semibold">
                                     {item.allocation_count || 0}x
                                   </Badge>
@@ -6211,8 +6310,8 @@ const WeddingDetail = () => {
                           <TableRow>
                             <TableHead>Package Name</TableHead>
                             <TableHead>Type</TableHead>
-                            <TableHead className="text-right">Price</TableHead>
-                            <TableHead className="text-right">Quantity Served</TableHead>
+                            <TableHead className="text-right">Selling Price</TableHead>
+                            <TableHead className="text-right">Quantity</TableHead>
                             <TableHead>Menu Items</TableHead>
                             <TableHead>Assigned To Tables</TableHead>
                             <TableHead className="w-[50px]"></TableHead>
@@ -6691,19 +6790,24 @@ const WeddingDetail = () => {
                     <Label className="text-xs text-muted-foreground mb-2 block">Total Dietary Restrictions ({restrictionDetails.length})</Label>
                     {restrictionDetails.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
-                        {restrictionDetails.map((r, idx) => (
-                          <Badge 
-                            key={idx} 
-                            variant="outline" 
-                            className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
-                          >
-                            {(() => {
-                              const Icon = getTypeIcon(r.restriction_type || '');
-                              return <Icon className="h-3 w-3" />;
-                            })()}
-                            {r.restriction_name}
-                          </Badge>
-                        ))}
+                        {restrictionDetails.map((r, idx) => {
+                          if (isNoneRestriction(r)) {
+                            return <div key={idx}>{getNoneRestrictionBadge()}</div>;
+                          }
+                          return (
+                            <Badge 
+                              key={idx} 
+                              variant="outline" 
+                              className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}
+                            >
+                              {(() => {
+                                const Icon = getTypeIcon(r.restriction_type || '');
+                                return <Icon className="h-3 w-3" />;
+                              })()}
+                              {r.restriction_name}
+                            </Badge>
+                          );
+                        })}
                       </div>
                     ) : (
                       <p className="text-sm text-muted-foreground">No dietary restrictions</p>
@@ -7148,13 +7252,16 @@ const WeddingDetail = () => {
                 </div>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="edit_guest_restrictions">Dietary Restrictions *</Label>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="edit_guest_restrictions">Dietary Restrictions</Label>
+                  <span className="text-xs text-muted-foreground">(Optional - defaults to "None" if not selected)</span>
+                </div>
                 <MultiSelectRestrictions
                   restrictions={dietaryRestrictions}
                   selectedIds={editGuestRestrictionIds}
                   onSelectionChange={setEditGuestRestrictionIds}
                   disabled={editGuestLoading}
-                  placeholder="Select dietary restrictions (at least one required)"
+                  placeholder="Select dietary restrictions (defaults to 'None' if not selected)"
                 />
               </div>
               <div className="space-y-2">
@@ -7241,11 +7348,14 @@ const WeddingDetail = () => {
                     <SelectValue placeholder="Select an inventory item" />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableInventoryItems.map((item) => (
-                      <SelectItem key={item.inventory_id} value={item.inventory_id ? item.inventory_id.toString() : `inventory-${item.item_name || 'unknown'}`}>
-                        {item.item_name} - {item.category} ({item.quantity_available} available)
-                      </SelectItem>
-                    ))}
+                    {availableInventoryItems.map((item) => {
+                      const actualAvailable = getActualAvailableQuantity(item.inventory_id);
+                      return (
+                        <SelectItem key={item.inventory_id} value={item.inventory_id ? item.inventory_id.toString() : `inventory-${item.item_name || 'unknown'}`}>
+                          {item.item_name} - {item.category} ({actualAvailable} available)
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
                 {allocationFormErrors.inventory_id && (
@@ -7255,13 +7365,17 @@ const WeddingDetail = () => {
                   const selectedItem = availableInventoryItems.find(item => 
                     item.inventory_id?.toString() === allocationFormData.inventory_id
                   );
-                  return selectedItem ? (
-                    <div className="p-3 bg-muted rounded-lg text-sm">
-                      <p><strong>Available:</strong> {selectedItem.quantity_available}</p>
-                      <p><strong>Condition:</strong> {selectedItem.item_condition}</p>
-                      <p><strong>Default Rental Cost:</strong> {formatCurrency((typeof (selectedItem.unit_rental_cost || selectedItem.rental_cost) === 'number' ? (selectedItem.unit_rental_cost || selectedItem.rental_cost) : parseFloat((selectedItem.unit_rental_cost || selectedItem.rental_cost || '0').toString()) || 0))} per unit</p>
-                    </div>
-                  ) : null;
+                  if (selectedItem) {
+                    const actualAvailable = getActualAvailableQuantity(selectedItem.inventory_id);
+                    return (
+                      <div className="p-3 bg-muted rounded-lg text-sm">
+                        <p><strong>Available:</strong> {actualAvailable}</p>
+                        <p><strong>Condition:</strong> {selectedItem.item_condition}</p>
+                        <p><strong>Default Rental Cost:</strong> {formatCurrency((typeof (selectedItem.unit_rental_cost || selectedItem.rental_cost) === 'number' ? (selectedItem.unit_rental_cost || selectedItem.rental_cost) : parseFloat((selectedItem.unit_rental_cost || selectedItem.rental_cost || '0').toString()) || 0))} per unit</p>
+                      </div>
+                    );
+                  }
+                  return null;
                 })()}
               </div>
               <div className="space-y-2">
@@ -7300,8 +7414,8 @@ const WeddingDetail = () => {
                     // Always use the rental cost from the inventory item
                     const cost = selectedItem.unit_rental_cost || selectedItem.rental_cost || 0;
                     const total = qty * cost;
-                    const stockAvailable = selectedItem.quantity_available || 0;
-                    const canAllocate = qty <= stockAvailable;
+                    const actualAvailable = getActualAvailableQuantity(selectedItem.inventory_id);
+                    const canAllocate = qty <= actualAvailable;
                     return (
                       <div className="space-y-1">
                         <p className="text-sm text-muted-foreground">
@@ -7312,8 +7426,8 @@ const WeddingDetail = () => {
                         </p>
                         <p className={`text-xs ${canAllocate ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
                           {canAllocate 
-                            ? `✓ Can allocate ${qty} (${stockAvailable} available)` 
-                            : `✗ Cannot allocate ${qty} (only ${stockAvailable} available)`}
+                            ? `✓ Can allocate ${qty} (${actualAvailable} available)` 
+                            : `✗ Cannot allocate ${qty} (only ${actualAvailable} available)`}
                         </p>
                       </div>
                     );
@@ -7380,7 +7494,9 @@ const WeddingDetail = () => {
                     );
                     if (selectedItem) {
                       const currentQty = selectedAllocation.quantity_used || 0;
-                      const effectiveAvailable = selectedItem.quantity_available + currentQty;
+                      // Get actual available, then add back the current allocation quantity (since we're editing it)
+                      const actualAvailable = getActualAvailableQuantity(selectedItem.inventory_id);
+                      const effectiveAvailable = actualAvailable + currentQty;
                       return (
                         <p className="text-xs text-muted-foreground">
                           Available: {effectiveAvailable} (including current allocation)
