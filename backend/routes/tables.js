@@ -26,9 +26,9 @@ async function getOrCreateTableInventoryItem(
   const rentalCost = basePrice + (capacity * perSeatPrice);
 
   const [result] = await db.query(
-      `INSERT INTO inventory_items (item_name, category, item_condition, quantity_available, unit_rental_cost, rental_cost)
-     VALUES (?, 'Furniture', 'Excellent', 999, ?, ?)`,
-      [itemName, rentalCost, rentalCost]);
+      `INSERT INTO inventory_items (item_name, category, item_condition, quantity_available, unit_rental_cost)
+     VALUES (?, 'Furniture', 'Excellent', 999, ?)`,
+      [itemName, rentalCost]);
 
   return result.insertId;
 }
@@ -73,17 +73,16 @@ async function createTableInventoryAllocation(
     await db.query(
         `UPDATE inventory_allocation 
        SET quantity_used = quantity_used + 1, 
-           unit_rental_cost = ?,
-           rental_cost = ?
+           unit_rental_cost = ?
        WHERE allocation_id = ?`,
-        [rentalCost, rentalCost, existingAllocations[0].allocation_id]);
+        [rentalCost, existingAllocations[0].allocation_id]);
     return existingAllocations[0].allocation_id;
   } else {
     // Create new allocation
     const [result] = await db.query(
-        `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost)
-       VALUES (?, ?, 1, ?, ?)`,
-        [weddingId, inventoryId, rentalCost, rentalCost]);
+        `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost)
+       VALUES (?, ?, 1, ?)`,
+        [weddingId, inventoryId, rentalCost]);
     return result.insertId;
   }
 }
@@ -128,10 +127,9 @@ async function updateTableInventoryAllocation(
     // Same item, just update the cost
     await db.query(
         `UPDATE inventory_allocation 
-       SET unit_rental_cost = ?,
-           rental_cost = ?
+       SET unit_rental_cost = ?
        WHERE allocation_id = ?`,
-        [newRentalCost, newRentalCost, oldAllocation.allocation_id]);
+        [newRentalCost, oldAllocation.allocation_id]);
     return oldAllocation.allocation_id;
   } else {
     // Different item, need to transfer quantity
@@ -146,15 +144,15 @@ async function updateTableInventoryAllocation(
       // Update existing new allocation
       await db.query(
           `UPDATE inventory_allocation 
-         SET quantity_used = quantity_used + ?, unit_rental_cost = ?, rental_cost = ?
+         SET quantity_used = quantity_used + ?, unit_rental_cost = ?
          WHERE allocation_id = ?`,
-          [oldQuantity, newRentalCost, newRentalCost, newAllocations[0].allocation_id]);
+          [oldQuantity, newRentalCost, newAllocations[0].allocation_id]);
     } else {
       // Create new allocation
       await db.query(
-          `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost)
-         VALUES (?, ?, ?, ?, ?)`,
-          [weddingId, newInventoryId, oldQuantity, newRentalCost, newRentalCost]);
+          `INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost)
+         VALUES (?, ?, ?, ?)`,
+          [weddingId, newInventoryId, oldQuantity, newRentalCost]);
     }
 
     // Delete old allocation if quantity becomes 0

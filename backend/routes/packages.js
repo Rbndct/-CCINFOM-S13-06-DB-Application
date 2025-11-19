@@ -7,16 +7,16 @@ async function updateWeddingCosts(weddingId) {
   try {
     // Calculate equipment rental cost from inventory allocations
     const [inventoryCosts] = await promisePool.query(
-      `SELECT COALESCE(SUM(quantity_used * COALESCE(unit_rental_cost, rental_cost)), 0) as equipment_rental_cost
+        `SELECT COALESCE(SUM(quantity_used * unit_rental_cost), 0) as equipment_rental_cost
        FROM inventory_allocation
        WHERE wedding_id = ?`,
-      [weddingId]
-    );
-    const equipmentRentalCost = parseFloat(inventoryCosts[0]?.equipment_rental_cost || 0);
+        [weddingId]);
+    const equipmentRentalCost =
+        parseFloat(inventoryCosts[0]?.equipment_rental_cost || 0);
 
     // Calculate food cost from table packages
     const [foodCosts] = await promisePool.query(
-      `SELECT COALESCE(SUM(
+        `SELECT COALESCE(SUM(
         COALESCE(
           (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
            FROM package_menu_items pmi
@@ -27,23 +27,21 @@ async function updateWeddingCosts(weddingId) {
       FROM table_package tp
       JOIN seating_table st ON tp.table_id = st.table_id
       WHERE st.wedding_id = ?`,
-      [weddingId]
-    );
-    
+        [weddingId]);
+
     const foodCost = parseFloat(foodCosts[0]?.food_cost || 0);
+    const totalCost = equipmentRentalCost + foodCost;
 
     // Update wedding with calculated costs
     await promisePool.query(
-      `UPDATE wedding 
+        `UPDATE wedding 
        SET equipment_rental_cost = ?,
            food_cost = ?,
-           total_cost = ?,
-           production_cost = ?
+           total_cost = ?
        WHERE wedding_id = ?`,
-      [equipmentRentalCost, foodCost, equipmentRentalCost, foodCost, weddingId]
-    );
+        [equipmentRentalCost, foodCost, totalCost, weddingId]);
 
-    return { equipmentRentalCost, foodCost };
+    return {equipmentRentalCost, foodCost};
   } catch (error) {
     console.error('Error updating wedding costs:', error);
     throw error;
@@ -53,56 +51,55 @@ async function updateWeddingCosts(weddingId) {
 // Helper function to calculate package unit_cost from menu items
 async function calculatePackageCost(packageId, connection = null) {
   const pool = connection || promisePool;
-  
+
   const [rows] = await pool.query(
-    `SELECT 
+      `SELECT 
       COALESCE(SUM(mi.unit_cost * COALESCE(pmi.quantity, 1)), 0) as total_cost
     FROM package_menu_items pmi
     JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
     WHERE pmi.package_id = ?`,
-    [packageId]
-  );
-  
+      [packageId]);
+
   return parseFloat(rows[0]?.total_cost || 0);
 }
 
 // Helper function to calculate ingredient usage for a package
 // Based on package_menu_items quantities only (not guest count or capacity)
-async function calculateIngredientUsageForPackage(packageId, connection = null) {
+async function calculateIngredientUsageForPackage(
+    packageId, connection = null) {
   const pool = connection || promisePool;
-  const usage = new Map(); // ingredient_id -> total_quantity_needed
-  
+  const usage = new Map();  // ingredient_id -> total_quantity_needed
+
   try {
     // Get all menu items in the package with their quantities
     const [menuItems] = await pool.query(
-      `SELECT pmi.menu_item_id, pmi.quantity as package_quantity
+        `SELECT pmi.menu_item_id, pmi.quantity as package_quantity
        FROM package_menu_items pmi
        WHERE pmi.package_id = ?`,
-      [packageId]
-    );
-    
+        [packageId]);
+
     // For each menu item, get its recipe ingredients and calculate usage
     for (const menuItem of menuItems) {
       const menuItemId = menuItem.menu_item_id;
       const packageQuantity = menuItem.package_quantity || 1;
-      
+
       // Get recipe ingredients for this menu item
       const [recipeIngredients] = await pool.query(
-        `SELECT ingredient_id, quantity_needed
+          `SELECT ingredient_id, quantity_needed
          FROM recipe
          WHERE menu_item_id = ?`,
-        [menuItemId]
-      );
-      
+          [menuItemId]);
+
       // Calculate usage for each ingredient
       for (const recipeIngredient of recipeIngredients) {
         const ingredientId = recipeIngredient.ingredient_id;
-        const quantityNeeded = parseFloat(recipeIngredient.quantity_needed) || 0;
-        
+        const quantityNeeded =
+            parseFloat(recipeIngredient.quantity_needed) || 0;
+
         // Calculate total quantity needed: quantity_needed * package_quantity
         // This is based on the package allocation, not guest count
         const totalNeeded = quantityNeeded * packageQuantity;
-        
+
         if (totalNeeded > 0) {
           const current = usage.get(ingredientId) || 0;
           usage.set(ingredientId, current + totalNeeded);
@@ -113,31 +110,34 @@ async function calculateIngredientUsageForPackage(packageId, connection = null) 
     console.error('Error calculating ingredient usage:', error);
     throw error;
   }
-  
+
   return usage;
 }
 
 // Helper function to deduct ingredient stock when package is assigned to table
 // Stock is deducted based on package menu item quantities only
-async function deductIngredientStockForPackage(tableId, packageId, connection = null) {
+async function deductIngredientStockForPackage(
+    tableId, packageId, connection = null) {
   const pool = connection || promisePool;
-  
+
   try {
     // Calculate ingredient usage based on package menu items only
-    const ingredientUsage = await calculateIngredientUsageForPackage(packageId, connection);
-    
+    const ingredientUsage =
+        await calculateIngredientUsageForPackage(packageId, connection);
+
     // Deduct stock for each ingredient
     for (const [ingredientId, totalToDeduct] of ingredientUsage.entries()) {
       if (totalToDeduct > 0) {
         // Deduct from ingredient stock (ensure it doesn't go below 0)
         await pool.query(
-          `UPDATE ingredient 
+            `UPDATE ingredient 
            SET stock_quantity = GREATEST(0, stock_quantity - ?)
            WHERE ingredient_id = ?`,
-          [totalToDeduct, ingredientId]
-        );
-        
-        console.log(`Deducted ${totalToDeduct} from ingredient ${ingredientId} for package ${packageId} allocated to table ${tableId}`);
+            [totalToDeduct, ingredientId]);
+
+        console.log(`Deducted ${totalToDeduct} from ingredient ${
+            ingredientId} for package ${packageId} allocated to table ${
+            tableId}`);
       }
     }
   } catch (error) {
@@ -146,27 +146,30 @@ async function deductIngredientStockForPackage(tableId, packageId, connection = 
   }
 }
 
-// Helper function to restore ingredient stock when package is removed from table
-// Stock is restored based on package menu item quantities only
-async function restoreIngredientStockForPackage(tableId, packageId, connection = null) {
+// Helper function to restore ingredient stock when package is removed from
+// table Stock is restored based on package menu item quantities only
+async function restoreIngredientStockForPackage(
+    tableId, packageId, connection = null) {
   const pool = connection || promisePool;
-  
+
   try {
     // Calculate ingredient usage based on package menu items only
-    const ingredientUsage = await calculateIngredientUsageForPackage(packageId, connection);
-    
+    const ingredientUsage =
+        await calculateIngredientUsageForPackage(packageId, connection);
+
     // Restore stock for each ingredient
     for (const [ingredientId, totalToRestore] of ingredientUsage.entries()) {
       if (totalToRestore > 0) {
         // Restore to ingredient stock
         await pool.query(
-          `UPDATE ingredient 
+            `UPDATE ingredient 
            SET stock_quantity = stock_quantity + ?
            WHERE ingredient_id = ?`,
-          [totalToRestore, ingredientId]
-        );
-        
-        console.log(`Restored ${totalToRestore} to ingredient ${ingredientId} for package ${packageId} removed from table ${tableId}`);
+            [totalToRestore, ingredientId]);
+
+        console.log(`Restored ${totalToRestore} to ingredient ${
+            ingredientId} for package ${packageId} removed from table ${
+            tableId}`);
       }
     }
   } catch (error) {
@@ -239,9 +242,8 @@ router.get('/', async (req, res) => {
       const calculatedCost = await calculatePackageCost(pkg.package_id);
       if (Math.abs(calculatedCost - parseFloat(pkg.unit_cost || 0)) > 0.01) {
         await promisePool.query(
-          'UPDATE package SET unit_cost = ? WHERE package_id = ?',
-          [calculatedCost, pkg.package_id]
-        );
+            'UPDATE package SET unit_cost = ? WHERE package_id = ?',
+            [calculatedCost, pkg.package_id]);
         pkg.unit_cost = calculatedCost;
       }
     }));
@@ -249,7 +251,7 @@ router.get('/', async (req, res) => {
     // Get menu items for each package (include unit_cost and selling_price)
     const packagesWithItems = await Promise.all(rows.map(async (pkg) => {
       const [menuItems] = await promisePool.query(
-        `SELECT 
+          `SELECT 
           m.menu_item_id,
           m.menu_name,
           m.menu_type,
@@ -263,19 +265,12 @@ router.get('/', async (req, res) => {
         JOIN menu_item m ON pmi.menu_item_id = m.menu_item_id
         LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
         WHERE pmi.package_id = ?`,
-        [pkg.package_id]
-      );
+          [pkg.package_id]);
 
-      return {
-        ...pkg,
-        menu_items: menuItems
-      };
+      return {...pkg, menu_items: menuItems};
     }));
 
-    res.json({
-      success: true,
-      data: packagesWithItems
-    });
+    res.json({success: true, data: packagesWithItems});
   } catch (error) {
     console.error('Error fetching packages:', error);
     res.status(500).json({
@@ -290,7 +285,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const [rows] = await promisePool.query(
-      `SELECT 
+        `SELECT 
         p.package_id,
         p.package_name,
         p.package_type,
@@ -302,39 +297,33 @@ router.get('/:id', async (req, res) => {
         p.unit_cost * (1 + p.default_markup_percentage / 100) as suggested_price
       FROM package p
       WHERE p.package_id = ?`,
-      [req.params.id]
-    );
+        [req.params.id]);
 
     if (rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        error: 'Package not found'
-      });
+      return res.status(404).json({success: false, error: 'Package not found'});
     }
 
     // Recalculate unit_cost (in case menu item costs changed)
     const calculatedCost = await calculatePackageCost(req.params.id);
     if (Math.abs(calculatedCost - parseFloat(rows[0].unit_cost || 0)) > 0.01) {
       await promisePool.query(
-        'UPDATE package SET unit_cost = ? WHERE package_id = ?',
-        [calculatedCost, req.params.id]
-      );
+          'UPDATE package SET unit_cost = ? WHERE package_id = ?',
+          [calculatedCost, req.params.id]);
       rows[0].unit_cost = calculatedCost;
     }
 
     // Calculate usage_count (distinct weddings using this package)
     const [usageRows] = await promisePool.query(
-      `SELECT COUNT(DISTINCT st.wedding_id) as wedding_count
+        `SELECT COUNT(DISTINCT st.wedding_id) as wedding_count
        FROM table_package tp
        JOIN seating_table st ON tp.table_id = st.table_id
        WHERE tp.package_id = ?`,
-      [req.params.id]
-    );
+        [req.params.id]);
     rows[0].usage_count = usageRows[0]?.wedding_count || 0;
 
     // Get menu items for this package (include unit_cost and selling_price)
     const [menuItems] = await promisePool.query(
-      `SELECT 
+        `SELECT 
         m.menu_item_id,
         m.menu_name,
         m.menu_type,
@@ -350,16 +339,9 @@ router.get('/:id', async (req, res) => {
       LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE pmi.package_id = ?
       ORDER BY m.menu_name ASC`,
-      [req.params.id]
-    );
+        [req.params.id]);
 
-    res.json({
-      success: true,
-      data: {
-        ...rows[0],
-        menu_items: menuItems
-      }
-    });
+    res.json({success: true, data: {...rows[0], menu_items: menuItems}});
   } catch (error) {
     console.error('Error fetching package:', error);
     res.status(500).json({
@@ -376,30 +358,43 @@ router.post('/', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const {package_name, package_type, selling_price, menu_item_ids, default_markup_percentage, package_price} = req.body;
-    
-    // Support both new (selling_price) and old (package_price) field names for backward compatibility
-    const finalSellingPrice = selling_price !== undefined ? selling_price : package_price;
+    const {
+      package_name,
+      package_type,
+      selling_price,
+      menu_item_ids,
+      default_markup_percentage,
+      package_price
+    } = req.body;
+
+    // Support both new (selling_price) and old (package_price) field names for
+    // backward compatibility
+    const finalSellingPrice =
+        selling_price !== undefined ? selling_price : package_price;
 
     if (!package_name || !package_type || finalSellingPrice === undefined) {
       await connection.rollback();
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: package_name, package_type, selling_price (or package_price)'
+        error:
+            'Missing required fields: package_name, package_type, selling_price (or package_price)'
       });
     }
 
     // Create package (unit_cost will be calculated later from menu items)
     const [result] = await connection.query(
-      `INSERT INTO package (package_name, package_type, unit_cost, selling_price, default_markup_percentage)
+        `INSERT INTO package (package_name, package_type, unit_cost, selling_price, default_markup_percentage)
        VALUES (?, ?, 0, ?, ?)`,
-      [package_name, package_type, finalSellingPrice, default_markup_percentage || 180.00]
-    );
+        [
+          package_name, package_type, finalSellingPrice,
+          default_markup_percentage || 180.00
+        ]);
 
     const packageId = result.insertId;
 
     // Add menu items to package
-    if (menu_item_ids && Array.isArray(menu_item_ids) && menu_item_ids.length > 0) {
+    if (menu_item_ids && Array.isArray(menu_item_ids) &&
+        menu_item_ids.length > 0) {
       const packageMenuItems = menu_item_ids.map((item) => {
         const menuItemId = typeof item === 'object' ? item.menu_item_id : item;
         const quantity = typeof item === 'object' ? (item.quantity || 1) : 1;
@@ -407,19 +402,17 @@ router.post('/', async (req, res) => {
       });
 
       await connection.query(
-        'INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES ?',
-        [packageMenuItems]
-      );
+          'INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES ?',
+          [packageMenuItems]);
     }
 
     // Calculate package unit_cost from menu items
     const calculatedCost = await calculatePackageCost(packageId, connection);
-    
+
     // Update package with calculated cost
     await connection.query(
-      'UPDATE package SET unit_cost = ? WHERE package_id = ?',
-      [calculatedCost, packageId]
-    );
+        'UPDATE package SET unit_cost = ? WHERE package_id = ?',
+        [calculatedCost, packageId]);
 
     await connection.commit();
 
@@ -458,24 +451,28 @@ router.put('/:id', async (req, res) => {
   try {
     await connection.beginTransaction();
 
-    const {package_name, package_type, selling_price, menu_item_ids, default_markup_percentage, package_price} = req.body;
+    const {
+      package_name,
+      package_type,
+      selling_price,
+      menu_item_ids,
+      default_markup_percentage,
+      package_price
+    } = req.body;
     const packageId = req.params.id;
-    
-    // Support both new (selling_price) and old (package_price) field names for backward compatibility
-    const finalSellingPrice = selling_price !== undefined ? selling_price : package_price;
+
+    // Support both new (selling_price) and old (package_price) field names for
+    // backward compatibility
+    const finalSellingPrice =
+        selling_price !== undefined ? selling_price : package_price;
 
     // Check if package exists
     const [checkRows] = await connection.query(
-      'SELECT package_id FROM package WHERE package_id = ?',
-      [packageId]
-    );
+        'SELECT package_id FROM package WHERE package_id = ?', [packageId]);
 
     if (checkRows.length === 0) {
       await connection.rollback();
-      return res.status(404).json({
-        success: false,
-        error: 'Package not found'
-      });
+      return res.status(404).json({success: false, error: 'Package not found'});
     }
 
     // Build update query dynamically
@@ -503,49 +500,42 @@ router.put('/:id', async (req, res) => {
     if (updateFields.length > 0) {
       updateValues.push(packageId);
       await connection.query(
-        `UPDATE package 
+          `UPDATE package 
          SET ${updateFields.join(', ')}
          WHERE package_id = ?`,
-        updateValues
-      );
+          updateValues);
     }
 
     // Update menu items if provided
     if (menu_item_ids && Array.isArray(menu_item_ids)) {
       // Delete existing menu items
       await connection.query(
-        'DELETE FROM package_menu_items WHERE package_id = ?',
-        [packageId]
-      );
+          'DELETE FROM package_menu_items WHERE package_id = ?', [packageId]);
 
       // Add new menu items
       if (menu_item_ids.length > 0) {
         const packageMenuItems = menu_item_ids.map((item) => {
-          const menuItemId = typeof item === 'object' ? item.menu_item_id : item;
+          const menuItemId =
+              typeof item === 'object' ? item.menu_item_id : item;
           const quantity = typeof item === 'object' ? (item.quantity || 1) : 1;
           return [packageId, menuItemId, quantity];
         });
 
         await connection.query(
-          'INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES ?',
-          [packageMenuItems]
-        );
+            'INSERT INTO package_menu_items (package_id, menu_item_id, quantity) VALUES ?',
+            [packageMenuItems]);
       }
-      
+
       // Recalculate package unit_cost when menu items change
       const calculatedCost = await calculatePackageCost(packageId, connection);
       await connection.query(
-        'UPDATE package SET unit_cost = ? WHERE package_id = ?',
-        [calculatedCost, packageId]
-      );
+          'UPDATE package SET unit_cost = ? WHERE package_id = ?',
+          [calculatedCost, packageId]);
     }
 
     await connection.commit();
 
-    res.json({
-      success: true,
-      message: 'Package updated successfully'
-    });
+    res.json({success: true, message: 'Package updated successfully'});
   } catch (error) {
     await connection.rollback();
     console.error('Error updating package:', error);
@@ -569,30 +559,20 @@ router.delete('/:id', async (req, res) => {
 
     // Check if package exists
     const [checkRows] = await connection.query(
-      'SELECT package_id FROM package WHERE package_id = ?',
-      [packageId]
-    );
+        'SELECT package_id FROM package WHERE package_id = ?', [packageId]);
 
     if (checkRows.length === 0) {
       await connection.rollback();
-      return res.status(404).json({
-        success: false,
-        error: 'Package not found'
-      });
+      return res.status(404).json({success: false, error: 'Package not found'});
     }
 
     // Delete package (cascade will handle related records)
     await connection.query(
-      'DELETE FROM package WHERE package_id = ?',
-      [packageId]
-    );
+        'DELETE FROM package WHERE package_id = ?', [packageId]);
 
     await connection.commit();
 
-    res.json({
-      success: true,
-      message: 'Package deleted successfully'
-    });
+    res.json({success: true, message: 'Package deleted successfully'});
   } catch (error) {
     await connection.rollback();
     console.error('Error deleting package:', error);
@@ -624,29 +604,23 @@ router.post('/assign', async (req, res) => {
 
     // Check if assignment already exists
     const [existing] = await connection.query(
-      'SELECT assignment_id FROM table_package WHERE table_id = ? AND package_id = ?',
-      [table_id, package_id]
-    );
+        'SELECT assignment_id FROM table_package WHERE table_id = ? AND package_id = ?',
+        [table_id, package_id]);
 
     if (existing.length > 0) {
       await connection.rollback();
-      return res.status(400).json({
-        success: false,
-        error: 'Package is already assigned to this table'
-      });
+      return res.status(400).json(
+          {success: false, error: 'Package is already assigned to this table'});
     }
 
     // Create assignment
     await connection.query(
-      'INSERT INTO table_package (table_id, package_id) VALUES (?, ?)',
-      [table_id, package_id]
-    );
+        'INSERT INTO table_package (table_id, package_id) VALUES (?, ?)',
+        [table_id, package_id]);
 
     // Get wedding_id from table
     const [tableRows] = await connection.query(
-      'SELECT wedding_id FROM seating_table WHERE table_id = ?',
-      [table_id]
-    );
+        'SELECT wedding_id FROM seating_table WHERE table_id = ?', [table_id]);
     const wedding_id = tableRows[0]?.wedding_id;
 
     // Deduct ingredient stock for this package assignment
@@ -654,8 +628,9 @@ router.post('/assign', async (req, res) => {
       await deductIngredientStockForPackage(table_id, package_id, connection);
     } catch (stockError) {
       console.error('Error deducting ingredient stock:', stockError);
-      // Log error but don't fail the assignment - stock deduction is important but shouldn't block assignment
-      // You may want to make this more strict depending on business requirements
+      // Log error but don't fail the assignment - stock deduction is important
+      // but shouldn't block assignment You may want to make this more strict
+      // depending on business requirements
     }
 
     await connection.commit();
@@ -670,10 +645,8 @@ router.post('/assign', async (req, res) => {
       }
     }
 
-    res.json({
-      success: true,
-      message: 'Package assigned to table successfully'
-    });
+    res.json(
+        {success: true, message: 'Package assigned to table successfully'});
   } catch (error) {
     await connection.rollback();
     console.error('Error assigning package:', error);
@@ -697,9 +670,7 @@ router.delete('/assign/:table_id/:package_id', async (req, res) => {
 
     // Get wedding_id before deleting
     const [tableRows] = await connection.query(
-      'SELECT wedding_id FROM seating_table WHERE table_id = ?',
-      [table_id]
-    );
+        'SELECT wedding_id FROM seating_table WHERE table_id = ?', [table_id]);
     const wedding_id = tableRows[0]?.wedding_id;
 
     // Restore ingredient stock before deleting assignment
@@ -712,9 +683,8 @@ router.delete('/assign/:table_id/:package_id', async (req, res) => {
 
     // Delete assignment
     await connection.query(
-      'DELETE FROM table_package WHERE table_id = ? AND package_id = ?',
-      [table_id, package_id]
-    );
+        'DELETE FROM table_package WHERE table_id = ? AND package_id = ?',
+        [table_id, package_id]);
 
     await connection.commit();
 
@@ -728,10 +698,8 @@ router.delete('/assign/:table_id/:package_id', async (req, res) => {
       }
     }
 
-    res.json({
-      success: true,
-      message: 'Package removed from table successfully'
-    });
+    res.json(
+        {success: true, message: 'Package removed from table successfully'});
   } catch (error) {
     await connection.rollback();
     console.error('Error removing package:', error);
@@ -751,7 +719,7 @@ router.get('/wedding/:wedding_id/assignments', async (req, res) => {
     const {wedding_id} = req.params;
 
     const [rows] = await promisePool.query(
-      `SELECT 
+        `SELECT 
         tp.assignment_id,
         tp.table_id,
         tp.package_id,
@@ -767,13 +735,9 @@ router.get('/wedding/:wedding_id/assignments', async (req, res) => {
       JOIN package p ON tp.package_id = p.package_id
       WHERE st.wedding_id = ?
       ORDER BY st.table_number ASC`,
-      [wedding_id]
-    );
+        [wedding_id]);
 
-    res.json({
-      success: true,
-      data: rows
-    });
+    res.json({success: true, data: rows});
   } catch (error) {
     console.error('Error fetching table-package assignments:', error);
     res.status(500).json({
@@ -786,7 +750,9 @@ router.get('/wedding/:wedding_id/assignments', async (req, res) => {
 
 // Export helper functions for use in other routes
 module.exports = router;
-module.exports.deductIngredientStockForPackage = deductIngredientStockForPackage;
-module.exports.restoreIngredientStockForPackage = restoreIngredientStockForPackage;
-module.exports.calculateIngredientUsageForPackage = calculateIngredientUsageForPackage;
-
+module.exports.deductIngredientStockForPackage =
+    deductIngredientStockForPackage;
+module.exports.restoreIngredientStockForPackage =
+    restoreIngredientStockForPackage;
+module.exports.calculateIngredientUsageForPackage =
+    calculateIngredientUsageForPackage;
