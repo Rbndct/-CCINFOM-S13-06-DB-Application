@@ -14,7 +14,6 @@ export interface Wedding {
   couple_id: number;
   guest_count?: number;
   total_cost?: number;
-  production_cost?: number;
   venue: string;
   wedding_date: string;
   wedding_time: string;
