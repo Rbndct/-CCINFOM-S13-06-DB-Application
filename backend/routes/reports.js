@@ -622,8 +622,16 @@ router.get('/accounts-receivable', async (req, res) => {
       whereSql = 'DATE_FORMAT(w.wedding_date, "%Y-%m") = ?';
       params = [value];
     } else if (period === 'year') {
+      // Ensure year is parsed as integer for proper comparison
+      const yearValue = parseInt(value, 10);
+      if (isNaN(yearValue)) {
+        return res.status(400).json({
+          success: false,
+          error: 'Invalid year value. Expected a valid year (e.g., 2024)'
+        });
+      }
       whereSql = 'YEAR(w.wedding_date) = ?';
-      params = [value];
+      params = [yearValue];
     } else {
       whereSql = '1=1';
       params = [];
@@ -635,11 +643,19 @@ router.get('/accounts-receivable', async (req, res) => {
     //   - paid: 0 (filtered out by WHERE clause)
     //   - partial: total_cost * 0.5 (50% of total cost)
     //   - pending: total_cost (100% of total cost)
-    const [receivables] = await promisePool.query(
-        `SELECT DISTINCT
+    // 
+    // Calculate total_cost dynamically using selling_price (what customer owes)
+    // instead of relying on stored total_cost which might be outdated
+    const query = `SELECT DISTINCT
     w.wedding_id,
     w.wedding_date,
-    COALESCE(w.total_cost, COALESCE(w.equipment_rental_cost, 0) + COALESCE(w.food_cost, 0)) AS total_cost,  -- Use total_cost if available, otherwise calculate
+    -- Calculate total invoice amount: equipment rental + package selling prices
+    (COALESCE(w.equipment_rental_cost, 0) + 
+     COALESCE((SELECT SUM(p.selling_price) 
+               FROM table_package tp 
+               JOIN seating_table st ON tp.table_id = st.table_id 
+               JOIN package p ON tp.package_id = p.package_id 
+               WHERE st.wedding_id = w.wedding_id), 0)) AS total_cost,
     w.payment_status,
     c.partner1_name,
     c.partner2_name,
@@ -648,15 +664,33 @@ router.get('/accounts-receivable', async (req, res) => {
     DATEDIFF(CURDATE(), DATE_SUB(w.wedding_date, INTERVAL 30 DAY)) AS days_overdue,
     CASE 
       WHEN w.payment_status = 'paid' THEN 0
-      WHEN w.payment_status = 'partial' THEN COALESCE(w.total_cost, COALESCE(w.equipment_rental_cost, 0) + COALESCE(w.food_cost, 0)) * 0.5  -- 50% outstanding
-      ELSE COALESCE(w.total_cost, COALESCE(w.equipment_rental_cost, 0) + COALESCE(w.food_cost, 0))  -- 100% outstanding (pending)
+      WHEN w.payment_status = 'partial' THEN 
+        (COALESCE(w.equipment_rental_cost, 0) + 
+         COALESCE((SELECT SUM(p.selling_price) 
+                   FROM table_package tp 
+                   JOIN seating_table st ON tp.table_id = st.table_id 
+                   JOIN package p ON tp.package_id = p.package_id 
+                   WHERE st.wedding_id = w.wedding_id), 0)) * 0.5  -- 50% outstanding
+      ELSE 
+        (COALESCE(w.equipment_rental_cost, 0) + 
+         COALESCE((SELECT SUM(p.selling_price) 
+                   FROM table_package tp 
+                   JOIN seating_table st ON tp.table_id = st.table_id 
+                   JOIN package p ON tp.package_id = p.package_id 
+                   WHERE st.wedding_id = w.wedding_id), 0))  -- 100% outstanding (pending)
     END AS outstanding_balance
   FROM wedding w
   JOIN couple c ON w.couple_id = c.couple_id
   WHERE ${whereSql}
     AND w.payment_status != 'paid'  -- Only show pending and partial payments
-  ORDER BY w.wedding_date DESC`,
-        params);
+  ORDER BY w.wedding_date DESC`;
+    
+    console.log('[Accounts Receivable] Query:', query);
+    console.log('[Accounts Receivable] Params:', params);
+    
+    const [receivables] = await promisePool.query(query, params);
+    
+    console.log(`[Accounts Receivable] Found ${receivables.length} receivables for period=${period}, value=${value}`);
 
     // Calculate aging buckets
     const agingBuckets = {
