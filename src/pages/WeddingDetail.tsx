@@ -5611,7 +5611,6 @@ const WeddingDetail = () => {
                       <TableHead>Package Type</TableHead>
                       <TableHead>Compatibility</TableHead>
                       <TableHead>Dietary Restrictions</TableHead>
-                      <TableHead className="w-[50px]"></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -5732,69 +5731,9 @@ const WeddingDetail = () => {
                                 )}
                               </div>
                             </TableCell>
-                            <TableCell>
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                  <DropdownMenuItem 
-                                    onClick={() => {
-                                      setSelectedTableForView(tables.find(t => (t.id || t.table_id) === assignment.tableId));
-                                      setViewTableOpen(true);
-                                    }}
-                                  >
-                                    <Eye className="mr-2 h-4 w-4" />
-                                    View Table Details
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem 
-                                    onClick={async () => {
-                                      try {
-                                        await packagesAPI.removeFromTable(assignment.tableId, assignment.packageId);
-                                        // Refresh assignments from API
-                                        const assignmentsResponse = await packagesAPI.getTableAssignments(id || '0');
-                                        if (assignmentsResponse && ((assignmentsResponse as any).success || (assignmentsResponse as any).data)) {
-                                          const assignmentsData = assignmentsResponse.data || [];
-                                          setTablePackageAssignments(Array.isArray(assignmentsData) ? assignmentsData : []);
-                                        } else {
-                                          setTablePackageAssignments(prev => prev.filter(a => a.id !== assignment.id));
-                                        }
-                                        
-                                        // Refresh wedding data to update costs
-                                        try {
-                                          const weddingResponse = await weddingsAPI.getById(id || '0');
-                                          if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
-                                            setWedding(weddingResponse.data);
-                                          }
-                                        } catch (weddingError) {
-                                          console.error('Error refreshing wedding data:', weddingError);
-                                        }
-                                        
-                                        toast({
-                                          title: 'Package Removed',
-                                          description: 'Package removed from table successfully',
-                                        });
-                                      } catch (error: any) {
-                                        toast({
-                                          title: 'Error',
-                                          description: error.response?.data?.error || 'Failed to remove package',
-                                          variant: 'destructive',
-                                        });
-                                      }
-                                    }}
-                                    className="text-destructive focus:text-destructive"
-                                  >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Remove Package
-                                  </DropdownMenuItem>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 )}
