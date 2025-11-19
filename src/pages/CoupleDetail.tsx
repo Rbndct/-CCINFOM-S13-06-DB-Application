@@ -881,14 +881,14 @@ const CoupleDetail = () => {
                             <DollarSign className="w-3 h-3" />
                             Equipment Rental Cost:
                           </span>
-                          <span className="font-semibold">{formatCurrency(wedding.equipmentRentalCost || (wedding as any).equipment_rental_cost || (wedding as any).total_cost || wedding.totalCost || 0)}</span>
+                          <span className="font-semibold">{formatCurrency(wedding.equipmentRentalCost || (wedding as any).equipment_rental_cost || 0)}</span>
                         </div>
                         <div className="flex items-center justify-between text-sm">
                           <span className="text-muted-foreground flex items-center gap-1">
                             <Utensils className="w-3 h-3" />
                             Food Cost:
                           </span>
-                          <span className="font-semibold">{formatCurrency(wedding.foodCost || (wedding as any).food_cost || (wedding as any).production_cost || wedding.productionCost || 0)}</span>
+                          <span className="font-semibold">{formatCurrency(wedding.foodCost || (wedding as any).food_cost || 0)}</span>
                         </div>
                       </div>
                       <div className="pt-2 space-y-2">

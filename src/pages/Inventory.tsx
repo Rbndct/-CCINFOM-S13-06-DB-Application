@@ -97,7 +97,7 @@ const Inventory = () => {
     category: '',
     item_condition: '',
     quantity_available: '',
-    rental_cost: ''
+    unit_rental_cost: ''
   });
   const [formLoading, setFormLoading] = useState(false);
 
@@ -148,7 +148,7 @@ const Inventory = () => {
       category: '',
       item_condition: '',
       quantity_available: '',
-      rental_cost: ''
+      unit_rental_cost: ''
     });
     setAddDialogOpen(true);
   };
@@ -160,7 +160,7 @@ const Inventory = () => {
       category: item.category || '',
       item_condition: item.item_condition || '',
       quantity_available: (item.quantity_available || 0).toString(),
-      rental_cost: (item.rental_cost || 0).toString()
+      unit_rental_cost: (item.unit_rental_cost || 0).toString()
     });
     setIsEditingInView(true);
     setViewDialogOpen(true);
@@ -178,7 +178,7 @@ const Inventory = () => {
   };
 
   const handleSaveItem = async () => {
-    if (!formData.item_name || !formData.category || !formData.item_condition || !formData.quantity_available || !formData.rental_cost) {
+    if (!formData.item_name || !formData.category || !formData.item_condition || !formData.quantity_available || !formData.unit_rental_cost) {
       toast({
         title: 'Validation Error',
         description: 'Please fill in all required fields',
@@ -194,7 +194,7 @@ const Inventory = () => {
         category: formData.category,
         item_condition: formData.item_condition,
         quantity_available: parseInt(formData.quantity_available),
-        rental_cost: parseFloat(formData.rental_cost)
+        unit_rental_cost: parseFloat(formData.unit_rental_cost)
       };
 
       if (selectedItem && editDialogOpen) {
@@ -338,8 +338,8 @@ const Inventory = () => {
             bVal = b.quantity_available || 0;
             break;
           case 'cost':
-            aVal = a.rental_cost || 0;
-            bVal = b.rental_cost || 0;
+            aVal = a.unit_rental_cost || 0;
+            bVal = b.unit_rental_cost || 0;
             break;
           default:
             return 0;
@@ -361,7 +361,7 @@ const Inventory = () => {
   const endIndex = startIndex + itemsPerPage;
   const paginatedItems = filteredAndSortedItems.slice(startIndex, endIndex);
 
-  const totalValue = inventoryItems.reduce((sum, item) => sum + ((item.rental_cost || 0) * (item.quantity_available || 0)), 0);
+  const totalValue = inventoryItems.reduce((sum, item) => sum + ((item.unit_rental_cost || 0) * (item.quantity_available || 0)), 0);
   const lowStockItems = inventoryItems.filter(item => (item.quantity_available || 0) < 5 && (item.quantity_available || 0) > 0).length;
   const outOfStockItems = inventoryItems.filter(item => (item.quantity_available || 0) === 0).length;
   const categories = [...new Set(inventoryItems.map(item => item.category).filter(Boolean))];
@@ -572,7 +572,7 @@ const Inventory = () => {
                           </TableCell>
                           <TableCell>
                             <div className="text-sm font-medium">
-                              {formatCurrency(item.rental_cost || 0)}
+                              {formatCurrency(item.unit_rental_cost || 0)}
                             </div>
                           </TableCell>
                           <TableCell onClick={(e) => e.stopPropagation()}>
@@ -742,19 +742,19 @@ const Inventory = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="rental_cost">Rental Cost (PHP) *</Label>
+                <Label htmlFor="unit_rental_cost">Unit Rental Cost (PHP) *</Label>
                 <Input
-                  id="rental_cost"
+                  id="unit_rental_cost"
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.rental_cost}
-                  onChange={(e) => setFormData({ ...formData, rental_cost: e.target.value })}
+                  value={formData.unit_rental_cost}
+                  onChange={(e) => setFormData({ ...formData, unit_rental_cost: e.target.value })}
                   placeholder="0.00"
                   disabled={formLoading}
                 />
                 <p className="text-xs text-muted-foreground">
-                  Display: {formData.rental_cost ? formatCurrency(parseFloat(formData.rental_cost) || 0) : formatCurrency(0)}
+                  Display: {formData.unit_rental_cost ? formatCurrency(parseFloat(formData.unit_rental_cost) || 0) : formatCurrency(0)}
                 </p>
               </div>
             </div>
@@ -805,7 +805,7 @@ const Inventory = () => {
                         category: selectedItem.category || '',
                         item_condition: selectedItem.item_condition || '',
                         quantity_available: (selectedItem.quantity_available || 0).toString(),
-                        rental_cost: (selectedItem.rental_cost || 0).toString()
+                        unit_rental_cost: (selectedItem.unit_rental_cost || 0).toString()
                       });
                       setIsEditingInView(true);
                     }}
@@ -886,19 +886,19 @@ const Inventory = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label htmlFor="view_rental_cost">Rental Cost (PHP) *</Label>
+                      <Label htmlFor="view_unit_rental_cost">Unit Rental Cost (PHP) *</Label>
                       <Input
-                        id="view_rental_cost"
+                        id="view_unit_rental_cost"
                         type="number"
                         step="0.01"
                         min="0"
-                        value={formData.rental_cost}
-                        onChange={(e) => setFormData({ ...formData, rental_cost: e.target.value })}
+                        value={formData.unit_rental_cost}
+                        onChange={(e) => setFormData({ ...formData, unit_rental_cost: e.target.value })}
                         placeholder="0.00"
                         disabled={formLoading}
                       />
                       <p className="text-xs text-muted-foreground">
-                        Display: {formData.rental_cost ? formatCurrency(parseFloat(formData.rental_cost) || 0) : formatCurrency(0)}
+                        Display: {formData.unit_rental_cost ? formatCurrency(parseFloat(formData.unit_rental_cost) || 0) : formatCurrency(0)}
                       </p>
                     </div>
                     <DialogFooter>
@@ -909,13 +909,13 @@ const Inventory = () => {
                           category: selectedItem.category || '',
                           item_condition: selectedItem.item_condition || '',
                           quantity_available: (selectedItem.quantity_available || 0).toString(),
-                          rental_cost: (selectedItem.rental_cost || 0).toString()
+                          unit_rental_cost: (selectedItem.unit_rental_cost || 0).toString()
                         });
                       }} disabled={formLoading}>
                         Cancel
                       </Button>
                       <Button onClick={async () => {
-                        if (!formData.item_name || !formData.category || !formData.item_condition || !formData.quantity_available || !formData.rental_cost) {
+                        if (!formData.item_name || !formData.category || !formData.item_condition || !formData.quantity_available || !formData.unit_rental_cost) {
                           toast({
                             title: 'Validation Error',
                             description: 'Please fill in all required fields',
@@ -930,7 +930,7 @@ const Inventory = () => {
                             category: formData.category,
                             item_condition: formData.item_condition,
                             quantity_available: parseInt(formData.quantity_available),
-                            rental_cost: parseFloat(formData.rental_cost)
+                            unit_rental_cost: parseFloat(formData.unit_rental_cost)
                           };
                           await inventoryAPI.update(selectedItem.inventory_id, data);
                           toast({ title: 'Success', description: 'Inventory item updated successfully' });
@@ -986,8 +986,8 @@ const Inventory = () => {
                         </div>
                       </div>
                       <div>
-                        <Label className="text-xs text-muted-foreground">Rental Cost (per unit)</Label>
-                        <p className="font-semibold mt-1">{formatCurrency(selectedItem.rental_cost || 0)}</p>
+                        <Label className="text-xs text-muted-foreground">Unit Rental Cost (per unit)</Label>
+                        <p className="font-semibold mt-1">{formatCurrency(selectedItem.unit_rental_cost || 0)}</p>
                       </div>
                     </div>
                     <DialogFooter>

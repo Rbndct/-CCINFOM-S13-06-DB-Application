@@ -106,8 +106,8 @@ const Dashboard = () => {
           if (!weddingDate) return sum;
           const date = new Date(weddingDate);
           if (date.getMonth() === currentMonth && date.getFullYear() === currentYear) {
-            const equipmentCost = parseFloat(w.equipment_rental_cost || w.equipmentRentalCost || w.total_cost || w.totalCost || 0);
-            const foodCost = parseFloat(w.food_cost || w.foodCost || w.production_cost || w.productionCost || 0);
+            const equipmentCost = parseFloat(w.equipment_rental_cost || w.equipmentRentalCost || 0);
+            const foodCost = parseFloat(w.food_cost || w.foodCost || 0);
             return sum + (isNaN(equipmentCost) ? 0 : equipmentCost) + (isNaN(foodCost) ? 0 : foodCost);
           }
           return sum;

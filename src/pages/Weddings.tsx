@@ -246,7 +246,7 @@ const Weddings = () => {
                 const totalCost = parseFloat(allocation.total_cost || 0);
                 if (!totalCost || isNaN(totalCost)) {
                   const qty = parseFloat(allocation.quantity_used || 0);
-                  const unitCost = parseFloat(allocation.unit_rental_cost || allocation.rental_cost || 0);
+                  const unitCost = parseFloat(allocation.unit_rental_cost || 0);
                   return sum + (qty * unitCost);
                 }
                 return sum + totalCost;
@@ -434,7 +434,6 @@ const Weddings = () => {
           venue: venue.trim(),
           guest_count: 0,
           total_cost: 0,
-          production_cost: 0,
           payment_status: paymentStatus,
           preference_id: selectedPreferenceId ? parseInt(selectedPreferenceId) : null,
         });

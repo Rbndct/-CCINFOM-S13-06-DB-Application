@@ -189,7 +189,6 @@ const WeddingDetail = () => {
     venue: '',
     guest_count: '',
     total_cost: '',
-    production_cost: '',
     equipment_rental_cost: '',
     food_cost: '',
     payment_status: 'pending',
@@ -263,8 +262,7 @@ const WeddingDetail = () => {
   const [allocationFormData, setAllocationFormData] = useState({
     inventory_id: '',
     quantity_used: '',
-    unit_rental_cost: '',
-    rental_cost: '' // Keep for backward compatibility
+    unit_rental_cost: ''
   });
   const [allocationFormLoading, setAllocationFormLoading] = useState(false);
   const [allocationFormErrors, setAllocationFormErrors] = useState<Record<string, string>>({});
@@ -292,6 +290,115 @@ const WeddingDetail = () => {
   useEffect(() => {
     localStorage.setItem('guest_current_page', guestCurrentPage.toString());
   }, [guestCurrentPage]);
+
+  // Function to refresh wedding stats (guest counts, tables, etc.)
+  const refreshWeddingStats = async () => {
+    if (!id) return;
+    
+    try {
+      // Refresh wedding data
+      const weddingResponse = await weddingsAPI.getById(id);
+      if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
+        const weddingData = (weddingResponse as any).data;
+        setWedding((prev: any) => ({
+          ...prev,
+          ...weddingData,
+          guestCount: weddingData.guestCount || weddingData.guest_count || guests.length || 0
+        }));
+      }
+      
+      // Refresh guests and update RSVP counts
+      const guestsResponse: any = await guestsAPI.getAll({ wedding_id: id });
+      if (guestsResponse && (guestsResponse.success || guestsResponse.data)) {
+        const guestsData = guestsResponse.data || (Array.isArray(guestsResponse) ? guestsResponse : []);
+        const transformedGuests = (guestsData || []).map((g: any) => {
+          const guestName = g.guest_name || g.name || '';
+          let restrictions = [];
+          if (g.restrictions) {
+            try {
+              if (typeof g.restrictions === 'string') {
+                restrictions = JSON.parse(g.restrictions);
+              } else if (Array.isArray(g.restrictions)) {
+                restrictions = g.restrictions;
+              }
+            } catch (e) {
+              restrictions = [];
+            }
+          }
+          restrictions = restrictions.filter((r: any) => r && (r.restriction_id || r.restriction_name));
+          
+          return {
+            id: g.guest_id || g.id || 0,
+            guest_id: g.guest_id || g.id || 0,
+            firstName: guestName.split(' ')[0] || '',
+            lastName: guestName.split(' ').slice(1).join(' ') || '',
+            name: guestName,
+            dietaryRestriction: g.restriction_name || null,
+            dietaryRestrictions: restrictions,
+            rsvpStatus: g.rsvp_status || 'pending',
+            weddingId: g.wedding_id,
+            table_id: g.table_id || null
+          };
+        }).filter((g: any) => g !== null);
+        
+        setGuests(transformedGuests);
+        
+        // Update RSVP counts
+        const accepted = transformedGuests.filter((g: any) => g.rsvpStatus === 'accepted' || g.rsvpStatus === 'confirmed').length;
+        const pending = transformedGuests.filter((g: any) => g.rsvpStatus === 'pending').length;
+        const declined = transformedGuests.filter((g: any) => g.rsvpStatus === 'declined').length;
+        
+        setWedding((prev: any) => ({
+          ...prev,
+          acceptedGuests: accepted,
+          pendingRSVPs: pending,
+          declinedGuests: declined,
+          guestCount: transformedGuests.length
+        }));
+      }
+      
+      // Refresh tables
+      const resp = await tablesAPI.getSeating(id);
+      let tablesData: any[] = [];
+      if (resp) {
+        if (resp.data && Array.isArray(resp.data)) {
+          tablesData = resp.data;
+        } else if (Array.isArray(resp)) {
+          tablesData = resp;
+        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
+          tablesData = resp.data;
+        }
+      }
+      tablesData = tablesData.map((t: any) => ({
+        ...t,
+        id: t.id || t.table_id,
+        table_id: t.table_id || t.id,
+        tableNumber: t.table_number || t.tableNumber,
+        table_number: t.table_number || t.tableNumber,
+        capacity: t.capacity || 0,
+        category: t.category || t.table_category,
+        table_category: t.table_category || t.category
+      }));
+      setTables(tablesData);
+      
+      // Refresh inventory allocations (tables create inventory allocations automatically)
+      try {
+        const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
+        if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        } else if (allocationsResponse && allocationsResponse.data) {
+          setInventoryAllocations(allocationsResponse.data || []);
+        } else if (Array.isArray(allocationsResponse)) {
+          setInventoryAllocations(allocationsResponse || []);
+        }
+      } catch (allocError) {
+        console.error('Error refreshing inventory allocations:', allocError);
+      }
+      
+    } catch (error) {
+      console.error('Error refreshing wedding stats:', error);
+    }
+  };
 
   useEffect(() => {
     const fetchWeddingData = async () => {
@@ -357,10 +464,9 @@ const WeddingDetail = () => {
               wedding_time: weddingData.weddingTime || weddingData.wedding_time || '',
               venue: weddingData.venue || '',
               guest_count: (weddingData.guestCount || weddingData.guest_count || 0).toString(),
-              equipment_rental_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || weddingData.totalCost || weddingData.total_cost || 0).toString(),
-              food_cost: (weddingData.foodCost || weddingData.food_cost || weddingData.productionCost || weddingData.production_cost || 0).toString(),
-              total_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || weddingData.totalCost || weddingData.total_cost || 0).toString(),
-              production_cost: (weddingData.foodCost || weddingData.food_cost || weddingData.productionCost || weddingData.production_cost || 0).toString(),
+              equipment_rental_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || 0).toString(),
+              food_cost: (weddingData.foodCost || weddingData.food_cost || 0).toString(),
+              total_cost: (weddingData.totalCost || weddingData.total_cost || 0).toString(),
               payment_status: weddingData.paymentStatus || weddingData.payment_status || 'pending',
               preference_id: (weddingData.preference_id || weddingData.pref_id || '').toString()
             });
@@ -810,10 +916,9 @@ const WeddingDetail = () => {
         wedding_time: wedding.weddingTime || wedding.wedding_time || '',
         venue: wedding.venue || '',
         guest_count: (wedding.guestCount || wedding.guest_count || 0).toString(),
-        equipment_rental_cost: (wedding.equipmentRentalCost || wedding.equipment_rental_cost || wedding.totalCost || wedding.total_cost || 0).toString(),
-        food_cost: (wedding.foodCost || wedding.food_cost || wedding.productionCost || wedding.production_cost || 0).toString(),
-        total_cost: (wedding.equipmentRentalCost || wedding.equipment_rental_cost || wedding.totalCost || wedding.total_cost || 0).toString(),
-        production_cost: (wedding.foodCost || wedding.food_cost || wedding.productionCost || wedding.production_cost || 0).toString(),
+        equipment_rental_cost: (wedding.equipmentRentalCost || wedding.equipment_rental_cost || 0).toString(),
+        food_cost: (wedding.foodCost || wedding.food_cost || 0).toString(),
+        total_cost: (wedding.totalCost || wedding.total_cost || 0).toString(),
         payment_status: wedding.paymentStatus || wedding.payment_status || 'pending',
         preference_id: (wedding.preference_id || wedding.pref_id || '').toString()
       });
@@ -834,30 +939,10 @@ const WeddingDetail = () => {
     if (!id) return;
     try {
       await tablesAPI.createCoupleTable(id, { capacity: 2 });
-      const resp = await tablesAPI.getSeating(id);
-      let tablesData: any[] = [];
-      if (resp) {
-        if (resp.data && Array.isArray(resp.data)) {
-          tablesData = resp.data;
-        } else if (Array.isArray(resp)) {
-          tablesData = resp;
-        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
-          tablesData = resp.data;
-        }
-      }
-      tablesData = tablesData.map((t: any) => ({
-        ...t,
-        id: t.id || t.table_id,
-        table_id: t.table_id || t.id,
-        tableNumber: t.tableNumber || t.table_number,
-        table_number: t.table_number || t.tableNumber,
-        category: t.category || t.table_category,
-        table_category: t.table_category || t.category,
-        capacity: t.capacity || 0,
-        assignedGuests: t.assignedGuests || t.assigned_guests || [],
-        assigned_guests: t.assigned_guests || t.assignedGuests || []
-      }));
-      setTables(tablesData);
+      
+      // Refresh wedding stats (tables, inventory allocations, etc.)
+      await refreshWeddingStats();
+      
       toast({ title: 'Couple Table Created', description: 'Couple table with capacity 2 created' });
     } catch (e: any) {
       toast({ title: 'Error', description: e.response?.data?.error || e?.error || 'Failed to create couple table', variant: 'destructive' });
@@ -867,31 +952,28 @@ const WeddingDetail = () => {
   const addGuestTable = async (capacity: number, category: string = 'guest') => {
     if (!id) return;
     try {
-      await tablesAPI.createGuestTable(id, capacity, category);
-      const resp = await tablesAPI.getSeating(id);
-      let tablesData: any[] = [];
-      if (resp) {
-        if (resp.data && Array.isArray(resp.data)) {
-          tablesData = resp.data;
-        } else if (Array.isArray(resp)) {
-          tablesData = resp;
-        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
-          tablesData = resp.data;
+      // Check if couple table exists, if not create it first
+      const hasCoupleTable = tables.some(t => {
+        const cat = t?.table_category || t?.category;
+        return cat === 'couple' || cat === 'Couple';
+      });
+      
+      if (!hasCoupleTable) {
+        try {
+          await tablesAPI.createCoupleTable(id, { capacity: 2 });
+          // Refresh tables to get the newly created couple table
+          await refreshWeddingStats();
+        } catch (coupleError: any) {
+          console.error('Error creating couple table:', coupleError);
+          // Continue anyway - maybe couple table already exists
         }
       }
-      tablesData = tablesData.map((t: any) => ({
-        ...t,
-        id: t.id || t.table_id,
-        table_id: t.table_id || t.id,
-        tableNumber: t.tableNumber || t.table_number,
-        table_number: t.table_number || t.tableNumber,
-        category: t.category || t.table_category,
-        table_category: t.table_category || t.category,
-        capacity: t.capacity || 0,
-        assignedGuests: t.assignedGuests || t.assigned_guests || [],
-        assigned_guests: t.assigned_guests || t.assignedGuests || []
-      }));
-      setTables(tablesData);
+      
+      await tablesAPI.createGuestTable(id, capacity, category);
+      
+      // Refresh wedding stats (tables, inventory allocations, etc.)
+      await refreshWeddingStats();
+      
       toast({ title: 'Table Created', description: `${category} table with capacity ${capacity} created` });
     } catch (e: any) {
       toast({ title: 'Error', description: e.response?.data?.error || e?.error || 'Failed to create table', variant: 'destructive' });
@@ -948,7 +1030,7 @@ const WeddingDetail = () => {
         wedding_date: editWeddingForm.wedding_date,
         wedding_time: editWeddingForm.wedding_time,
         venue: editWeddingForm.venue,
-        // guest_count, total_cost, and production_cost are derived fields - not sent in update
+        // guest_count, total_cost, equipment_rental_cost, and food_cost are derived fields - not sent in update
         payment_status: editWeddingForm.payment_status,
         preference_id: editWeddingForm.preference_id ? parseInt(editWeddingForm.preference_id) : null
       });
@@ -988,10 +1070,9 @@ const WeddingDetail = () => {
             wedding_time: weddingData.weddingTime || weddingData.wedding_time || '',
             venue: weddingData.venue || '',
             guest_count: (weddingData.guestCount || weddingData.guest_count || 0).toString(),
-            equipment_rental_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || weddingData.totalCost || weddingData.total_cost || 0).toString(),
-            food_cost: (weddingData.foodCost || weddingData.food_cost || weddingData.productionCost || weddingData.production_cost || 0).toString(),
-            total_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || weddingData.totalCost || weddingData.total_cost || 0).toString(),
-            production_cost: (weddingData.foodCost || weddingData.food_cost || weddingData.productionCost || weddingData.production_cost || 0).toString(),
+            equipment_rental_cost: (weddingData.equipmentRentalCost || weddingData.equipment_rental_cost || 0).toString(),
+            food_cost: (weddingData.foodCost || weddingData.food_cost || 0).toString(),
+            total_cost: (weddingData.totalCost || weddingData.total_cost || 0).toString(),
             payment_status: weddingData.paymentStatus || weddingData.payment_status || 'pending',
             preference_id: (weddingData.preference_id || weddingData.pref_id || '').toString()
           });
@@ -1083,26 +1164,10 @@ const WeddingDetail = () => {
             };
           });
           setGuests(transformedGuests);
-          
-          // Update counts
-          const confirmed = transformedGuests.filter((g: any) => g.rsvpStatus === 'accepted' || g.rsvpStatus === 'confirmed').length;
-          const pending = transformedGuests.filter((g: any) => g.rsvpStatus === 'pending').length;
-          setWedding((prev: any) => ({
-            ...prev,
-            confirmedGuests: confirmed,
-            pendingRSVPs: pending
-          }));
         }
         
-      // Refresh wedding data to update guest count
-      try {
-        const weddingResponse = await weddingsAPI.getById(id || '0');
-        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
-          setWedding(weddingResponse.data);
-        }
-      } catch (refreshError) {
-        console.error('Error refreshing wedding data:', refreshError);
-      }
+      // Refresh wedding stats (guest counts, tables, etc.)
+      await refreshWeddingStats();
       
       // Invalidate all weddings queries to refresh the weddings list page
       queryClient.invalidateQueries({ queryKey: ['weddings'] });
@@ -1171,49 +1236,8 @@ const WeddingDetail = () => {
         restriction_ids: finalRestrictionIds
       });
       
-      // Refresh guests list
-      const guestsResponse = await guestsAPI.getAll({ wedding_id: id });
-      if (guestsResponse && (guestsResponse as any).success && (guestsResponse as any).data) {
-        const transformedGuests = guestsResponse.data.map((g: any) => {
-          const guestName = g.guest_name || g.name || '';
-          let restrictions = [];
-          if (g.restrictions) {
-            try {
-              if (typeof g.restrictions === 'string') {
-                restrictions = JSON.parse(g.restrictions);
-              } else if (Array.isArray(g.restrictions)) {
-                restrictions = g.restrictions;
-              }
-            } catch (e) {
-              restrictions = [];
-            }
-          }
-          restrictions = restrictions.filter((r: any) => r && (r.restriction_id || r.restriction_name));
-          
-          return {
-            id: g.guest_id || g.id,
-            guest_id: g.guest_id || g.id,
-            firstName: guestName.split(' ')[0] || '',
-            lastName: guestName.split(' ').slice(1).join(' ') || '',
-            name: guestName,
-            dietaryRestriction: g.restriction_name || null,
-            dietaryRestrictions: restrictions,
-            rsvpStatus: g.rsvp_status || 'pending',
-            weddingId: g.wedding_id
-          };
-        });
-        setGuests(transformedGuests);
-      }
-      
-      // Refresh wedding data to update guest count
-      try {
-        const weddingResponse = await weddingsAPI.getById(id || '0');
-        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
-          setWedding(weddingResponse.data);
-        }
-      } catch (refreshError) {
-        console.error('Error refreshing wedding data:', refreshError);
-      }
+      // Refresh wedding stats (guest counts, tables, etc.)
+      await refreshWeddingStats();
       
       // Invalidate all weddings queries to refresh the weddings list page
       queryClient.invalidateQueries({ queryKey: ['weddings'] });
@@ -1247,49 +1271,8 @@ const WeddingDetail = () => {
     try {
       await guestsAPI.delete(guestId);
       
-      // Refresh guests list
-      const guestsResponse = await guestsAPI.getAll({ wedding_id: id });
-      if (guestsResponse && (guestsResponse as any).success && (guestsResponse as any).data) {
-        const transformedGuests = guestsResponse.data.map((g: any) => {
-          const guestName = g.guest_name || g.name || '';
-          let restrictions = [];
-          if (g.restrictions) {
-            try {
-              if (typeof g.restrictions === 'string') {
-                restrictions = JSON.parse(g.restrictions);
-              } else if (Array.isArray(g.restrictions)) {
-                restrictions = g.restrictions;
-              }
-            } catch (e) {
-              restrictions = [];
-            }
-          }
-          restrictions = restrictions.filter((r: any) => r && (r.restriction_id || r.restriction_name));
-          
-          return {
-            id: g.guest_id || g.id,
-            guest_id: g.guest_id || g.id,
-            firstName: guestName.split(' ')[0] || '',
-            lastName: guestName.split(' ').slice(1).join(' ') || '',
-            name: guestName,
-            dietaryRestriction: g.restriction_name || null,
-            dietaryRestrictions: restrictions,
-            rsvpStatus: g.rsvp_status || 'pending',
-            weddingId: g.wedding_id
-          };
-        });
-        setGuests(transformedGuests);
-      }
-      
-      // Refresh wedding data to update guest count
-      try {
-        const weddingResponse = await weddingsAPI.getById(id || '0');
-        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
-          setWedding(weddingResponse.data);
-        }
-      } catch (refreshError) {
-        console.error('Error refreshing wedding data:', refreshError);
-      }
+      // Refresh wedding stats (guest counts, tables, etc.)
+      await refreshWeddingStats();
       
       // Invalidate all weddings queries to refresh the weddings list page
       queryClient.invalidateQueries({ queryKey: ['weddings'] });
@@ -1351,49 +1334,8 @@ const WeddingDetail = () => {
         await tablesAPI.createGuestTable(id, capacity, tableCategory);
       }
       
-      // Refresh tables
-      const resp = await tablesAPI.getSeating(id);
-      let tablesData: any[] = [];
-      if (resp) {
-        if (resp.data && Array.isArray(resp.data)) {
-          tablesData = resp.data;
-        } else if (Array.isArray(resp)) {
-          tablesData = resp;
-        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
-          tablesData = resp.data;
-        }
-      }
-      tablesData = tablesData.map((t: any) => ({
-        ...t,
-        id: t.id || t.table_id,
-        table_id: t.table_id || t.id,
-        tableNumber: t.tableNumber || t.table_number,
-        table_number: t.table_number || t.tableNumber,
-        category: t.category || t.table_category,
-        table_category: t.table_category || t.category,
-        capacity: t.capacity || 0,
-        assignedGuests: t.assignedGuests || t.assigned_guests || [],
-        assigned_guests: t.assigned_guests || t.assignedGuests || []
-      }));
-      setTables(tablesData);
-      
-      // Refresh inventory allocations to show the auto-created table allocation
-      try {
-        const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
-        if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
-          setInventoryAllocations(allocationsResponse.data || []);
-        } else if (allocationsResponse && allocationsResponse.data) {
-          setInventoryAllocations(allocationsResponse.data || []);
-        }
-        
-        // Refresh wedding data to update costs
-        const weddingResponse = await weddingsAPI.getById(id);
-        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
-          setWedding(weddingResponse.data);
-        }
-      } catch (allocError) {
-        console.error('Error refreshing inventory allocations:', allocError);
-      }
+      // Refresh wedding stats (guest counts, tables, inventory allocations, etc.)
+      await refreshWeddingStats();
       
       // Reset form
       setTableCategory('');
@@ -1507,67 +1449,8 @@ const WeddingDetail = () => {
       }
       await tablesAPI.assignGuests(id, Number(tableId), [numericGuestId]);
       
-      // Refresh guests to get updated table_id
-      const guestsResp = await guestsAPI.getByWedding(id);
-      if (guestsResp && guestsResp.data) {
-        const transformedGuests = guestsResp.data.map((g: any) => {
-          const guestName = g.guest_name || '';
-          let restrictions: any[] = [];
-          if (g.restrictions) {
-            try {
-              if (typeof g.restrictions === 'string') {
-                restrictions = JSON.parse(g.restrictions);
-              } else if (Array.isArray(g.restrictions)) {
-                restrictions = g.restrictions;
-              }
-            } catch (e) {
-              restrictions = [];
-            }
-          }
-          restrictions = restrictions.filter((r: any) => r && (r.restriction_id || r.restriction_name));
-          
-          return {
-            id: g.guest_id || g.id || 0,
-            guest_id: g.guest_id || g.id || 0,
-            firstName: guestName.split(' ')[0] || '',
-            lastName: guestName.split(' ').slice(1).join(' ') || '',
-            name: guestName,
-            dietaryRestriction: g.restriction_name || null,
-            dietaryRestrictions: restrictions,
-            rsvpStatus: g.rsvp_status || 'pending',
-            weddingId: g.wedding_id,
-            table_id: g.table_id || null
-          };
-        }).filter((g: any) => g !== null);
-        
-        setGuests(transformedGuests);
-      }
-      
-      // Refresh tables to update counts
-      const tablesResp = await tablesAPI.getSeating(id);
-      if (tablesResp) {
-        let tablesData: any[] = [];
-        if (tablesResp.data && Array.isArray(tablesResp.data)) {
-          tablesData = tablesResp.data;
-        } else if (Array.isArray(tablesResp)) {
-          tablesData = tablesResp;
-        } else if ((tablesResp as any).success && (tablesResp as any).data && Array.isArray((tablesResp as any).data)) {
-          tablesData = tablesResp.data;
-        }
-        tablesData = tablesData.map((t: any) => ({
-          ...t,
-          id: t.id || t.table_id,
-          table_id: t.table_id || t.id,
-          tableNumber: t.tableNumber || t.table_number,
-          table_number: t.table_number || t.tableNumber,
-          category: t.category || t.table_category,
-          table_category: t.table_category || t.category,
-          capacity: t.capacity || 0,
-          assignedGuests: t.assignedGuests || t.assigned_guests || [],
-          assigned_guests: t.assigned_guests || t.assignedGuests || []
-        }));
-        setTables(tablesData);
-      }
+      // Refresh wedding stats (guest counts, tables, etc.)
+      await refreshWeddingStats();
       
       // Reset form
       setAllocationTableId('');
@@ -1759,41 +1642,8 @@ const WeddingDetail = () => {
       // Use backend API to assign guests (this will handle reassignment automatically)
       await tablesAPI.assignGuests(id, tableId, guestsToAssign);
       
-      // Refresh guests to get updated table_id
-      const guestsResp = await guestsAPI.getByWedding(id);
-      if (guestsResp && guestsResp.data) {
-        const transformedGuests = guestsResp.data.map((g: any) => {
-          const guestName = g.guest_name || '';
-          let restrictions: any[] = [];
-          if (g.restrictions) {
-            try {
-              if (typeof g.restrictions === 'string') {
-                restrictions = JSON.parse(g.restrictions);
-              } else if (Array.isArray(g.restrictions)) {
-                restrictions = g.restrictions;
-              }
-            } catch (e) {
-              restrictions = [];
-            }
-          }
-          restrictions = restrictions.filter((r: any) => r && (r.restriction_id || r.restriction_name));
-          
-          return {
-            id: g.guest_id || g.id || 0,
-            guest_id: g.guest_id || g.id || 0,
-            firstName: guestName.split(' ')[0] || '',
-            lastName: guestName.split(' ').slice(1).join(' ') || '',
-            name: guestName,
-            dietaryRestriction: g.restriction_name || null,
-            dietaryRestrictions: restrictions,
-            rsvpStatus: g.rsvp_status || 'pending',
-            weddingId: g.wedding_id,
-            table_id: g.table_id || null
-          };
-        }).filter((g: any) => g !== null);
-        
-        setGuests(transformedGuests);
-      }
+      // Refresh wedding stats (guest counts, tables, etc.)
+      await refreshWeddingStats();
       
       // Reset form
       setSelectedGuestIds([]);
@@ -1804,32 +1654,6 @@ const WeddingDetail = () => {
         title: 'Guests Assigned',
         description: `${guestsToAssign.length} guest(s) ${guestsToReassign.length > 0 ? 'reassigned' : 'assigned'} to ${table.tableNumber || table.table_number}`,
       });
-      
-      // Refresh tables to update counts
-      const tablesResp = await tablesAPI.getSeating(id);
-      if (tablesResp) {
-        let tablesData: any[] = [];
-        if (tablesResp.data && Array.isArray(tablesResp.data)) {
-          tablesData = tablesResp.data;
-        } else if (Array.isArray(tablesResp)) {
-          tablesData = tablesResp;
-        } else if ((tablesResp as any).success && (tablesResp as any).data && Array.isArray((tablesResp as any).data)) {
-          tablesData = tablesResp.data;
-        }
-        tablesData = tablesData.map((t: any) => ({
-          ...t,
-          id: t.id || t.table_id,
-          table_id: t.table_id || t.id,
-          tableNumber: t.tableNumber || t.table_number,
-          table_number: t.table_number || t.tableNumber,
-          category: t.category || t.table_category,
-          table_category: t.table_category || t.category,
-          capacity: t.capacity || 0,
-          assignedGuests: t.assignedGuests || t.assigned_guests || [],
-          assigned_guests: t.assigned_guests || t.assignedGuests || []
-        }));
-        setTables(tablesData);
-      }
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -2084,9 +1908,7 @@ const WeddingDetail = () => {
         inventory_id: selectedItem.inventory_id,
         item_name: selectedItem.item_name,
         unit_rental_cost: selectedItem.unit_rental_cost,
-        rental_cost: selectedItem.rental_cost,
-        unit_rental_cost_type: typeof selectedItem.unit_rental_cost,
-        rental_cost_type: typeof selectedItem.rental_cost
+        unit_rental_cost_type: typeof selectedItem.unit_rental_cost
       });
       
       // Parse rental cost - handle both number and string types
@@ -2095,15 +1917,11 @@ const WeddingDetail = () => {
         rentalCost = typeof selectedItem.unit_rental_cost === 'number' 
           ? selectedItem.unit_rental_cost 
           : parseFloat(String(selectedItem.unit_rental_cost)) || 0;
-      } else if (selectedItem.rental_cost !== undefined && selectedItem.rental_cost !== null) {
-        rentalCost = typeof selectedItem.rental_cost === 'number' 
-          ? selectedItem.rental_cost 
-          : parseFloat(String(selectedItem.rental_cost)) || 0;
       }
       
       console.log('[FRONTEND] Parsed rental cost:', rentalCost);
       
-      // Ensure rental_cost is a valid number
+      // Ensure unit_rental_cost is a valid number
       if (isNaN(rentalCost) || rentalCost < 0) {
         throw new Error(`Invalid rental cost from inventory item: ${rentalCost}. Item: ${selectedItem.item_name}`);
       }
@@ -2112,13 +1930,12 @@ const WeddingDetail = () => {
         wedding_id: parseInt(id || '0'),
         inventory_id: parseInt(allocationFormData.inventory_id),
         quantity_used: quantity,
-        unit_rental_cost: rentalCost,
-        rental_cost: rentalCost // Keep for backward compatibility
+        unit_rental_cost: rentalCost
       });
       
       toast({ title: 'Success', description: 'Inventory allocated successfully' });
       setAddAllocationOpen(false);
-      setAllocationFormData({ inventory_id: '', quantity_used: '', unit_rental_cost: '', rental_cost: '' });
+      setAllocationFormData({ inventory_id: '', quantity_used: '', unit_rental_cost: '' });
       
       // Refresh allocations
       const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id || '0');
@@ -2141,11 +1958,9 @@ const WeddingDetail = () => {
         console.log('[FRONTEND] Sample allocation:', {
           allocation_id: allocations[0].allocation_id,
           unit_rental_cost: allocations[0].unit_rental_cost,
-          rental_cost: allocations[0].rental_cost,
           total_cost: allocations[0].total_cost,
           types: {
             unit_rental_cost: typeof allocations[0].unit_rental_cost,
-            rental_cost: typeof allocations[0].rental_cost,
             total_cost: typeof allocations[0].total_cost
           }
         });
@@ -2173,8 +1988,7 @@ const WeddingDetail = () => {
     setAllocationFormData({
       inventory_id: allocation.inventory_id?.toString() || '',
       quantity_used: allocation.quantity_used?.toString() || '',
-      unit_rental_cost: '',
-      rental_cost: ''
+      unit_rental_cost: ''
     });
     setAllocationFormErrors({});
     setEditAllocationOpen(true);
@@ -2432,51 +2246,8 @@ const WeddingDetail = () => {
       // Update table capacity via backend
       await tablesAPI.updateTable(editingTable.id || editingTable.table_id, { capacity });
       
-      // Refresh tables
-      const resp = await tablesAPI.getSeating(id);
-      let tablesData: any[] = [];
-      if (resp) {
-        if (resp.data && Array.isArray(resp.data)) {
-          tablesData = resp.data;
-        } else if (Array.isArray(resp)) {
-          tablesData = resp;
-        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
-          tablesData = resp.data;
-        }
-      }
-      
-      tablesData = tablesData.map((t: any) => ({
-        ...t,
-        id: t.id || t.table_id,
-        table_id: t.table_id || t.id,
-        tableNumber: t.tableNumber || t.table_number,
-        table_number: t.table_number || t.tableNumber,
-        category: t.category || t.table_category,
-        table_category: t.table_category || t.category,
-        capacity: t.capacity || 0,
-        assignedGuests: t.assignedGuests || t.assigned_guests || [],
-        assigned_guests: t.assigned_guests || t.assignedGuests || []
-      }));
-      
-      setTables(tablesData);
-      
-      // Refresh inventory allocations after table update
-      try {
-        const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
-        if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
-          setInventoryAllocations(allocationsResponse.data || []);
-        } else if (allocationsResponse && allocationsResponse.data) {
-          setInventoryAllocations(allocationsResponse.data || []);
-        }
-        
-        // Refresh wedding data to update costs
-        const weddingResponse = await weddingsAPI.getById(id);
-        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
-          setWedding(weddingResponse.data);
-        }
-      } catch (allocError) {
-        console.error('Error refreshing inventory allocations:', allocError);
-      }
+      // Refresh wedding stats (guest counts, tables, etc.)
+      await refreshWeddingStats();
       
       toast({
         title: 'Table Updated',
@@ -2516,54 +2287,11 @@ const WeddingDetail = () => {
     try {
       await tablesAPI.deleteTable(tableId);
       
-      // Refresh tables
-      const resp = await tablesAPI.getSeating(id);
-      let tablesData: any[] = [];
-      if (resp) {
-        if (resp.data && Array.isArray(resp.data)) {
-          tablesData = resp.data;
-        } else if (Array.isArray(resp)) {
-          tablesData = resp;
-        } else if ((resp as any).success && (resp as any).data && Array.isArray((resp as any).data)) {
-          tablesData = resp.data;
-        }
-      }
+      // Refresh wedding stats (guest counts, tables, etc.)
+      await refreshWeddingStats();
       
-      tablesData = tablesData.map((t: any) => ({
-        ...t,
-        id: t.id || t.table_id,
-        table_id: t.table_id || t.id,
-        tableNumber: t.tableNumber || t.table_number,
-        table_number: t.table_number || t.tableNumber,
-        category: t.category || t.table_category,
-        table_category: t.table_category || t.category,
-        capacity: t.capacity || 0,
-        assignedGuests: t.assignedGuests || t.assigned_guests || [],
-        assigned_guests: t.assigned_guests || t.assignedGuests || []
-      }));
-      
-      setTables(tablesData);
-      
-      // Refresh inventory allocations after table deletion
-      try {
-        const allocationsResponse = await inventoryAllocationAPI.getAllByWedding(id);
-        if (allocationsResponse && (allocationsResponse as any).success && (allocationsResponse as any).data) {
-          setInventoryAllocations(allocationsResponse.data || []);
-        } else if (allocationsResponse && allocationsResponse.data) {
-          setInventoryAllocations(allocationsResponse.data || []);
-        }
-        
-        // Refresh wedding data to update costs
-        const weddingResponse = await weddingsAPI.getById(id);
-        if (weddingResponse && (weddingResponse as any).success && (weddingResponse as any).data) {
-          setWedding(weddingResponse.data);
-        }
-      } catch (allocError) {
-        console.error('Error refreshing inventory allocations:', allocError);
-      }
-      
-      // Show warning if no tables exist
-      if (tablesData.length === 0) {
+      // Show warning if no tables exist (check after refresh)
+      if (tables.length === 0) {
         toast({
           title: 'Warning',
           description: 'No tables exist for this wedding. Please create a table to assign guests.',
@@ -3926,7 +3654,9 @@ const WeddingDetail = () => {
                         { category: 'guest', capacity: 10, icon: getTableCategoryIcon('guest'), label: 'Guest' },
                       ].map((item) => {
                         const Icon = item.icon;
-                        const isDisabled = tables.filter(t => (t?.table_category === 'couple') || (t?.category === 'couple')).length === 0;
+                        // Don't disable buttons - they will auto-create couple table if needed
+                        // Only disable if tables are currently loading
+                        const isDisabled = seatingLoading;
                         // Match colors with seating layout - softer, better for dark mode
                         const categoryColors: Record<string, string> = {
                           'VIP': 'bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-200 border-purple-300 dark:border-purple-800 hover:bg-purple-200 dark:hover:bg-purple-900',
