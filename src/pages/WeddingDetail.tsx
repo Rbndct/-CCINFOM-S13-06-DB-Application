@@ -2518,6 +2518,10 @@ const WeddingDetail = () => {
         console.error('Error refreshing wedding data:', weddingError);
       }
       
+      // Invalidate and refetch weddings list to update Wedding Directory
+      queryClient.invalidateQueries({ queryKey: ['weddings'] });
+      queryClient.refetchQueries({ queryKey: ['weddings'] });
+      
       // Reset form
       setPackageAssignTableId('');
       setPackageAssignPackageId('');
@@ -2583,6 +2587,10 @@ const WeddingDetail = () => {
       } catch (weddingError) {
         console.error('Error refreshing wedding data:', weddingError);
       }
+      
+      // Invalidate and refetch weddings list to update Wedding Directory
+      queryClient.invalidateQueries({ queryKey: ['weddings'] });
+      queryClient.refetchQueries({ queryKey: ['weddings'] });
       
       setDeletePackageAssignmentOpen(false);
       setSelectedPackageAssignment(null);

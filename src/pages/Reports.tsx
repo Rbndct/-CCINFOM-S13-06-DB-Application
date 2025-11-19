@@ -1,4 +1,4 @@
-import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package } from 'lucide-react';
+import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package, Receipt, ArrowDownCircle, ArrowUpCircle, Minus, Percent, Activity, Building2, Wrench, TrendingUpDown } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { tablesAPI, weddingsAPI } from '@/api';
 import { useCurrencyFormat } from '@/utils/currency';
+import { useCurrency, SupportedCurrency } from '@/context/CurrencyContext';
 import api from '@/api';
 import { Loader2 } from 'lucide-react';
 import { 
@@ -30,6 +31,24 @@ import {
 
 const Reports = () => {
   const { formatCurrency } = useCurrencyFormat();
+  const { currency, setCurrency } = useCurrency();
+  
+  const CURRENCY_OPTIONS: { code: SupportedCurrency; symbol: string; name: string }[] = [
+    { code: 'PHP', symbol: '₱', name: 'Philippine Peso' },
+    { code: 'USD', symbol: '$', name: 'US Dollar' },
+    { code: 'EUR', symbol: '€', name: 'Euro' },
+    { code: 'GBP', symbol: '£', name: 'British Pound' },
+    { code: 'JPY', symbol: '¥', name: 'Japanese Yen' },
+    { code: 'AUD', symbol: 'A$', name: 'Australian Dollar' },
+    { code: 'CAD', symbol: 'C$', name: 'Canadian Dollar' },
+    { code: 'CHF', symbol: 'CHF', name: 'Swiss Franc' },
+    { code: 'CNY', symbol: '¥', name: 'Chinese Yuan' },
+    { code: 'HKD', symbol: 'HK$', name: 'Hong Kong Dollar' },
+    { code: 'SGD', symbol: 'S$', name: 'Singapore Dollar' },
+    { code: 'KRW', symbol: '₩', name: 'South Korean Won' },
+    { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+    { code: 'NZD', symbol: 'NZ$', name: 'New Zealand Dollar' },
+  ];
   const [period, setPeriod] = useState<'day' | 'month' | 'year'>('month');
   const [value, setValue] = useState<string>(''); // YYYY-MM-DD, YYYY-MM, or YYYY
   const [sales, setSales] = useState<any>(null);
@@ -176,46 +195,74 @@ const Reports = () => {
                 <CardTitle>Financial Report Filters</CardTitle>
                 <CardDescription>Select a period and date for financial analysis</CardDescription>
               </CardHeader>
-              <CardContent className="grid md:grid-cols-4 gap-3">
-                <div>
-                  <label className="text-sm text-muted-foreground">Period</label>
-                  <Select value={period} onValueChange={(v: any) => {
-                    setPeriod(v);
-                    setFinancial(null);
-                    setValue('');
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="day">Day (YYYY-MM-DD)</SelectItem>
-                      <SelectItem value="month">Month (YYYY-MM)</SelectItem>
-                      <SelectItem value="year">Year (YYYY)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm text-muted-foreground">
-                    {period === 'day' ? 'Day (YYYY-MM-DD)' : period === 'month' ? 'Month (YYYY-MM)' : 'Year (YYYY)'}
-                  </label>
-                  <Input 
-                    value={value} 
-                    onChange={(e) => {
-                      setValue(e.target.value);
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-sm text-muted-foreground">Period</label>
+                    <Select value={period} onValueChange={(v: any) => {
+                      setPeriod(v);
                       setFinancial(null);
-                    }} 
-                    placeholder={getPlaceholder()} 
-                  />
+                      setValue('');
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="day">Day (YYYY-MM-DD)</SelectItem>
+                        <SelectItem value="month">Month (YYYY-MM)</SelectItem>
+                        <SelectItem value="year">Year (YYYY)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-muted-foreground">
+                      {period === 'day' ? 'Day (YYYY-MM-DD)' : period === 'month' ? 'Month (YYYY-MM)' : 'Year (YYYY)'}
+                    </label>
+                    <Input 
+                      value={value} 
+                      onChange={(e) => {
+                        setValue(e.target.value);
+                        setFinancial(null);
+                      }} 
+                      placeholder={getPlaceholder()} 
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={fetchFinancial} disabled={!value || financialLoading}>
+                      {financialLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Generate Report'
+                      )}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-end">
-                  <Button onClick={fetchFinancial} disabled={!value || financialLoading}>
-                    {financialLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      'Generate Report'
-                    )}
-                  </Button>
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-medium">Display Currency</label>
+                      <p className="text-xs text-muted-foreground">Change currency for all amounts in this report</p>
+                    </div>
+                    <Select value={currency} onValueChange={(value) => setCurrency(value as SupportedCurrency)}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue>
+                          {CURRENCY_OPTIONS.find(c => c.code === currency)?.symbol} {currency}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CURRENCY_OPTIONS.map((curr) => (
+                          <SelectItem key={curr.code} value={curr.code}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{curr.symbol}</span>
+                              <span>{curr.name}</span>
+                              <span className="text-muted-foreground">({curr.code})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -236,107 +283,233 @@ const Reports = () => {
                     </CardContent>
                   </Card>
                 )}
+
+                {/* Key Performance Indicators */}
+                <div className="grid gap-4 md:grid-cols-4">
+                  <Card className="border-green-200 dark:border-green-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Receipt className="h-4 w-4 text-green-600" />
+                        Total Revenue
+                      </CardTitle>
+                      <TrendingUp className="h-4 w-4 text-green-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-green-600">
+                        {formatCurrency(financial.revenue?.total || 0)}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {financial.revenue?.change_percent !== undefined && financial.revenue.change_percent !== 0 && (
+                          <span className={financial.revenue.change_percent > 0 ? 'text-green-600' : 'text-red-600'}>
+                            {financial.revenue.change_percent > 0 ? '↑' : '↓'} {Math.abs(financial.revenue.change_percent).toFixed(1)}% vs previous
+                          </span>
+                        )}
+                        {(!financial.revenue?.change_percent || financial.revenue.change_percent === 0) && 'Package sales revenue'}
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-blue-200 dark:border-blue-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Percent className="h-4 w-4 text-blue-600" />
+                        Gross Margin
+                      </CardTitle>
+                      <Activity className="h-4 w-4 text-blue-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-blue-600">
+                        {financial.gross_profit?.margin_percent?.toFixed(1) || 0}%
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatCurrency(financial.gross_profit?.total || 0)} gross profit
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-purple-200 dark:border-purple-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-purple-600" />
+                        Net Margin
+                      </CardTitle>
+                      <TrendingUpDown className="h-4 w-4 text-purple-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className={`text-2xl font-bold ${(financial.net_profit?.total || 0) >= 0 ? 'text-purple-600' : 'text-red-600'}`}>
+                        {financial.net_profit?.margin_percent?.toFixed(1) || 0}%
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {formatCurrency(financial.net_profit?.total || 0)} net profit
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-orange-200 dark:border-orange-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4 text-orange-600" />
+                        Weddings
+                      </CardTitle>
+                      <Users className="h-4 w-4 text-orange-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-orange-600">
+                        {financial.weddings_count || 0}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {financial.table_assignments || 0} table assignments
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
                 {/* Income Statement */}
-                <Card>
-                  <CardHeader>
+                <Card className="border-2">
+                  <CardHeader className="bg-muted/50">
                     <div className="flex items-center justify-between">
-                      <CardTitle>Income Statement</CardTitle>
-                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                          <FileText className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-2xl">Income Statement</CardTitle>
+                          <CardDescription className="text-base mt-1">
+                            {period === 'month' ? `For ${value}` : period === 'day' ? `For ${value}` : `For Year ${value}`}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-sm">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        {period === 'day' ? 'Daily' : period === 'month' ? 'Monthly' : 'Annual'}
+                      </Badge>
                     </div>
-                    <CardDescription>
-                      {period === 'month' ? `For ${value}` : period === 'day' ? `For ${value}` : `For Year ${value}`}
-                    </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Revenue */}
-                      <div className="border-b pb-4">
-                        <div className="flex items-center justify-between mb-2">
-                          <div>
-                            <h3 className="font-semibold text-lg">Revenue</h3>
-                            <p className="text-sm text-muted-foreground">Package Sales</p>
-                          </div>
-                          <div className="text-right">
-                            <div className="text-2xl font-bold text-green-600">
-                              {formatCurrency(financial.revenue?.total || 0)}
+                  <CardContent className="pt-6">
+                    <div className="space-y-6">
+                      {/* Revenue Section */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-2 border-b-2">
+                          <ArrowUpCircle className="h-5 w-5 text-green-600" />
+                          <h3 className="font-bold text-lg text-green-600">REVENUE</h3>
+                        </div>
+                        <div className="ml-7 space-y-2">
+                          <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center gap-2">
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">Package Sales</span>
                             </div>
-                            {financial.revenue?.change_percent !== undefined && financial.revenue.change_percent !== 0 && (
-                              <div className={`text-sm flex items-center gap-1 ${financial.revenue.change_percent > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {financial.revenue.change_percent > 0 ? (
-                                  <TrendingUp className="h-4 w-4" />
-                                ) : (
-                                  <TrendingDown className="h-4 w-4" />
-                                )}
-                                {Math.abs(financial.revenue.change_percent).toFixed(1)}% vs previous period
+                            <div className="text-right">
+                              <div className="text-xl font-bold text-green-600">
+                                {formatCurrency(financial.revenue?.total || 0)}
                               </div>
-                            )}
+                              {financial.revenue?.change_percent !== undefined && financial.revenue.change_percent !== 0 && (
+                                <div className={`text-xs flex items-center justify-end gap-1 mt-1 ${financial.revenue.change_percent > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {financial.revenue.change_percent > 0 ? (
+                                    <TrendingUp className="h-3 w-3" />
+                                  ) : (
+                                    <TrendingDown className="h-3 w-3" />
+                                  )}
+                                  {Math.abs(financial.revenue.change_percent).toFixed(1)}% vs previous period
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-between pt-2 border-t font-bold text-lg">
+                            <span>Total Revenue</span>
+                            <span className="text-green-600">{formatCurrency(financial.revenue?.total || 0)}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* COGS */}
-                      <div className="border-b pb-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-semibold">Cost of Goods Sold (COGS)</h3>
-                            <p className="text-sm text-muted-foreground">Package Costs</p>
+                      {/* COGS Section */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-2 border-b-2">
+                          <ArrowDownCircle className="h-5 w-5 text-red-600" />
+                          <h3 className="font-bold text-lg text-red-600">COST OF GOODS SOLD (COGS)</h3>
+                        </div>
+                        <div className="ml-7 space-y-2">
+                          <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center gap-2">
+                              <Calculator className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">Package Costs</span>
+                            </div>
+                            <div className="text-xl font-bold text-red-600">
+                              {formatCurrency(financial.cogs?.total || 0)}
+                            </div>
                           </div>
-                          <div className="text-xl font-semibold text-red-600">
-                            {formatCurrency(financial.cogs?.total || 0)}
+                          <div className="flex items-center justify-between pt-2 border-t font-bold text-lg">
+                            <span>Total COGS</span>
+                            <span className="text-red-600">{formatCurrency(financial.cogs?.total || 0)}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Gross Profit */}
-                      <div className="border-b pb-4">
+                      <div className="bg-blue-50 dark:bg-blue-950/20 p-4 rounded-lg border-2 border-blue-200 dark:border-blue-900">
                         <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-semibold">Gross Profit</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Margin: {financial.gross_profit?.margin_percent?.toFixed(2) || 0}%
-                            </p>
+                          <div className="flex items-center gap-2">
+                            <Percent className="h-5 w-5 text-blue-600" />
+                            <div>
+                              <h3 className="font-bold text-lg text-blue-600">GROSS PROFIT</h3>
+                              <p className="text-sm text-muted-foreground">
+                                Gross Margin: {financial.gross_profit?.margin_percent?.toFixed(2) || 0}%
+                              </p>
+                            </div>
                           </div>
-                          <div className="text-xl font-semibold text-blue-600">
+                          <div className="text-2xl font-bold text-blue-600">
                             {formatCurrency(financial.gross_profit?.total || 0)}
                           </div>
                         </div>
                       </div>
 
-                      {/* Operating Costs */}
-                      <div className="border-b pb-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-semibold">Operating Costs</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Equipment Rental: {formatCurrency(financial.operating_costs?.equipment_rental || 0)}
-                            </p>
+                      {/* Operating Expenses Section */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-2 border-b-2">
+                          <Building2 className="h-5 w-5 text-orange-600" />
+                          <h3 className="font-bold text-lg text-orange-600">OPERATING EXPENSES</h3>
+                        </div>
+                        <div className="ml-7 space-y-2">
+                          <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center gap-2">
+                              <Wrench className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">Equipment Rental</span>
+                            </div>
+                            <div className="text-lg font-semibold text-orange-600">
+                              {formatCurrency(financial.operating_costs?.equipment_rental || 0)}
+                            </div>
                           </div>
-                          <div className="text-xl font-semibold text-orange-600">
-                            {formatCurrency(financial.operating_costs?.total || 0)}
+                          <div className="flex items-center justify-between pt-2 border-t font-bold text-lg">
+                            <span>Total Operating Expenses</span>
+                            <span className="text-orange-600">{formatCurrency(financial.operating_costs?.total || 0)}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Net Profit */}
-                      <div className="pt-2">
-                        <div className="flex items-center justify-between bg-muted p-4 rounded-lg">
-                          <div>
-                            <h3 className="font-bold text-lg">Net Profit</h3>
-                            <p className="text-sm text-muted-foreground">
-                              Margin: {financial.net_profit?.margin_percent?.toFixed(2) || 0}%
-                            </p>
-                            {financial.net_profit?.change_percent !== undefined && financial.net_profit.change_percent !== 0 && (
-                              <div className={`text-sm flex items-center gap-1 mt-1 ${financial.net_profit.change_percent > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                {financial.net_profit.change_percent > 0 ? (
-                                  <TrendingUp className="h-4 w-4" />
-                                ) : (
-                                  <TrendingDown className="h-4 w-4" />
-                                )}
-                                {Math.abs(financial.net_profit.change_percent).toFixed(1)}% vs previous period
-                              </div>
-                            )}
+                      <div className={`p-6 rounded-lg border-2 ${(financial.net_profit?.total || 0) >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900'}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${(financial.net_profit?.total || 0) >= 0 ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                              <DollarSign className={`h-6 w-6 ${(financial.net_profit?.total || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                            </div>
+                            <div>
+                              <h3 className={`font-bold text-xl ${(financial.net_profit?.total || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                NET PROFIT / (LOSS)
+                              </h3>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                Net Margin: {financial.net_profit?.margin_percent?.toFixed(2) || 0}%
+                              </p>
+                              {financial.net_profit?.change_percent !== undefined && financial.net_profit.change_percent !== 0 && (
+                                <div className={`text-sm flex items-center gap-1 mt-1 ${financial.net_profit.change_percent > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {financial.net_profit.change_percent > 0 ? (
+                                    <TrendingUp className="h-4 w-4" />
+                                  ) : (
+                                    <TrendingDown className="h-4 w-4" />
+                                  )}
+                                  {Math.abs(financial.net_profit.change_percent).toFixed(1)}% vs previous period
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className={`text-3xl font-bold ${(financial.net_profit?.total || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                          <div className={`text-4xl font-bold ${(financial.net_profit?.total || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {formatCurrency(financial.net_profit?.total || 0)}
                           </div>
                         </div>
@@ -345,53 +518,6 @@ const Reports = () => {
                   </CardContent>
                 </Card>
 
-                {/* Key Metrics */}
-                <div className="grid gap-4 md:grid-cols-4">
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Weddings</CardTitle>
-                      <BarChart3 className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{financial.weddings_count || 0}</div>
-                      <p className="text-xs text-muted-foreground">With packages</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Table Assignments</CardTitle>
-                      <Calculator className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{financial.table_assignments || 0}</div>
-                      <p className="text-xs text-muted-foreground">Package assignments</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Gross Margin</CardTitle>
-                      <PieChart className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {financial.gross_profit?.margin_percent?.toFixed(1) || 0}%
-                      </div>
-                      <p className="text-xs text-muted-foreground">Profit margin</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium">Net Margin</CardTitle>
-                      <DollarSign className="h-4 w-4 text-muted-foreground" />
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">
-                        {financial.net_profit?.margin_percent?.toFixed(1) || 0}%
-                      </div>
-                      <p className="text-xs text-muted-foreground">After operating costs</p>
-                    </CardContent>
-                  </Card>
-                </div>
 
                 {/* Revenue by Package Type with Chart */}
                 {financial.revenue_by_package_type && financial.revenue_by_package_type.length > 0 && (
@@ -518,135 +644,324 @@ const Reports = () => {
                 <CardTitle>Cash Flow Statement Filters</CardTitle>
                 <CardDescription>Select a period and date for cash flow analysis</CardDescription>
               </CardHeader>
-              <CardContent className="grid md:grid-cols-4 gap-3">
-                <div>
-                  <label className="text-sm text-muted-foreground">Period</label>
-                  <Select value={period} onValueChange={(v: any) => {
-                    setPeriod(v);
-                    setCashFlow(null);
-                    setValue('');
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="day">Day (YYYY-MM-DD)</SelectItem>
-                      <SelectItem value="month">Month (YYYY-MM)</SelectItem>
-                      <SelectItem value="year">Year (YYYY)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm text-muted-foreground">
-                    {period === 'day' ? 'Day (YYYY-MM-DD)' : period === 'month' ? 'Month (YYYY-MM)' : 'Year (YYYY)'}
-                  </label>
-                  <Input 
-                    value={value} 
-                    onChange={(e) => {
-                      setValue(e.target.value);
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-sm text-muted-foreground">Period</label>
+                    <Select value={period} onValueChange={(v: any) => {
+                      setPeriod(v);
                       setCashFlow(null);
-                    }} 
-                    placeholder={getPlaceholder()} 
-                  />
+                      setValue('');
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="day">Day (YYYY-MM-DD)</SelectItem>
+                        <SelectItem value="month">Month (YYYY-MM)</SelectItem>
+                        <SelectItem value="year">Year (YYYY)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-muted-foreground">
+                      {period === 'day' ? 'Day (YYYY-MM-DD)' : period === 'month' ? 'Month (YYYY-MM)' : 'Year (YYYY)'}
+                    </label>
+                    <Input 
+                      value={value} 
+                      onChange={(e) => {
+                        setValue(e.target.value);
+                        setCashFlow(null);
+                      }} 
+                      placeholder={getPlaceholder()} 
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={fetchCashFlow} disabled={!value || cashFlowLoading}>
+                      {cashFlowLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Generate Report'
+                      )}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-end">
-                  <Button onClick={fetchCashFlow} disabled={!value || cashFlowLoading}>
-                    {cashFlowLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      'Generate Report'
-                    )}
-                  </Button>
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-medium">Display Currency</label>
+                      <p className="text-xs text-muted-foreground">Change currency for all amounts in this report</p>
+                    </div>
+                    <Select value={currency} onValueChange={(value) => setCurrency(value as SupportedCurrency)}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue>
+                          {CURRENCY_OPTIONS.find(c => c.code === currency)?.symbol} {currency}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CURRENCY_OPTIONS.map((curr) => (
+                          <SelectItem key={curr.code} value={curr.code}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{curr.symbol}</span>
+                              <span>{curr.name}</span>
+                              <span className="text-muted-foreground">({curr.code})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
             {cashFlow && (
               <>
-                {/* Cash Flow Summary */}
-                <Card>
-                  <CardHeader>
+                {/* Cash Flow Key Metrics */}
+                <div className="grid gap-4 md:grid-cols-4">
+                  <Card className="border-green-200 dark:border-green-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <ArrowUpCircle className="h-4 w-4 text-green-600" />
+                        Total Inflows
+                      </CardTitle>
+                      <TrendingUp className="h-4 w-4 text-green-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-green-600">
+                        {formatCurrency(cashFlow.cash_flows?.inflows?.total || 0)}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cash received
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-red-200 dark:border-red-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <ArrowDownCircle className="h-4 w-4 text-red-600" />
+                        Total Outflows
+                      </CardTitle>
+                      <TrendingDown className="h-4 w-4 text-red-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-red-600">
+                        {formatCurrency(cashFlow.cash_flows?.outflows?.total || 0)}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Cash paid out
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className={`border-2 ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'border-green-200 dark:border-green-900' : 'border-red-200 dark:border-red-900'}`}>
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <ArrowUpDown className={`h-4 w-4 ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                        Net Cash Flow
+                      </CardTitle>
+                      <Activity className={`h-4 w-4 ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                    </CardHeader>
+                    <CardContent>
+                      <div className={`text-2xl font-bold ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                        {formatCurrency(cashFlow.cash_flows?.net_cash_flow || 0)}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'Positive' : 'Negative'} flow
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-blue-200 dark:border-blue-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <CreditCard className="h-4 w-4 text-blue-600" />
+                        Cash Received
+                      </CardTitle>
+                      <Receipt className="h-4 w-4 text-blue-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-blue-600">
+                        {formatCurrency(cashFlow.payment_receipts?.cash_received || 0)}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Actual payments
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                {/* Cash Flow Statement */}
+                <Card className="border-2">
+                  <CardHeader className="bg-muted/50">
                     <div className="flex items-center justify-between">
-                      <CardTitle>Cash Flow Statement</CardTitle>
-                      <ArrowUpDown className="h-5 w-5 text-muted-foreground" />
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-primary/10 rounded-lg">
+                          <ArrowUpDown className="h-6 w-6 text-primary" />
+                        </div>
+                        <div>
+                          <CardTitle className="text-2xl">Cash Flow Statement</CardTitle>
+                          <CardDescription className="text-base mt-1">
+                            {period === 'day' ? `For ${value}` : period === 'month' ? `For ${value}` : `For Year ${value}`}
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <Badge variant="outline" className="text-sm">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        {period === 'day' ? 'Daily' : period === 'month' ? 'Monthly' : 'Annual'}
+                      </Badge>
                     </div>
-                    <CardDescription>
-                      {period === 'day' ? `For ${value}` : period === 'month' ? `For ${value}` : `For Year ${value}`}
-                    </CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <div className="space-y-4">
-                      {/* Cash Inflows */}
-                      <div className="border-b pb-4">
-                        <h3 className="font-semibold text-lg mb-3 text-green-600">Cash Inflows</h3>
-                        <div className="space-y-2 ml-4">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Package Sales</span>
-                            <span className="font-medium">{formatCurrency(cashFlow.cash_flows?.inflows?.package_sales || 0)}</span>
+                  <CardContent className="pt-6">
+                    <div className="space-y-6">
+                      {/* Cash Inflows Section */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-2 border-b-2 border-green-200">
+                          <ArrowUpCircle className="h-5 w-5 text-green-600" />
+                          <h3 className="font-bold text-lg text-green-600">CASH INFLOWS</h3>
+                        </div>
+                        <div className="ml-7 space-y-3">
+                          <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center gap-2">
+                              <Package className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">Package Sales Revenue</span>
+                            </div>
+                            <div className="text-xl font-bold text-green-600">
+                              {formatCurrency(cashFlow.cash_flows?.inflows?.package_sales || 0)}
+                            </div>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Equipment Rental</span>
-                            <span className="font-medium">{formatCurrency(cashFlow.cash_flows?.inflows?.equipment_rental || 0)}</span>
+                          <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center gap-2">
+                              <Wrench className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">Equipment Rental Income</span>
+                            </div>
+                            <div className="text-xl font-bold text-green-600">
+                              {formatCurrency(cashFlow.cash_flows?.inflows?.equipment_rental || 0)}
+                            </div>
                           </div>
-                          <div className="flex justify-between pt-2 border-t font-semibold">
-                            <span>Total Inflows</span>
+                          <div className="flex items-center justify-between pt-3 border-t-2 border-green-200 font-bold text-lg">
+                            <span className="text-green-600">Total Cash Inflows</span>
                             <span className="text-green-600">{formatCurrency(cashFlow.cash_flows?.inflows?.total || 0)}</span>
                           </div>
                         </div>
                       </div>
 
-                      {/* Cash Outflows */}
-                      <div className="border-b pb-4">
-                        <h3 className="font-semibold text-lg mb-3 text-red-600">Cash Outflows</h3>
-                        <div className="space-y-2 ml-4">
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Package Costs (COGS)</span>
-                            <span className="font-medium">{formatCurrency(cashFlow.cash_flows?.outflows?.package_costs || 0)}</span>
+                      {/* Cash Outflows Section */}
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 pb-2 border-b-2 border-red-200">
+                          <ArrowDownCircle className="h-5 w-5 text-red-600" />
+                          <h3 className="font-bold text-lg text-red-600">CASH OUTFLOWS</h3>
+                        </div>
+                        <div className="ml-7 space-y-3">
+                          <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center gap-2">
+                              <Calculator className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">Package Costs (COGS)</span>
+                            </div>
+                            <div className="text-xl font-bold text-red-600">
+                              {formatCurrency(cashFlow.cash_flows?.outflows?.package_costs || 0)}
+                            </div>
                           </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Equipment Costs</span>
-                            <span className="font-medium">{formatCurrency(cashFlow.cash_flows?.outflows?.equipment_costs || 0)}</span>
+                          <div className="flex items-center justify-between py-2">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">Equipment Costs</span>
+                            </div>
+                            <div className="text-xl font-bold text-red-600">
+                              {formatCurrency(cashFlow.cash_flows?.outflows?.equipment_costs || 0)}
+                            </div>
                           </div>
-                          <div className="flex justify-between pt-2 border-t font-semibold">
-                            <span>Total Outflows</span>
+                          <div className="flex items-center justify-between pt-3 border-t-2 border-red-200 font-bold text-lg">
+                            <span className="text-red-600">Total Cash Outflows</span>
                             <span className="text-red-600">{formatCurrency(cashFlow.cash_flows?.outflows?.total || 0)}</span>
                           </div>
                         </div>
                       </div>
 
                       {/* Net Cash Flow */}
-                      <div className="pt-2">
-                        <div className="flex items-center justify-between bg-muted p-4 rounded-lg">
-                          <h3 className="font-bold text-lg">Net Cash Flow</h3>
-                          <div className={`text-3xl font-bold ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      <div className={`p-6 rounded-lg border-2 ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900' : 'bg-red-50 dark:bg-red-950/20 border-red-200 dark:border-red-900'}`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={`p-2 rounded-lg ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'bg-green-100 dark:bg-green-900' : 'bg-red-100 dark:bg-red-900'}`}>
+                              <ArrowUpDown className={`h-6 w-6 ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`} />
+                            </div>
+                            <div>
+                              <h3 className={`font-bold text-xl ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                NET CASH FLOW
+                              </h3>
+                              <p className="text-sm text-muted-foreground mt-1">
+                                {(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'Positive cash position' : 'Negative cash position'}
+                              </p>
+                            </div>
+                          </div>
+                          <div className={`text-4xl font-bold ${(cashFlow.cash_flows?.net_cash_flow || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
                             {formatCurrency(cashFlow.cash_flows?.net_cash_flow || 0)}
                           </div>
                         </div>
                       </div>
 
-                      {/* Payment Receipts */}
-                      <div className="pt-4 border-t">
-                        <h3 className="font-semibold text-lg mb-3">Payment Receipts</h3>
-                        <div className="grid grid-cols-4 gap-4">
-                          <div>
-                            <div className="text-sm text-muted-foreground">Cash Received</div>
-                            <div className="text-xl font-semibold text-green-600">
-                              {formatCurrency(cashFlow.payment_receipts?.cash_received || 0)}
-                            </div>
-                          </div>
-                          <div>
-                            <div className="text-sm text-muted-foreground">Paid</div>
-                            <div className="text-xl font-semibold">{cashFlow.payment_receipts?.paid_count || 0}</div>
-                          </div>
-                          <div>
-                            <div className="text-sm text-muted-foreground">Partial</div>
-                            <div className="text-xl font-semibold text-warning">{cashFlow.payment_receipts?.partial_count || 0}</div>
-                          </div>
-                          <div>
-                            <div className="text-sm text-muted-foreground">Pending</div>
-                            <div className="text-xl font-semibold text-red-600">{cashFlow.payment_receipts?.pending_count || 0}</div>
-                          </div>
+                      {/* Payment Receipts Section */}
+                      <div className="pt-4 border-t-2">
+                        <div className="flex items-center gap-2 pb-3 mb-4">
+                          <CreditCard className="h-5 w-5 text-blue-600" />
+                          <h3 className="font-bold text-lg text-blue-600">PAYMENT RECEIPTS SUMMARY</h3>
+                        </div>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                          <Card className="border-green-200 dark:border-green-900">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs font-medium flex items-center gap-2 text-green-600">
+                                <CheckCircle className="h-3 w-3" />
+                                Paid
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="text-2xl font-bold text-green-600">
+                                {cashFlow.payment_receipts?.paid_count || 0}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">Fully paid</p>
+                            </CardContent>
+                          </Card>
+                          <Card className="border-yellow-200 dark:border-yellow-900">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs font-medium flex items-center gap-2 text-yellow-600">
+                                <Clock className="h-3 w-3" />
+                                Partial
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="text-2xl font-bold text-yellow-600">
+                                {cashFlow.payment_receipts?.partial_count || 0}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">50% paid</p>
+                            </CardContent>
+                          </Card>
+                          <Card className="border-red-200 dark:border-red-900">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs font-medium flex items-center gap-2 text-red-600">
+                                <XCircle className="h-3 w-3" />
+                                Pending
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="text-2xl font-bold text-red-600">
+                                {cashFlow.payment_receipts?.pending_count || 0}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">Not paid</p>
+                            </CardContent>
+                          </Card>
+                          <Card className="border-blue-200 dark:border-blue-900">
+                            <CardHeader className="pb-2">
+                              <CardTitle className="text-xs font-medium flex items-center gap-2 text-blue-600">
+                                <DollarSign className="h-3 w-3" />
+                                Total Received
+                              </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                              <div className="text-2xl font-bold text-blue-600">
+                                {formatCurrency(cashFlow.payment_receipts?.cash_received || 0)}
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">Actual cash</p>
+                            </CardContent>
+                          </Card>
                         </div>
                       </div>
                     </div>
@@ -709,46 +1024,74 @@ const Reports = () => {
                 <CardTitle>Accounts Receivable Aging Filters</CardTitle>
                 <CardDescription>Select a period and date for receivables analysis</CardDescription>
               </CardHeader>
-              <CardContent className="grid md:grid-cols-4 gap-3">
-                <div>
-                  <label className="text-sm text-muted-foreground">Period</label>
-                  <Select value={period} onValueChange={(v: any) => {
-                    setPeriod(v);
-                    setAccountsReceivable(null);
-                    setValue('');
-                  }}>
-                    <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="day">Day (YYYY-MM-DD)</SelectItem>
-                      <SelectItem value="month">Month (YYYY-MM)</SelectItem>
-                      <SelectItem value="year">Year (YYYY)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm text-muted-foreground">
-                    {period === 'day' ? 'Day (YYYY-MM-DD)' : period === 'month' ? 'Month (YYYY-MM)' : 'Year (YYYY)'}
-                  </label>
-                  <Input 
-                    value={value} 
-                    onChange={(e) => {
-                      setValue(e.target.value);
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-sm text-muted-foreground">Period</label>
+                    <Select value={period} onValueChange={(v: any) => {
+                      setPeriod(v);
                       setAccountsReceivable(null);
-                    }} 
-                    placeholder={getPlaceholder()} 
-                  />
+                      setValue('');
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="day">Day (YYYY-MM-DD)</SelectItem>
+                        <SelectItem value="month">Month (YYYY-MM)</SelectItem>
+                        <SelectItem value="year">Year (YYYY)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2">
+                    <label className="text-sm text-muted-foreground">
+                      {period === 'day' ? 'Day (YYYY-MM-DD)' : period === 'month' ? 'Month (YYYY-MM)' : 'Year (YYYY)'}
+                    </label>
+                    <Input 
+                      value={value} 
+                      onChange={(e) => {
+                        setValue(e.target.value);
+                        setAccountsReceivable(null);
+                      }} 
+                      placeholder={getPlaceholder()} 
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={fetchAccountsReceivable} disabled={!value || arLoading}>
+                      {arLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Generate Report'
+                      )}
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex items-end">
-                  <Button onClick={fetchAccountsReceivable} disabled={!value || arLoading}>
-                    {arLoading ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      'Generate Report'
-                    )}
-                  </Button>
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-medium">Display Currency</label>
+                      <p className="text-xs text-muted-foreground">Change currency for all amounts in this report</p>
+                    </div>
+                    <Select value={currency} onValueChange={(value) => setCurrency(value as SupportedCurrency)}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue>
+                          {CURRENCY_OPTIONS.find(c => c.code === currency)?.symbol} {currency}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CURRENCY_OPTIONS.map((curr) => (
+                          <SelectItem key={curr.code} value={curr.code}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{curr.symbol}</span>
+                              <span>{curr.name}</span>
+                              <span className="text-muted-foreground">({curr.code})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1336,7 +1679,11 @@ const Reports = () => {
                                 <Cell key={`cell-${index}`} fill={[CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.info][index % 4]} />
                               ))}
                             </Pie>
-                            <Tooltip formatter={(value: number, name: string) => [`${value} (${((value / Object.values(payments.statusCounts).reduce((a: number, b: any) => a + b, 0)) * 100).toFixed(1)}%)`, name] as [string, string]} />
+                            <Tooltip formatter={(value: number, name: string) => {
+                              const total: number = (Object.values(payments.statusCounts) as number[]).reduce((a: number, b: number) => a + (b || 0), 0);
+                              const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0';
+                              return [`${value} (${percentage}%)`, name] as [string, string];
+                            }} />
                             <Legend 
                               verticalAlign="middle" 
                               align="right" 
