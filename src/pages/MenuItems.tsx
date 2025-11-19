@@ -937,7 +937,7 @@ const MenuItems = () => {
                               Used in {item.usage_count || 0} package{item.usage_count !== 1 ? 's' : ''}
                             </span>
                           </TableCell>
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">

@@ -765,7 +765,7 @@ const Packages = () => {
                               {formatCurrency((pkg.selling_price || pkg.package_price || 0) * (pkg.usage_count || 0))}
                             </div>
                           </TableCell>
-                          <TableCell>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" className="h-8 w-8 p-0">
