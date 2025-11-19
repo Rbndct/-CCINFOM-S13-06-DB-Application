@@ -77,8 +77,7 @@ CREATE TABLE wedding (
     guest_count INT,
     equipment_rental_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
     food_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
-    total_cost DECIMAL(10,2),
-    production_cost DECIMAL(10,2),
+    total_cost DECIMAL(10,2), -- Calculated as equipment_rental_cost + food_cost
     venue VARCHAR(255) NOT NULL,
     wedding_date DATE NOT NULL,
     wedding_time TIME NOT NULL,
@@ -203,7 +202,6 @@ CREATE TABLE inventory_items (
     item_condition VARCHAR(50) NOT NULL,
     quantity_available INT NOT NULL,
     unit_rental_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
-    rental_cost DECIMAL(10,2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
@@ -215,7 +213,6 @@ CREATE TABLE inventory_allocation (
     inventory_id INT NOT NULL,
     quantity_used INT NOT NULL,
     unit_rental_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
-    rental_cost DECIMAL(10,2) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (wedding_id) REFERENCES wedding(wedding_id) ON DELETE CASCADE,
