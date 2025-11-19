@@ -20,12 +20,12 @@ router.get('/sales', async (req, res) => {
     const {period = 'month', value} = req.query;
     const {sql: whereSql, params} = periodWhere(period, value);
 
-    // Totals and averages (use equipment_rental_cost + food_cost as income
-    // proxy)
+    // Totals and averages (use total_cost which represents customer invoice amount:
+    // equipment_rental_cost + package selling_price)
     const [incomeRows] = await promisePool.query(
         `SELECT 
-         COALESCE(SUM(w.equipment_rental_cost + w.food_cost), 0) AS totalIncome,
-         COALESCE(AVG(w.equipment_rental_cost + w.food_cost), 0) AS avgIncome,
+         COALESCE(SUM(w.total_cost), 0) AS totalIncome,
+         COALESCE(AVG(w.total_cost), 0) AS avgIncome,
          COUNT(*) AS weddingCount
        FROM wedding w
        WHERE ${whereSql}`,
@@ -861,6 +861,7 @@ router.get('/menu-usage', async (req, res) => {
     const {sql: whereSql, params} = periodWhere(period, value);
 
     // Menu item usage count and financials
+    // Count actual usage: sum of (quantity in package_menu_items) for each table assignment
     const [menuUsageData] = await promisePool.query(
         `SELECT 
         m.menu_item_id,
@@ -868,10 +869,10 @@ router.get('/menu-usage', async (req, res) => {
         m.menu_type,
         m.unit_cost,
         m.selling_price,
-        COUNT(DISTINCT tp.table_id) AS usage_count,
-        COALESCE(SUM(p.selling_price), 0) AS total_revenue,
-        COALESCE(SUM(p.unit_cost), 0) AS total_cost,
-        COALESCE(SUM(p.selling_price - p.unit_cost), 0) AS total_profit
+        COALESCE(SUM(COALESCE(pmi.quantity, 1)), 0) AS usage_count,
+        COALESCE(SUM(COALESCE(pmi.quantity, 1) * m.selling_price), 0) AS total_revenue,
+        COALESCE(SUM(COALESCE(pmi.quantity, 1) * m.unit_cost), 0) AS total_cost,
+        COALESCE(SUM(COALESCE(pmi.quantity, 1) * (m.selling_price - m.unit_cost)), 0) AS total_profit
       FROM menu_item m
       JOIN package_menu_items pmi ON pmi.menu_item_id = m.menu_item_id
       JOIN package p ON pmi.package_id = p.package_id
@@ -896,7 +897,7 @@ router.get('/menu-usage', async (req, res) => {
       const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
       const prevWhere = periodWhere('month', prevMonthStr);
       const [prevData] = await promisePool.query(
-          `SELECT COUNT(DISTINCT tp.table_id) AS total_usage
+          `SELECT COALESCE(SUM(COALESCE(pmi.quantity, 1)), 0) AS total_usage
          FROM package_menu_items pmi
          JOIN package p ON pmi.package_id = p.package_id
          JOIN table_package tp ON tp.package_id = p.package_id
@@ -929,7 +930,7 @@ router.get('/menu-usage', async (req, res) => {
           menu_item_id: item.menu_item_id,
           menu_name: item.menu_name,
           menu_type: item.menu_type,
-          usage_count: item.usage_count || 0,
+          usage_count: parseInt(item.usage_count) || 0,
           total_revenue: parseFloat(item.total_revenue || 0),
           total_cost: parseFloat(item.total_cost || 0),
           total_profit: parseFloat(item.total_profit || 0),
@@ -943,6 +944,114 @@ router.get('/menu-usage', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to generate menu usage report',
+      message: error.message
+    });
+  }
+});
+
+// GET /reports/inventory-usage?period=month|year&value=YYYY-MM|YYYY
+// Inventory usage analytics across all weddings
+router.get('/inventory-usage', async (req, res) => {
+  try {
+    const {period = 'month', value} = req.query;
+    const {sql: whereSql, params} = periodWhere(period, value);
+
+    // Inventory usage calculation
+    const [inventoryUsageData] = await promisePool.query(
+        `SELECT 
+        ii.inventory_id,
+        ii.item_name,
+        ii.category,
+        ii.item_condition,
+        ii.quantity_available,
+        COALESCE(SUM(ia.quantity_used), 0) AS total_used,
+        COUNT(DISTINCT ia.wedding_id) AS wedding_count,
+        COUNT(DISTINCT ia.allocation_id) AS allocation_count,
+        COALESCE(SUM(ia.quantity_used * ia.unit_rental_cost), 0) AS total_revenue
+      FROM inventory_items ii
+      INNER JOIN inventory_allocation ia ON ia.inventory_id = ii.inventory_id
+      INNER JOIN wedding w ON ia.wedding_id = w.wedding_id
+      WHERE ${whereSql}
+      GROUP BY ii.inventory_id, ii.item_name, ii.category, ii.item_condition, ii.quantity_available
+      HAVING total_used > 0
+      ORDER BY total_used DESC`,
+        params);
+
+    // Filter to only show items that were actually used in the period
+    const usedItems = inventoryUsageData.filter(item => item.total_used > 0);
+
+    // Items needing attention (repair or low stock)
+    const needsAttention = usedItems.filter(item => {
+      const condition = (item.item_condition || '').toLowerCase();
+      const needsRepair = condition.includes('repair') || condition.includes('damaged') || condition.includes('broken');
+      const lowStock = parseFloat(item.quantity_available || 0) <= 5; // Threshold for low stock
+      return needsRepair || lowStock;
+    });
+
+    // Calculate totals
+    const totalItems = usedItems.length;
+    const totalUsed = usedItems.reduce((sum, item) => sum + parseFloat(item.total_used || 0), 0);
+    const totalRevenue = usedItems.reduce((sum, item) => sum + parseFloat(item.total_revenue || 0), 0);
+    const totalWeddings = new Set(usedItems.flatMap(item => item.wedding_count ? [item.wedding_id] : [])).size;
+
+    // Category breakdown
+    const categoryBreakdown = usedItems.reduce((acc, item) => {
+      const category = item.category || 'Uncategorized';
+      if (!acc[category]) {
+        acc[category] = {count: 0, total_used: 0, total_revenue: 0};
+      }
+      acc[category].count += 1;
+      acc[category].total_used += parseFloat(item.total_used || 0);
+      acc[category].total_revenue += parseFloat(item.total_revenue || 0);
+      return acc;
+    }, {});
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        value,
+        total_items: totalItems,
+        total_used: totalUsed,
+        total_revenue: totalRevenue,
+        total_weddings: totalWeddings,
+        needs_attention_count: needsAttention.length,
+        items: usedItems.map(item => ({
+          inventory_id: item.inventory_id,
+          item_name: item.item_name,
+          category: item.category,
+          item_condition: item.item_condition,
+          quantity_available: parseFloat(item.quantity_available || 0),
+          total_used: parseFloat(item.total_used || 0),
+          wedding_count: item.wedding_count || 0,
+          allocation_count: item.allocation_count || 0,
+          total_revenue: parseFloat(item.total_revenue || 0),
+          needs_repair: (item.item_condition || '').toLowerCase().includes('repair') || 
+                       (item.item_condition || '').toLowerCase().includes('damaged') ||
+                       (item.item_condition || '').toLowerCase().includes('broken'),
+          low_stock: parseFloat(item.quantity_available || 0) <= 5
+        })),
+        needs_attention: needsAttention.map(item => ({
+          inventory_id: item.inventory_id,
+          item_name: item.item_name,
+          category: item.category,
+          item_condition: item.item_condition,
+          quantity_available: parseFloat(item.quantity_available || 0),
+          issue: (item.item_condition || '').toLowerCase().includes('repair') ? 'repair' : 'low_stock'
+        })),
+        category_breakdown: Object.entries(categoryBreakdown).map(([category, data]) => ({
+          category,
+          item_count: data.count,
+          total_used: data.total_used,
+          total_revenue: data.total_revenue
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Error generating inventory usage report:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate inventory usage report',
       message: error.message
     });
   }
