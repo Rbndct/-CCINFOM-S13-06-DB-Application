@@ -24,8 +24,8 @@ router.get('/sales', async (req, res) => {
     // proxy)
     const [incomeRows] = await promisePool.query(
         `SELECT 
-         COALESCE(SUM(COALESCE(w.equipment_rental_cost, w.total_cost) + COALESCE(w.food_cost, w.production_cost)), 0) AS totalIncome,
-         COALESCE(AVG(COALESCE(w.equipment_rental_cost, w.total_cost) + COALESCE(w.food_cost, w.production_cost)), 0) AS avgIncome,
+         COALESCE(SUM(w.equipment_rental_cost + w.food_cost), 0) AS totalIncome,
+         COALESCE(AVG(w.equipment_rental_cost + w.food_cost), 0) AS avgIncome,
          COUNT(*) AS weddingCount
        FROM wedding w
        WHERE ${whereSql}`,
@@ -96,10 +96,9 @@ router.get('/payments', async (req, res) => {
          w.wedding_id,
          w.couple_id,
          w.wedding_date,
-         COALESCE(w.equipment_rental_cost, w.total_cost) as equipment_rental_cost,
-         COALESCE(w.food_cost, w.production_cost) as food_cost,
+         w.equipment_rental_cost,
+         w.food_cost,
          w.total_cost,
-         w.production_cost,
          w.payment_status
        FROM wedding w
        WHERE ${whereSql}
@@ -199,9 +198,9 @@ router.get('/wedding/:id/inventory', async (req, res) => {
 
     const [allocations] = await promisePool.query(
         `SELECT 
-         ia.allocation_id, ia.inventory_id, ia.quantity_used, ia.rental_cost,
+         ia.allocation_id, ia.inventory_id, ia.quantity_used, ia.unit_rental_cost,
          ii.item_name, ii.category, ii.item_condition, ii.quantity_available,
-         (ia.quantity_used * ia.rental_cost) AS total_cost
+         (ia.quantity_used * ia.unit_rental_cost) AS total_cost
        FROM inventory_allocation ia
        JOIN inventory_items ii ON ii.inventory_id = ia.inventory_id
        WHERE ia.wedding_id = ?
@@ -300,7 +299,7 @@ router.get('/financial', async (req, res) => {
     // Equipment/Inventory Rental Costs
     const [equipmentData] = await promisePool.query(
         `SELECT 
-        COALESCE(SUM(ia.rental_cost), 0) AS total_equipment_cost
+        COALESCE(SUM(ia.quantity_used * ia.unit_rental_cost), 0) AS total_equipment_cost
       FROM inventory_allocation ia
       JOIN wedding w ON ia.wedding_id = w.wedding_id
       WHERE ${whereSql}`,
@@ -476,7 +475,7 @@ router.get('/cash-flow', async (req, res) => {
     // transactions)
     const [equipmentRevenue] = await promisePool.query(
         `SELECT 
-        COALESCE(SUM(ia.rental_cost), 0) AS total_rental_income,
+        COALESCE(SUM(ia.quantity_used * ia.unit_rental_cost), 0) AS total_rental_income,
         COUNT(DISTINCT ia.allocation_id) AS transaction_count
       FROM inventory_allocation ia
       JOIN wedding w ON ia.wedding_id = w.wedding_id
@@ -503,8 +502,8 @@ router.get('/cash-flow', async (req, res) => {
         `SELECT 
         COALESCE(SUM(
           CASE 
-            WHEN w.payment_status = 'paid' THEN COALESCE(w.total_cost, 0)
-            WHEN w.payment_status = 'partial' THEN COALESCE(w.total_cost * 0.5, 0)
+            WHEN w.payment_status = 'paid' THEN COALESCE(w.equipment_rental_cost + w.food_cost, 0)
+            WHEN w.payment_status = 'partial' THEN COALESCE((w.equipment_rental_cost + w.food_cost) * 0.5, 0)
             ELSE 0
           END
         ), 0) AS cash_received,
@@ -531,7 +530,7 @@ router.get('/cash-flow', async (req, res) => {
           DATE_FORMAT(w.wedding_date, "%Y-%m") AS period,
           COALESCE(SUM(p.selling_price), 0) AS revenue,
           COALESCE(SUM(p.unit_cost), 0) AS costs,
-          COALESCE(SUM(ia.rental_cost), 0) AS equipment_income
+          COALESCE(SUM(ia.quantity_used * ia.unit_rental_cost), 0) AS equipment_income
         FROM wedding w
         LEFT JOIN seating_table st ON st.wedding_id = w.wedding_id
         LEFT JOIN table_package tp ON tp.table_id = st.table_id
@@ -548,7 +547,7 @@ router.get('/cash-flow', async (req, res) => {
           DATE(w.wedding_date) AS period,
           COALESCE(SUM(p.selling_price), 0) AS revenue,
           COALESCE(SUM(p.unit_cost), 0) AS costs,
-          COALESCE(SUM(ia.rental_cost), 0) AS equipment_income
+          COALESCE(SUM(ia.quantity_used * ia.unit_rental_cost), 0) AS equipment_income
         FROM wedding w
         LEFT JOIN seating_table st ON st.wedding_id = w.wedding_id
         LEFT JOIN table_package tp ON tp.table_id = st.table_id
@@ -631,26 +630,32 @@ router.get('/accounts-receivable', async (req, res) => {
     }
 
     // Get all weddings with outstanding balances
+    // Payment due date is 30 days before wedding date
+    // Outstanding balance calculation:
+    //   - paid: 0 (filtered out by WHERE clause)
+    //   - partial: total_cost * 0.5 (50% of total cost)
+    //   - pending: total_cost (100% of total cost)
     const [receivables] = await promisePool.query(
-        `SELECT 
-        w.wedding_id,
-        w.wedding_date,
-        w.total_cost,
-        w.payment_status,
-        c.partner1_name,
-        c.partner2_name,
-        w.venue,
-        DATEDIFF(CURDATE(), w.wedding_date) AS days_since_wedding,
-        CASE 
-          WHEN w.payment_status = 'paid' THEN 0
-          WHEN w.payment_status = 'partial' THEN COALESCE(w.total_cost * 0.5, 0)
-          ELSE COALESCE(w.total_cost, 0)
-        END AS outstanding_balance
-      FROM wedding w
-      JOIN couple c ON w.couple_id = c.couple_id
-      WHERE ${whereSql}
-        AND w.payment_status != 'paid'
-      ORDER BY w.wedding_date DESC`,
+        `SELECT DISTINCT
+    w.wedding_id,
+    w.wedding_date,
+    COALESCE(w.total_cost, COALESCE(w.equipment_rental_cost, 0) + COALESCE(w.food_cost, 0)) AS total_cost,  -- Use total_cost if available, otherwise calculate
+    w.payment_status,
+    c.partner1_name,
+    c.partner2_name,
+    w.venue,
+    DATE_SUB(w.wedding_date, INTERVAL 30 DAY) AS payment_due_date,
+    DATEDIFF(CURDATE(), DATE_SUB(w.wedding_date, INTERVAL 30 DAY)) AS days_overdue,
+    CASE 
+      WHEN w.payment_status = 'paid' THEN 0
+      WHEN w.payment_status = 'partial' THEN COALESCE(w.total_cost, COALESCE(w.equipment_rental_cost, 0) + COALESCE(w.food_cost, 0)) * 0.5  -- 50% outstanding
+      ELSE COALESCE(w.total_cost, COALESCE(w.equipment_rental_cost, 0) + COALESCE(w.food_cost, 0))  -- 100% outstanding (pending)
+    END AS outstanding_balance
+  FROM wedding w
+  JOIN couple c ON w.couple_id = c.couple_id
+  WHERE ${whereSql}
+    AND w.payment_status != 'paid'  -- Only show pending and partial payments
+  ORDER BY w.wedding_date DESC`,
         params);
 
     // Calculate aging buckets
@@ -662,11 +667,12 @@ router.get('/accounts-receivable', async (req, res) => {
     };
 
     receivables.forEach((rec) => {
-      const days = rec.days_since_wedding || 0;
+      const days = rec.days_overdue || 0;
       const balance = parseFloat(rec.outstanding_balance || 0);
       const item = {
         wedding_id: rec.wedding_id,
         wedding_date: rec.wedding_date,
+        payment_due_date: rec.payment_due_date,
         couple_name: `${rec.partner1_name} & ${rec.partner2_name}`,
         venue: rec.venue,
         total_cost: parseFloat(rec.total_cost || 0),
@@ -740,16 +746,33 @@ router.get('/accounts-receivable', async (req, res) => {
           }
         },
         receivables: receivables.map(
-            (r) => ({
-              wedding_id: r.wedding_id,
-              wedding_date: r.wedding_date,
-              couple_name: `${r.partner1_name} & ${r.partner2_name}`,
-              venue: r.venue,
-              total_cost: parseFloat(r.total_cost || 0),
-              outstanding_balance: parseFloat(r.outstanding_balance || 0),
-              payment_status: r.payment_status,
-              days_overdue: r.days_since_wedding || 0
-            }))
+            (r) => {
+              const totalCost = parseFloat(r.total_cost || 0);
+              const outstandingBalance = parseFloat(r.outstanding_balance || 0);
+              const paymentStatus = (r.payment_status || '').toLowerCase();
+              
+              // Ensure outstanding_balance is calculated correctly based on payment status
+              let calculatedOutstanding = outstandingBalance;
+              if (paymentStatus === 'partial' && outstandingBalance === 0 && totalCost > 0) {
+                // If outstanding_balance is 0 but status is partial, calculate it
+                calculatedOutstanding = totalCost * 0.5;
+              } else if (paymentStatus === 'pending' && outstandingBalance === 0 && totalCost > 0) {
+                // If outstanding_balance is 0 but status is pending, use total_cost
+                calculatedOutstanding = totalCost;
+              }
+              
+              return {
+                wedding_id: r.wedding_id,
+                wedding_date: r.wedding_date,
+                payment_due_date: r.payment_due_date,
+                couple_name: `${r.partner1_name} & ${r.partner2_name}`,
+                venue: r.venue,
+                total_cost: totalCost,
+                outstanding_balance: calculatedOutstanding,
+                payment_status: r.payment_status,
+                days_overdue: r.days_overdue || 0
+              };
+            })
       }
     });
   } catch (error) {
