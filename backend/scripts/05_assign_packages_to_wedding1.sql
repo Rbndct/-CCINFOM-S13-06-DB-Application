@@ -8,6 +8,9 @@
 
 USE wedding_management_db;
 
+-- Disable safe updates to allow DELETE operations
+SET SQL_SAFE_UPDATES = 0;
+
 -- Set wedding ID - Try to use wedding_id = 1, otherwise find Naruto & Hinata's wedding
 SET @wedding1_id = COALESCE(
   (SELECT wedding_id FROM wedding WHERE wedding_id = 1 LIMIT 1),

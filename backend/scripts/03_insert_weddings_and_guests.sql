@@ -11,6 +11,9 @@
 
 USE wedding_management_db;
 
+-- Disable safe updates to allow DELETE operations
+SET SQL_SAFE_UPDATES = 0;
+
 -- ============================================================================
 -- STEP 1: GET COUPLE IDs (assuming couples are already inserted)
 -- ============================================================================

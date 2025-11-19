@@ -6,6 +6,9 @@
 
 USE wedding_management_db;
 
+-- Disable safe updates to allow DELETE operations
+SET SQL_SAFE_UPDATES = 0;
+
 -- Insert Naruto-themed couples (with duplicate prevention)
 INSERT INTO couple (partner1_name, partner2_name, partner1_phone, partner2_phone, partner1_email, partner2_email, planner_contact)
 SELECT * FROM (

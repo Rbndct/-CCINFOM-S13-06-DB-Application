@@ -7,6 +7,9 @@
 
 USE wedding_management_db;
 
+-- Disable safe updates to allow DELETE operations
+SET SQL_SAFE_UPDATES = 0;
+
 -- Clear existing inventory items (optional - comment out if you want to keep existing data)
 -- DELETE FROM inventory_allocation;
 -- DELETE FROM inventory_items;

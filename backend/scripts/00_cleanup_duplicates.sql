@@ -13,7 +13,7 @@ USE wedding_management_db;
 
 -- Disable foreign key checks temporarily to allow deletion
 SET FOREIGN_KEY_CHECKS = 0;
-
+SET SQL_SAFE_UPDATES = 0;
 -- Delete all data in reverse dependency order (child tables first, then parent tables)
 
 -- 1. Delete from junction/relationship tables first (only if they exist)
