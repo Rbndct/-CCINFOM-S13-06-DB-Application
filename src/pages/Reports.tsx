@@ -1,4 +1,4 @@
-import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar } from 'lucide-react';
+import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -47,6 +47,8 @@ const Reports = () => {
   const [menuDietary, setMenuDietary] = useState<any>(null);
   const [inventoryUsage, setInventoryUsage] = useState<any>(null);
   const [seating, setSeating] = useState<any>(null);
+  const [menuUsage, setMenuUsage] = useState<any>(null);
+  const [ingredientUsage, setIngredientUsage] = useState<any>(null);
 
   // Chart colors
   const CHART_COLORS = {
@@ -75,8 +77,12 @@ const Reports = () => {
     try {
       const s = await api.get('/reports/sales', { params: { period, value } });
       const p = await api.get('/reports/payments', { params: { period, value } });
+      const mu = await api.get('/reports/menu-usage', { params: { period, value } });
+      const iu = await api.get('/reports/ingredient-usage', { params: { period, value } });
       setSales(s.data?.data || s.data || s);
       setPayments(p.data?.data || p.data || p);
+      setMenuUsage(mu.data?.data || mu.data || mu);
+      setIngredientUsage(iu.data?.data || iu.data || iu);
     } finally {
       setLoading(false);
     }
@@ -1152,54 +1158,150 @@ const Reports = () => {
               </CardContent>
             </Card>
 
+            {/* Key Metrics Dashboard */}
+            <div className="grid gap-4 md:grid-cols-4">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Income</CardTitle>
+                  <DollarSign className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold text-green-600">
+                    {formatCurrency(sales?.totalIncome ?? 0)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    From {sales?.weddingCount ?? 0} wedding{sales?.weddingCount !== 1 ? 's' : ''}
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Average Income</CardTitle>
+                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {formatCurrency(sales?.avgIncome ?? 0)}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Per wedding
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Weddings</CardTitle>
+                  <Calendar className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {sales?.weddingCount ?? 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    In selected period
+                  </p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Payment Status</CardTitle>
+                  <CreditCard className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {payments?.statusCounts ? Object.keys(payments.statusCounts).length : 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Status categories
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+
             <div className="grid gap-4 md:grid-cols-2">
               <Card>
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle>Wedding Sales Report</CardTitle>
-                    <DollarSign className="h-5 w-5 text-muted-foreground" />
+                    <BarChart3 className="h-5 w-5 text-muted-foreground" />
                   </div>
-                  <CardDescription>Totals, averages, popular packages and menu</CardDescription>
+                  <CardDescription>Popular packages and menu items</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="grid grid-cols-3 gap-3">
+                <CardContent className="space-y-4">
+                  {/* Payment Methods Pie Chart */}
+                  {(sales?.paymentBreakdown) && (
                     <div>
-                      <div className="text-sm text-muted-foreground">Total Income</div>
-                      <div className="text-xl font-semibold">{sales?.totalIncome ?? 0}</div>
+                      <div className="text-sm font-medium mb-2">Payment Methods Distribution</div>
+                      <div className="h-48">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsPieChart>
+                            <Pie
+                              data={[
+                                { name: 'Cash', value: sales.paymentBreakdown.cash || 0 },
+                                { name: 'Card', value: sales.paymentBreakdown.card || 0 },
+                                { name: 'Bank', value: sales.paymentBreakdown.bank || 0 }
+                              ].filter(item => item.value > 0)}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={80}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              <Cell fill={CHART_COLORS.success} />
+                              <Cell fill={CHART_COLORS.primary} />
+                              <Cell fill={CHART_COLORS.info} />
+                            </Pie>
+                            <Tooltip />
+                            <Legend />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
+                  )}
+
+                  {/* Top Packages Bar Chart */}
+                  {(sales?.topPackages && sales.topPackages.length > 0) && (
                     <div>
-                      <div className="text-sm text-muted-foreground">Avg Income</div>
-                      <div className="text-xl font-semibold">{sales?.avgIncome ?? 0}</div>
+                      <div className="text-sm font-medium mb-2">Top Packages</div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={sales.topPackages.slice(0, 10).reverse()} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis type="number" className="text-xs" />
+                            <YAxis dataKey="package_name" type="category" width={100} className="text-xs" />
+                            <Tooltip 
+                              formatter={(value: number) => `${value} times`}
+                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                            />
+                            <Bar dataKey="usage_count" fill={CHART_COLORS.primary} name="Usage Count" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
+                  )}
+
+                  {/* Top Menu Items Bar Chart */}
+                  {(sales?.topMenuItems && sales.topMenuItems.length > 0) && (
                     <div>
-                      <div className="text-sm text-muted-foreground">Weddings</div>
-                      <div className="text-xl font-semibold">{sales?.weddingCount ?? 0}</div>
+                      <div className="text-sm font-medium mb-2">Top Menu Items</div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={sales.topMenuItems.slice(0, 10).reverse()} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis type="number" className="text-xs" />
+                            <YAxis dataKey="menu_name" type="category" width={100} className="text-xs" />
+                            <Tooltip 
+                              formatter={(value: number) => `${value} times`}
+                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                            />
+                            <Bar dataKey="usage_count" fill={CHART_COLORS.success} name="Usage Count" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
                     </div>
-                  </div>
-                  <div>
-                    <div className="text-sm font-medium">Payment Methods</div>
-                    <div className="text-sm text-muted-foreground">
-                      Cash: {sales?.paymentBreakdown?.cash ?? 0} | Card: {sales?.paymentBreakdown?.card ?? 0} | Bank: {sales?.paymentBreakdown?.bank ?? 0}
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm font-medium mb-1">Top Packages</div>
-                      <ul className="text-sm list-disc pl-5">
-                        {(sales?.topPackages || []).map((p: any) => (
-                          <li key={p.package_id}>{p.package_name} ({p.usage_count})</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium mb-1">Top Menu Items</div>
-                      <ul className="text-sm list-disc pl-5">
-                        {(sales?.topMenuItems || []).map((m: any) => (
-                          <li key={m.menu_item_id}>{m.menu_name} ({m.usage_count})</li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
+                  )}
                 </CardContent>
               </Card>
 
@@ -1208,35 +1310,81 @@ const Reports = () => {
                   <CardTitle>Payment & Receipt Report</CardTitle>
                   <CardDescription>Status by wedding for selected period</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="text-sm">
-                    Status counts: {payments?.statusCounts ? JSON.stringify(payments.statusCounts) : '{}'}
-                  </div>
-                  <div className="max-h-64 overflow-auto border rounded-md">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left">
-                          <th className="p-2">Wedding</th>
-                          <th className="p-2">Date</th>
-                          <th className="p-2">Total</th>
-                          <th className="p-2">Status</th>
-                          <th className="p-2">Paid</th>
-                          <th className="p-2">Due</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(payments?.items || []).map((it: any) => (
-                          <tr key={it.wedding_id}>
-                            <td className="p-2">#{it.wedding_id}</td>
-                            <td className="p-2">{it.wedding_date?.slice(0,10)}</td>
-                            <td className="p-2">{it.total_cost}</td>
-                            <td className="p-2">{it.payment_status}</td>
-                            <td className="p-2">{it.amount_paid}</td>
-                            <td className="p-2">{it.amount_due}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                <CardContent className="space-y-4">
+                  {/* Payment Status Donut Chart */}
+                  {(payments?.statusCounts) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Payment Status Distribution</div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsPieChart>
+                            <Pie
+                              data={Object.entries(payments.statusCounts).map(([name, value]: [string, any]) => ({
+                                name: name.charAt(0).toUpperCase() + name.slice(1),
+                                value: value
+                              }))}
+                              cx="40%"
+                              cy="50%"
+                              innerRadius={50}
+                              outerRadius={70}
+                              labelLine={false}
+                              label={false}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {Object.keys(payments.statusCounts).map((_, index) => (
+                                <Cell key={`cell-${index}`} fill={[CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.info][index % 4]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value: number, name: string) => [`${value} (${((value / Object.values(payments.statusCounts).reduce((a: number, b: any) => a + b, 0)) * 100).toFixed(1)}%)`, name] as [string, string]} />
+                            <Legend 
+                              verticalAlign="middle" 
+                              align="right" 
+                              layout="vertical"
+                              wrapperStyle={{ paddingLeft: '20px' }}
+                            />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Payments Table */}
+                  <div>
+                    <div className="text-sm font-medium mb-2">Payment Details</div>
+                    <div className="max-h-64 overflow-auto border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Wedding</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Total</TableHead>
+                            <TableHead>Status</TableHead>
+                            <TableHead>Paid</TableHead>
+                            <TableHead>Due</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(payments?.items || []).map((it: any) => (
+                            <TableRow key={it.wedding_id}>
+                              <TableCell className="font-medium">#{it.wedding_id}</TableCell>
+                              <TableCell>{it.wedding_date?.slice(0,10)}</TableCell>
+                              <TableCell>{formatCurrency(it.total_cost || 0)}</TableCell>
+                              <TableCell>
+                                <Badge variant={
+                                  it.payment_status === 'paid' ? 'default' : 
+                                  it.payment_status === 'partial' ? 'secondary' : 'destructive'
+                                }>
+                                  {it.payment_status || 'unknown'}
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-green-600">{formatCurrency(it.amount_paid || 0)}</TableCell>
+                              <TableCell className="text-red-600">{formatCurrency(it.amount_due || 0)}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <Button variant="outline">Export CSV</Button>
@@ -1245,6 +1393,336 @@ const Reports = () => {
                 </CardContent>
               </Card>
             </div>
+
+            {/* Menu Item Usage Analytics */}
+            {menuUsage && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Menu Item Usage Analytics</CardTitle>
+                    <Utensils className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <CardDescription>Menu item usage and profitability across all weddings</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Key Metrics */}
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Unique Menu Items</CardTitle>
+                        <Hash className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{menuUsage.unique_menu_items || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Items used</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-green-600">
+                          {formatCurrency(menuUsage.total_revenue || 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">From menu items</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Profit</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-blue-600">
+                          {formatCurrency(menuUsage.total_profit || 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Margin: {menuUsage.total_revenue > 0 ? ((menuUsage.total_profit / menuUsage.total_revenue) * 100).toFixed(1) : 0}%
+                        </p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Usage</CardTitle>
+                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{menuUsage.total_usage || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Table assignments</p>
+                        {menuUsage.usage_change_percent !== 0 && (
+                          <p className={`text-xs mt-1 ${menuUsage.usage_change_percent > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {menuUsage.usage_change_percent > 0 ? '+' : ''}{menuUsage.usage_change_percent.toFixed(1)}% vs previous
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Top Menu Items by Usage */}
+                  {(menuUsage.menu_items && menuUsage.menu_items.length > 0) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Top 10 Menu Items by Usage</div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={menuUsage.menu_items.slice(0, 10).reverse()} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis type="number" className="text-xs" />
+                            <YAxis dataKey="menu_name" type="category" width={120} className="text-xs" />
+                            <Tooltip 
+                              formatter={(value: number) => `${value} times`}
+                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                            />
+                            <Bar dataKey="usage_count" fill={CHART_COLORS.primary} name="Usage Count" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Menu Items by Revenue (Stacked) */}
+                  {(menuUsage.menu_items && menuUsage.menu_items.length > 0) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Menu Items by Revenue (Cost vs Profit)</div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={menuUsage.menu_items.slice(0, 10).reverse()}>
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis dataKey="menu_name" angle={-45} textAnchor="end" height={100} className="text-xs" />
+                            <YAxis className="text-xs" tickFormatter={(value) => formatCurrency(value)} />
+                            <Tooltip 
+                              formatter={(value: number) => formatCurrency(value)}
+                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                            />
+                            <Legend />
+                            <Bar dataKey="total_cost" stackId="a" fill={CHART_COLORS.danger} name="Cost" />
+                            <Bar dataKey="total_profit" stackId="a" fill={CHART_COLORS.success} name="Profit" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detailed Table */}
+                  {(menuUsage.menu_items && menuUsage.menu_items.length > 0) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Detailed Menu Item Usage</div>
+                      <div className="max-h-64 overflow-auto border rounded-md">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Menu Item</TableHead>
+                              <TableHead>Type</TableHead>
+                              <TableHead>Usage Count</TableHead>
+                              <TableHead>Revenue</TableHead>
+                              <TableHead>Cost</TableHead>
+                              <TableHead>Profit</TableHead>
+                              <TableHead>Margin %</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {menuUsage.menu_items.map((item: any) => (
+                              <TableRow key={item.menu_item_id}>
+                                <TableCell className="font-medium">{item.menu_name}</TableCell>
+                                <TableCell>{item.menu_type}</TableCell>
+                                <TableCell>{item.usage_count}</TableCell>
+                                <TableCell>{formatCurrency(item.total_revenue)}</TableCell>
+                                <TableCell>{formatCurrency(item.total_cost)}</TableCell>
+                                <TableCell className={item.total_profit >= 0 ? 'text-green-600' : 'text-red-600'}>
+                                  {formatCurrency(item.total_profit)}
+                                </TableCell>
+                                <TableCell>{item.profit_margin.toFixed(1)}%</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Ingredient Consumption Analytics */}
+            {ingredientUsage && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle>Ingredient Consumption Analytics</CardTitle>
+                    <Warehouse className="h-5 w-5 text-muted-foreground" />
+                  </div>
+                  <CardDescription>Ingredient consumption and stock status across all weddings</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Key Metrics */}
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Unique Ingredients</CardTitle>
+                        <Hash className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{ingredientUsage.unique_ingredients || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Ingredients used</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Consumed</CardTitle>
+                        <Calculator className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{ingredientUsage.total_consumed?.toFixed(2) || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Total quantity</p>
+                        {ingredientUsage.consumption_change_percent !== 0 && (
+                          <p className={`text-xs mt-1 ${ingredientUsage.consumption_change_percent > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {ingredientUsage.consumption_change_percent > 0 ? '+' : ''}{ingredientUsage.consumption_change_percent.toFixed(1)}% vs previous
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
+                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-orange-600">
+                          {formatCurrency(ingredientUsage.total_cost || 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Estimated cost</p>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Low Stock Alert</CardTitle>
+                        <AlertTriangle className="h-4 w-4 text-red-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-red-600">
+                          {ingredientUsage.low_stock_ingredients?.length || 0}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Need attention</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Low Stock Alert */}
+                  {(ingredientUsage.low_stock_ingredients && ingredientUsage.low_stock_ingredients.length > 0) && (
+                    <div className="border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-md p-4">
+                      <div className="flex items-center gap-2 text-red-800 dark:text-red-200 mb-2">
+                        <AlertTriangle className="h-5 w-5" />
+                        <h3 className="font-semibold">Ingredients Approaching Re-order Level</h3>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {ingredientUsage.low_stock_ingredients.map((item: any) => (
+                          <Badge key={item.ingredient_id} variant="destructive">
+                            {item.ingredient_name} ({item.stock_quantity} {item.unit || ''} - Reorder: {item.re_order_level})
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Top Ingredients by Consumption */}
+                  {(ingredientUsage.ingredients && ingredientUsage.ingredients.length > 0) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Top 10 Ingredients by Consumption</div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={ingredientUsage.ingredients.slice(0, 10).reverse()} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis type="number" className="text-xs" />
+                            <YAxis dataKey="ingredient_name" type="category" width={120} className="text-xs" />
+                            <Tooltip 
+                              formatter={(value: number) => `${value.toFixed(2)}`}
+                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                            />
+                            <Bar dataKey="total_consumed" fill={CHART_COLORS.orange} name="Consumed" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Ingredient Consumption Distribution */}
+                  {(ingredientUsage.ingredients && ingredientUsage.ingredients.length > 0) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Ingredient Consumption Distribution (by Cost)</div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsPieChart>
+                            <Pie
+                              data={ingredientUsage.ingredients.slice(0, 10).map((item: any) => ({
+                                name: item.ingredient_name,
+                                value: item.estimated_cost
+                              }))}
+                              cx="50%"
+                              cy="50%"
+                              labelLine={false}
+                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                              outerRadius={100}
+                              fill="#8884d8"
+                              dataKey="value"
+                            >
+                              {ingredientUsage.ingredients.slice(0, 10).map((_: any, index: number) => (
+                                <Cell key={`cell-${index}`} fill={[CHART_COLORS.primary, CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.info, CHART_COLORS.purple, CHART_COLORS.orange, CHART_COLORS.pink][index % 8]} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                            <Legend />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detailed Table */}
+                  {(ingredientUsage.ingredients && ingredientUsage.ingredients.length > 0) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Detailed Ingredient Consumption</div>
+                      <div className="max-h-64 overflow-auto border rounded-md">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Ingredient</TableHead>
+                              <TableHead>Consumed</TableHead>
+                              <TableHead>Unit</TableHead>
+                              <TableHead>Weddings</TableHead>
+                              <TableHead>Stock</TableHead>
+                              <TableHead>Status</TableHead>
+                              <TableHead>Estimated Cost</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {ingredientUsage.ingredients.map((item: any) => (
+                              <TableRow key={item.ingredient_id}>
+                                <TableCell className="font-medium">{item.ingredient_name}</TableCell>
+                                <TableCell>{item.total_consumed.toFixed(2)}</TableCell>
+                                <TableCell>{item.unit}</TableCell>
+                                <TableCell>{item.wedding_count}</TableCell>
+                                <TableCell>{item.stock_quantity.toFixed(2)}</TableCell>
+                                <TableCell>
+                                  <Badge variant={
+                                    item.stock_status === 'low' ? 'destructive' :
+                                    item.stock_status === 'warning' ? 'secondary' : 'default'
+                                  }>
+                                    {item.stock_status === 'low' ? 'Low Stock' :
+                                     item.stock_status === 'warning' ? 'Warning' : 'Good'}
+                                  </Badge>
+                                </TableCell>
+                                <TableCell>{formatCurrency(item.estimated_cost)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
 
           <TabsContent value="wedding" className="space-y-4">
@@ -1278,32 +1756,86 @@ const Reports = () => {
                   <CardTitle>Menu & Dietary Report</CardTitle>
                   <CardDescription>Top dishes, allergens, guest dietary restrictions</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div>
-                    <div className="text-sm font-medium mb-1">Top Dishes</div>
-                    <ul className="text-sm list-disc pl-5">
-                      {(menuDietary?.dishCounts || []).map((d: any) => (
-                        <li key={d.menu_item_id}>{d.menu_name} ({d.times_ordered})</li>
-                      ))}
-                    </ul>
-                  </div>
+                <CardContent className="space-y-4">
+                  {/* Top Dishes Bar Chart */}
+                  {(menuDietary?.dishCounts && menuDietary.dishCounts.length > 0) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Top Dishes</div>
+                      <div className="h-64">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={menuDietary.dishCounts.slice(0, 10).reverse()} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                            <XAxis type="number" className="text-xs" />
+                            <YAxis dataKey="menu_name" type="category" width={120} className="text-xs" />
+                            <Tooltip 
+                              formatter={(value: number) => `${value} times`}
+                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                            />
+                            <Bar dataKey="times_ordered" fill={CHART_COLORS.primary} name="Times Ordered" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <div className="text-sm font-medium mb-1">Allergens</div>
-                      <ul className="text-sm list-disc pl-5">
-                        {(menuDietary?.allergens || []).map((a: any, idx: number) => (
-                          <li key={idx}>{a.menu_name}: {a.restriction_name}</li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div>
-                      <div className="text-sm font-medium mb-1">Guest Restrictions</div>
-                      <ul className="text-sm list-disc pl-5">
-                        {(menuDietary?.guestRestrictions || []).map((g: any, idx: number) => (
-                          <li key={idx}>{g.restriction_name || 'None'} ({g.cnt})</li>
-                        ))}
-                      </ul>
-                    </div>
+                    {/* Allergens Pie Chart */}
+                    {(menuDietary?.allergens && menuDietary.allergens.length > 0) && (
+                      <div>
+                        <div className="text-sm font-medium mb-2">Allergens Distribution</div>
+                        <div className="h-48">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RechartsPieChart>
+                              <Pie
+                                data={menuDietary.allergens.reduce((acc: any, a: any) => {
+                                  const existing = acc.find((item: any) => item.name === a.restriction_name);
+                                  if (existing) {
+                                    existing.value += 1;
+                                  } else {
+                                    acc.push({ name: a.restriction_name, value: 1 });
+                                  }
+                                  return acc;
+                                }, [])}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                                outerRadius={60}
+                                fill="#8884d8"
+                                dataKey="value"
+                              >
+                                {menuDietary.allergens.map((_: any, index: number) => (
+                                  <Cell key={`cell-${index}`} fill={[CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.orange, CHART_COLORS.info][index % 4]} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                              <Legend />
+                            </RechartsPieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Guest Restrictions Bar Chart */}
+                    {(menuDietary?.guestRestrictions && menuDietary.guestRestrictions.length > 0) && (
+                      <div>
+                        <div className="text-sm font-medium mb-2">Guest Restrictions</div>
+                        <div className="h-48">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={menuDietary.guestRestrictions.slice(0, 8)}>
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis dataKey="restriction_name" angle={-45} textAnchor="end" height={80} className="text-xs" />
+                              <YAxis className="text-xs" />
+                              <Tooltip 
+                                formatter={(value: number) => `${value} guests`}
+                                contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                              />
+                              <Bar dataKey="cnt" fill={CHART_COLORS.secondary} name="Guest Count" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -1313,33 +1845,82 @@ const Reports = () => {
                   <CardTitle>Inventory & Equipment Usage</CardTitle>
                   <CardDescription>Allocations and items needing attention</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="max-h-48 overflow-auto border rounded-md">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="text-left">
-                          <th className="p-2">Item</th><th className="p-2">Qty Used</th><th className="p-2">Avail</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {(inventoryUsage?.allocations || []).map((a: any) => (
-                          <tr key={a.allocation_id}>
-                            <td className="p-2">{a.item_name}</td>
-                            <td className="p-2">{a.quantity_used}</td>
-                            <td className="p-2">{a.quantity_available}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                <CardContent className="space-y-4">
+                  {/* Utilization Gauge/Summary */}
+                  {(inventoryUsage?.allocations && inventoryUsage.allocations.length > 0) && (
+                    <div>
+                      <div className="text-sm font-medium mb-2">Equipment Utilization</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="border rounded-md p-3 text-center">
+                          <div className="text-2xl font-bold">{inventoryUsage.allocations.length}</div>
+                          <div className="text-xs text-muted-foreground">Items Allocated</div>
+                        </div>
+                        <div className="border rounded-md p-3 text-center">
+                          <div className="text-2xl font-bold text-orange-600">
+                            {inventoryUsage.needsAttention?.length || 0}
+                          </div>
+                          <div className="text-xs text-muted-foreground">Need Attention</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Allocations Table */}
                   <div>
-                    <div className="text-sm font-medium mb-1">Needs Attention</div>
-                    <ul className="text-sm list-disc pl-5">
-                      {(inventoryUsage?.needsAttention || []).map((n: any) => (
-                        <li key={n.allocation_id}>{n.item_name} — {n.item_condition || 'check'} ({n.quantity_available} avail)</li>
-                      ))}
-                    </ul>
+                    <div className="text-sm font-medium mb-2">Inventory Allocations</div>
+                    <div className="max-h-48 overflow-auto border rounded-md">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Item</TableHead>
+                            <TableHead>Qty Used</TableHead>
+                            <TableHead>Avail</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {(inventoryUsage?.allocations || []).map((a: any) => (
+                            <TableRow key={a.allocation_id}>
+                              <TableCell className="font-medium">{a.item_name}</TableCell>
+                              <TableCell>{a.quantity_used}</TableCell>
+                              <TableCell>{a.quantity_available}</TableCell>
+                              <TableCell>
+                                {(inventoryUsage?.needsAttention || []).some((n: any) => n.allocation_id === a.allocation_id) ? (
+                                  <Badge variant="destructive" className="flex items-center gap-1 w-fit">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    Attention
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="default" className="flex items-center gap-1 w-fit">
+                                    <CheckCircle className="h-3 w-3" />
+                                    OK
+                                  </Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
+
+                  {/* Needs Attention Alert */}
+                  {(inventoryUsage?.needsAttention && inventoryUsage.needsAttention.length > 0) && (
+                    <div className="border border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-900/20 rounded-md p-3">
+                      <div className="flex items-center gap-2 text-yellow-800 dark:text-yellow-200 mb-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        <h3 className="font-semibold text-sm">Items Needing Attention</h3>
+                      </div>
+                      <ul className="text-sm space-y-1">
+                        {inventoryUsage.needsAttention.map((n: any) => (
+                          <li key={n.allocation_id}>
+                            <Badge variant="outline" className="mr-2">{n.item_name}</Badge>
+                            {n.item_condition || 'check'} ({n.quantity_available} avail)
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </div>
@@ -1347,27 +1928,138 @@ const Reports = () => {
             <Card>
               <CardHeader>
                 <CardTitle>Guest Seating & Assignment</CardTitle>
-                <CardDescription>Tables and assigned guests</CardDescription>
+                <CardDescription>Tables and assigned guests with packages</CardDescription>
               </CardHeader>
-              <CardContent>
-                <div className="max-h-72 overflow-auto border rounded-md">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-left">
-                        <th className="p-2">Table</th><th className="p-2">Category</th><th className="p-2">Capacity</th><th className="p-2">Guests</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(seating?.seating || []).map((t: any) => (
-                        <tr key={t.table_id}>
-                          <td className="p-2">#{t.table_number || t.table_id}</td>
-                          <td className="p-2">{t.table_category || 'N/A'}</td>
-                          <td className="p-2">{t.capacity || '-'}</td>
-                          <td className="p-2">{(t.guests || []).map((g: any) => g.guest_name).join(', ')}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <CardContent className="space-y-4">
+                {/* Summary Metrics */}
+                {seating?.summary && (
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Tables</CardTitle>
+                        <Hash className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{seating.summary.total_tables || 0}</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Guests</CardTitle>
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{seating.summary.total_guests || 0}</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Capacity</CardTitle>
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{seating.summary.total_capacity || 0}</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Occupancy Rate</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{seating.summary.occupancy_rate?.toFixed(1) || 0}%</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Tables Grid */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {(seating?.seating || []).map((t: any) => {
+                    const guestCount = (t.guests || []).length;
+                    const capacity = parseInt(t.capacity) || 0;
+                    const occupancyPercent = capacity > 0 ? (guestCount / capacity) * 100 : 0;
+                    const categoryColors: Record<string, string> = {
+                      'VIP': 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200',
+                      'Family': 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200',
+                      'Friends': 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
+                      'Others': 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
+                    };
+                    const categoryColor = categoryColors[t.table_category] || categoryColors['Others'];
+
+                    return (
+                      <Card key={t.table_id} className="border-2">
+                        <CardHeader className="pb-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline" className="text-lg font-bold">
+                                #{t.table_number || t.table_id}
+                              </Badge>
+                              {t.table_category && (
+                                <Badge className={categoryColor}>
+                                  {t.table_category}
+                                </Badge>
+                              )}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {guestCount}/{capacity} guests
+                            </div>
+                          </div>
+                          {t.package && (
+                            <div className="mt-2">
+                              <Badge variant="secondary" className="flex items-center gap-1 w-fit">
+                                <Package className="h-3 w-3" />
+                                {t.package.package_name}
+                              </Badge>
+                            </div>
+                          )}
+                        </CardHeader>
+                        <CardContent className="space-y-2">
+                          {/* Occupancy Progress Bar */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Occupancy</span>
+                              <span>{occupancyPercent.toFixed(0)}%</span>
+                            </div>
+                            <div className="w-full bg-muted rounded-full h-2">
+                              <div
+                                className={`h-2 rounded-full ${
+                                  occupancyPercent >= 90 ? 'bg-red-500' :
+                                  occupancyPercent >= 70 ? 'bg-yellow-500' : 'bg-green-500'
+                                }`}
+                                style={{ width: `${Math.min(occupancyPercent, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Guests List */}
+                          <div className="space-y-1">
+                            <div className="text-xs font-medium text-muted-foreground">Guests:</div>
+                            <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
+                              {(t.guests || []).map((g: any) => (
+                                <Badge
+                                  key={g.guest_id}
+                                  variant={
+                                    g.rsvp_status === 'confirmed' ? 'default' :
+                                    g.rsvp_status === 'pending' ? 'secondary' : 'outline'
+                                  }
+                                  className="text-xs"
+                                >
+                                  {g.rsvp_status === 'confirmed' && <CheckCircle className="h-3 w-3 mr-1" />}
+                                  {g.rsvp_status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
+                                  {g.rsvp_status === 'no_response' && <XCircle className="h-3 w-3 mr-1" />}
+                                  {g.guest_name}
+                                </Badge>
+                              ))}
+                              {guestCount === 0 && (
+                                <span className="text-xs text-muted-foreground italic">No guests assigned</span>
+                              )}
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
                 </div>
               </CardContent>
             </Card>

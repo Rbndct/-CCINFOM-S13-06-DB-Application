@@ -243,6 +243,14 @@ router.get('/wedding/:id/seating', async (req, res) => {
        ORDER BY g.guest_name ASC`,
         [id]);
 
+    // Packages assigned to each table
+    const [packages] = await promisePool.query(
+        `SELECT tp.table_id, p.package_id, p.package_name, p.package_type
+       FROM table_package tp
+       JOIN package p ON tp.package_id = p.package_id
+       WHERE tp.table_id IN (SELECT table_id FROM seating_table WHERE wedding_id = ?)`,
+        [id]);
+
     const tableIdToGuests = guests.reduce((acc, g) => {
       const key = g.table_id || 0;
       acc[key] = acc[key] || [];
@@ -250,10 +258,36 @@ router.get('/wedding/:id/seating', async (req, res) => {
       return acc;
     }, {});
 
-    const seating =
-        tables.map(t => ({...t, guests: tableIdToGuests[t.table_id] || []}));
+    const tableIdToPackage = packages.reduce((acc, p) => {
+      acc[p.table_id] = p;
+      return acc;
+    }, {});
 
-    res.json({success: true, data: {seating}});
+    const seating =
+        tables.map(t => ({
+          ...t,
+          guests: tableIdToGuests[t.table_id] || [],
+          package: tableIdToPackage[t.table_id] || null
+        }));
+
+    // Calculate summary stats
+    const totalTables = seating.length;
+    const totalGuests = guests.length;
+    const totalCapacity = seating.reduce((sum, t) => sum + (parseInt(t.capacity) || 0), 0);
+    const occupancyRate = totalCapacity > 0 ? (totalGuests / totalCapacity) * 100 : 0;
+
+    res.json({
+      success: true,
+      data: {
+        seating,
+        summary: {
+          total_tables: totalTables,
+          total_guests: totalGuests,
+          total_capacity: totalCapacity,
+          occupancy_rate: occupancyRate
+        }
+      }
+    });
   } catch (error) {
     console.error('Error generating wedding seating report:', error);
     res.status(500).json({
@@ -780,6 +814,235 @@ router.get('/accounts-receivable', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to generate accounts receivable report',
+      message: error.message
+    });
+  }
+});
+
+// GET /reports/menu-usage?period=month|year&value=YYYY-MM|YYYY
+// Menu item usage analytics across all weddings
+router.get('/menu-usage', async (req, res) => {
+  try {
+    const {period = 'month', value} = req.query;
+    const {sql: whereSql, params} = periodWhere(period, value);
+
+    // Menu item usage count and financials
+    const [menuUsageData] = await promisePool.query(
+        `SELECT 
+        m.menu_item_id,
+        m.menu_name,
+        m.menu_type,
+        m.unit_cost,
+        m.selling_price,
+        COUNT(DISTINCT tp.table_id) AS usage_count,
+        COALESCE(SUM(p.selling_price), 0) AS total_revenue,
+        COALESCE(SUM(p.unit_cost), 0) AS total_cost,
+        COALESCE(SUM(p.selling_price - p.unit_cost), 0) AS total_profit
+      FROM menu_item m
+      JOIN package_menu_items pmi ON pmi.menu_item_id = m.menu_item_id
+      JOIN package p ON pmi.package_id = p.package_id
+      JOIN table_package tp ON tp.package_id = p.package_id
+      JOIN seating_table st ON tp.table_id = st.table_id
+      JOIN wedding w ON st.wedding_id = w.wedding_id
+      WHERE ${whereSql}
+      GROUP BY m.menu_item_id, m.menu_name, m.menu_type, m.unit_cost, m.selling_price
+      ORDER BY usage_count DESC`,
+        params);
+
+    // Calculate totals and previous period for comparison
+    let previousUsageCount = 0;
+    if (period === 'month' && value) {
+      const [year, month] = value.split('-');
+      let prevMonth = parseInt(month) - 1;
+      let prevYear = parseInt(year);
+      if (prevMonth < 1) {
+        prevMonth = 12;
+        prevYear = prevYear - 1;
+      }
+      const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+      const prevWhere = periodWhere('month', prevMonthStr);
+      const [prevData] = await promisePool.query(
+          `SELECT COUNT(DISTINCT tp.table_id) AS total_usage
+         FROM package_menu_items pmi
+         JOIN package p ON pmi.package_id = p.package_id
+         JOIN table_package tp ON tp.package_id = p.package_id
+         JOIN seating_table st ON tp.table_id = st.table_id
+         JOIN wedding w ON st.wedding_id = w.wedding_id
+         WHERE ${prevWhere.sql}`,
+          prevWhere.params);
+      previousUsageCount = parseFloat(prevData[0]?.total_usage || 0);
+    }
+
+    const totalUsage = menuUsageData.reduce((sum, item) => sum + (item.usage_count || 0), 0);
+    const totalRevenue = menuUsageData.reduce((sum, item) => sum + parseFloat(item.total_revenue || 0), 0);
+    const totalCost = menuUsageData.reduce((sum, item) => sum + parseFloat(item.total_cost || 0), 0);
+    const totalProfit = menuUsageData.reduce((sum, item) => sum + parseFloat(item.total_profit || 0), 0);
+    const uniqueMenuItems = menuUsageData.length;
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        value,
+        total_usage: totalUsage,
+        total_revenue: totalRevenue,
+        total_cost: totalCost,
+        total_profit: totalProfit,
+        unique_menu_items: uniqueMenuItems,
+        previous_period_usage: previousUsageCount,
+        usage_change_percent: previousUsageCount > 0 ? ((totalUsage - previousUsageCount) / previousUsageCount) * 100 : 0,
+        menu_items: menuUsageData.map(item => ({
+          menu_item_id: item.menu_item_id,
+          menu_name: item.menu_name,
+          menu_type: item.menu_type,
+          usage_count: item.usage_count || 0,
+          total_revenue: parseFloat(item.total_revenue || 0),
+          total_cost: parseFloat(item.total_cost || 0),
+          total_profit: parseFloat(item.total_profit || 0),
+          profit_margin: parseFloat(item.total_revenue || 0) > 0 ? 
+            (parseFloat(item.total_profit || 0) / parseFloat(item.total_revenue || 0)) * 100 : 0
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Error generating menu usage report:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate menu usage report',
+      message: error.message
+    });
+  }
+});
+
+// GET /reports/ingredient-usage?period=month|year&value=YYYY-MM|YYYY
+// Ingredient consumption analytics across all weddings
+router.get('/ingredient-usage', async (req, res) => {
+  try {
+    const {period = 'month', value} = req.query;
+    const {sql: whereSql, params} = periodWhere(period, value);
+
+    // Ingredient consumption calculation
+    const [ingredientUsageData] = await promisePool.query(
+        `SELECT 
+        i.ingredient_id,
+        i.ingredient_name,
+        i.unit,
+        i.stock_quantity,
+        i.re_order_level,
+        COALESCE(SUM(r.quantity_needed * pmi.quantity), 0) AS total_consumed,
+        COUNT(DISTINCT w.wedding_id) AS wedding_count,
+        COUNT(DISTINCT tp.table_id) AS usage_count
+      FROM ingredient i
+      JOIN recipe r ON r.ingredient_id = i.ingredient_id
+      JOIN menu_item m ON r.menu_item_id = m.menu_item_id
+      JOIN package_menu_items pmi ON pmi.menu_item_id = m.menu_item_id
+      JOIN package p ON pmi.package_id = p.package_id
+      JOIN table_package tp ON tp.package_id = p.package_id
+      JOIN seating_table st ON tp.table_id = st.table_id
+      JOIN wedding w ON st.wedding_id = w.wedding_id
+      WHERE ${whereSql}
+      GROUP BY i.ingredient_id, i.ingredient_name, i.unit, i.stock_quantity, i.re_order_level
+      ORDER BY total_consumed DESC`,
+        params);
+
+    // Calculate ingredient costs (via recipe -> menu item unit_cost)
+    const ingredientCosts = await Promise.all(ingredientUsageData.map(async (item) => {
+      const [costData] = await promisePool.query(
+          `SELECT 
+          COALESCE(SUM((r.quantity_needed * pmi.quantity) * (m.unit_cost / NULLIF(
+            (SELECT SUM(r2.quantity_needed) FROM recipe r2 WHERE r2.menu_item_id = m.menu_item_id), 0)
+          )), 0) AS estimated_cost
+        FROM ingredient i
+        JOIN recipe r ON r.ingredient_id = i.ingredient_id
+        JOIN menu_item m ON r.menu_item_id = m.menu_item_id
+        JOIN package_menu_items pmi ON pmi.menu_item_id = m.menu_item_id
+        JOIN package p ON pmi.package_id = p.package_id
+        JOIN table_package tp ON tp.package_id = p.package_id
+        JOIN seating_table st ON tp.table_id = st.table_id
+        JOIN wedding w ON st.wedding_id = w.wedding_id
+        WHERE ${whereSql} AND i.ingredient_id = ?`,
+          [...params, item.ingredient_id]);
+      return {
+        ingredient_id: item.ingredient_id,
+        estimated_cost: parseFloat(costData[0]?.estimated_cost || 0)
+      };
+    }));
+
+    const costMap = new Map(ingredientCosts.map(c => [c.ingredient_id, c.estimated_cost]));
+
+    // Previous period comparison
+    let previousConsumption = 0;
+    if (period === 'month' && value) {
+      const [year, month] = value.split('-');
+      let prevMonth = parseInt(month) - 1;
+      let prevYear = parseInt(year);
+      if (prevMonth < 1) {
+        prevMonth = 12;
+        prevYear = prevYear - 1;
+      }
+      const prevMonthStr = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+      const prevWhere = periodWhere('month', prevMonthStr);
+      const [prevData] = await promisePool.query(
+          `SELECT COALESCE(SUM(r.quantity_needed * pmi.quantity), 0) AS total_consumed
+         FROM recipe r
+         JOIN menu_item m ON r.menu_item_id = m.menu_item_id
+         JOIN package_menu_items pmi ON pmi.menu_item_id = m.menu_item_id
+         JOIN package p ON pmi.package_id = p.package_id
+         JOIN table_package tp ON tp.package_id = p.package_id
+         JOIN seating_table st ON tp.table_id = st.table_id
+         JOIN wedding w ON st.wedding_id = w.wedding_id
+         WHERE ${prevWhere.sql}`,
+          prevWhere.params);
+      previousConsumption = parseFloat(prevData[0]?.total_consumed || 0);
+    }
+
+    const totalConsumed = ingredientUsageData.reduce((sum, item) => sum + parseFloat(item.total_consumed || 0), 0);
+    const totalCost = Array.from(costMap.values()).reduce((sum, cost) => sum + cost, 0);
+    const uniqueIngredients = ingredientUsageData.length;
+
+    // Ingredients approaching re-order level
+    const lowStockIngredients = ingredientUsageData.filter(item => {
+      const stock = parseFloat(item.stock_quantity || 0);
+      const reorder = parseFloat(item.re_order_level || 0);
+      return stock <= reorder * 1.5;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        period,
+        value,
+        total_consumed: totalConsumed,
+        total_cost: totalCost,
+        unique_ingredients: uniqueIngredients,
+        previous_period_consumption: previousConsumption,
+        consumption_change_percent: previousConsumption > 0 ? ((totalConsumed - previousConsumption) / previousConsumption) * 100 : 0,
+        ingredients: ingredientUsageData.map(item => ({
+          ingredient_id: item.ingredient_id,
+          ingredient_name: item.ingredient_name,
+          unit: item.unit,
+          total_consumed: parseFloat(item.total_consumed || 0),
+          wedding_count: item.wedding_count || 0,
+          usage_count: item.usage_count || 0,
+          stock_quantity: parseFloat(item.stock_quantity || 0),
+          re_order_level: parseFloat(item.re_order_level || 0),
+          estimated_cost: costMap.get(item.ingredient_id) || 0,
+          stock_status: parseFloat(item.stock_quantity || 0) <= parseFloat(item.re_order_level || 0) ? 'low' :
+                       parseFloat(item.stock_quantity || 0) <= parseFloat(item.re_order_level || 0) * 1.5 ? 'warning' : 'good'
+        })),
+        low_stock_ingredients: lowStockIngredients.map(item => ({
+          ingredient_id: item.ingredient_id,
+          ingredient_name: item.ingredient_name,
+          stock_quantity: parseFloat(item.stock_quantity || 0),
+          re_order_level: parseFloat(item.re_order_level || 0)
+        }))
+      }
+    });
+  } catch (error) {
+    console.error('Error generating ingredient usage report:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to generate ingredient usage report',
       message: error.message
     });
   }
