@@ -4,96 +4,156 @@ This guide explains the order and purpose of each SQL script in the `backend/scr
 
 ## Execution Order
 
-Execute the scripts in the following order to properly set up the database:
+Execute the scripts in the following **numbered order** to properly set up the database:
 
-### 1. Database Setup (if not already done)
-```sql
--- Run the main database setup script first
-source backend/database/setup_database.sql;
+### 1. Database Setup (REQUIRED - Must run FIRST)
+```bash
+mysql -u root -p wedding_management_db < backend/database/setup_database.sql
 ```
 
-### 2. Dietary Restrictions and Food Data
-```sql
--- This script inserts all dietary restrictions (including "None") and food-related data
-source backend/scripts/insert_complete_food_data.sql;
+**What it does:**
+- Creates all database tables
+- Sets up relationships and constraints
+- Includes all pricing structure changes
+- **⚠️ MUST be run FIRST before any other scripts**
+
+---
+
+### 2. 01_insert_food_data.sql (REQUIRED)
+```bash
+mysql -u root -p wedding_management_db < backend/scripts/01_insert_food_data.sql
 ```
+
+**What it does:**
+- Inserts all dietary restrictions (including "None" as ID 1)
+- Inserts ingredients, menu items, recipes, and packages
+- Creates recipe and package relationships
+- **⚠️ Must run BEFORE couples/weddings scripts**
 
 **Important Notes:**
 - The "None" restriction is automatically inserted as the first restriction (ID 1)
 - This script clears and re-inserts all food-related data
 - Menu items use `NULL` for no restriction, but the "None" restriction is available for guests/couples
 
-### 3. Naruto Couples
-```sql
--- Insert Naruto-themed couples
-source backend/scripts/insert_naruto_couples.sql;
+---
+
+### 3. 02_insert_couples.sql (REQUIRED)
+```bash
+mysql -u root -p wedding_management_db < backend/scripts/02_insert_couples.sql
 ```
 
-**Note:** If Naruto & Hinata don't exist, you may need to insert them manually first:
-```sql
-INSERT INTO couple (partner1_name, partner2_name, partner1_phone, partner2_phone, partner1_email, partner2_email, planner_contact) 
-VALUES ('Naruto', 'Hinata', '+63 917 000 0001', '+63 917 000 0002', 'naruto.uzumaki@konoha.nin', 'hinata.hyuga@konoha.nin', 'planner@konoha.nin');
+**What it does:**
+- Inserts 18+ Naruto-themed couples with realistic contact information
+- **⚠️ Must run BEFORE weddings script (weddings need couple_id)**
+
+---
+
+### 4. 03_insert_weddings_and_guests.sql (REQUIRED)
+```bash
+mysql -u root -p wedding_management_db < backend/scripts/03_insert_weddings_and_guests.sql
 ```
 
-### 4. Naruto Weddings and Guests
-```sql
--- Insert 12+ weddings with 10+ guests each, all with varied dietary restrictions
-source backend/scripts/insert_naruto_weddings_and_guests.sql;
-```
-
-**What this script does:**
+**What it does:**
 - Creates 12 weddings from different Naruto couples
-- Each wedding has at least 10-15 guests (150+ total guests)
-- Couples have varied dietary restrictions:
-  - Naruto & Hinata: Vegetarian, No Alcohol
-  - Sasuke & Sakura: None (flexible)
-  - Shikamaru & Temari: Halal, No Alcohol
-  - Ino & Sai: Vegan
-  - Choji & Karui: None (food lovers!)
-  - Kiba & Tamaki: Pescatarian
-  - Minato & Kushina: Kosher
-  - Hashirama & Mito: Vegetarian
-  - Asuma & Kurenai: No Pork, Low-Sodium
-  - Gaara & Matsuri: Halal
-  - Rock Lee & Tenten: None
-  - Neji & Tenten: Gluten Free
-- Guests have varied restrictions including:
-  - None, Vegetarian, Vegan, Pescatarian
-  - No Pork, No Beef
-  - Lactose Intolerant, Gluten Intolerant
-  - Halal, Kosher, No Alcohol
-  - Various Allergies (Peanut, Tree Nut, Shellfish, Seafood, Dairy, Egg, Soy)
-  - Medical restrictions (Diabetic-Friendly, Low-Sodium, Low-Sugar)
+- Each wedding has at least 10-15 guests (186+ total guests)
+- Creates couple preferences with varied dietary restrictions
+- Creates inventory allocations for tables
+- **⚠️ Must run AFTER couples script**
 
-### 5. Inventory Items (Optional)
-```sql
--- Insert inventory items (excluding tables - tables are auto-created via API)
-source backend/scripts/insert_inventory_items.sql;
+**Features:**
+- 12 weddings with varied dates, venues, and costs
+- 186+ guests with diverse dietary restrictions
+- Proper junction table entries for guest_restrictions
+- Couple preferences with varied restrictions for testing
+- Couples have varied dietary restrictions:
+  - Naruto & Hinata: Vegetarian, No Alcohol, Lactose Intolerant
+  - Sasuke & Sakura: Peanut Allergy, Tree Nut Allergy
+  - Shikamaru & Temari: Halal, No Alcohol, No Pork, Low-Sodium
+  - Ino & Sai: Vegan, No Alcohol, Low-Sugar, Low-Fat
+  - Choji & Karui: Shellfish Allergy
+  - Kiba & Tamaki: Pescatarian, Seafood Allergy, Dairy Allergy
+  - Minato & Kushina: Kosher, No Alcohol, Low-Sodium, Heart-Healthy
+  - Hashirama & Mito: Vegetarian, No Alcohol, Gluten Intolerant
+  - Asuma & Kurenai: No Pork, Low-Sodium, Diabetic-Friendly, Egg Allergy
+  - Gaara & Matsuri: Halal, No Alcohol, Wheat Allergy
+  - Rock Lee & Tenten: Soy Allergy, Fructose Intolerant
+  - Neji & Tenten: Gluten Free, No Alcohol, Low-Sugar, Diabetic-Friendly
+
+---
+
+### 5. 04_insert_inventory_items.sql (OPTIONAL - but recommended)
+```bash
+mysql -u root -p wedding_management_db < backend/scripts/04_insert_inventory_items.sql
 ```
 
-**Note:** Tables are NOT included in the inventory script as they are automatically created as inventory allocations when tables are created via the API. Table inventory items are named: `"{ceremony_type} Table - {capacity} seats"` and are automatically billed.
+**What it does:**
+- Inserts 40+ inventory items for wedding rentals
+- Furniture, linens, lighting, decorations, equipment, etc.
+- **Note:** Tables are NOT included as they are automatically created as inventory allocations when tables are created via the API
+
+---
+
+### 6. 05_assign_packages_to_wedding1.sql (OPTIONAL - for complete wedding data)
+```bash
+mysql -u root -p wedding_management_db < backend/scripts/05_assign_packages_to_wedding1.sql
+```
+
+**What it does:**
+- Assigns packages to all tables for the first wedding (wedding_id = 1)
+- Makes the wedding complete with appropriate package assignments
+- VIP tables get premium packages, family tables get full service, friends get standard/basic
+
+---
+
+### 7. 06_assign_couple_restrictions.sql (OPTIONAL - for multiple preferences per couple)
+```bash
+mysql -u root -p wedding_management_db < backend/scripts/06_assign_couple_restrictions.sql
+```
+
+**What it does:**
+- Creates multiple preferences (2-3) for each couple with different ceremony types
+- Each preference has different dietary restrictions
+- Uses `WHERE NOT EXISTS` checks so it's safe to run after other scripts
+- Provides couples with multiple preference options for testing
+
+**Note:** This is different from `03_insert_weddings_and_guests.sql` which creates one preference per couple for their specific wedding. This script adds additional preferences so couples can choose between different ceremony types.
+
+---
 
 ## Script Details
 
-### insert_complete_food_data.sql
+### 01_insert_food_data.sql
 - **Purpose:** Sets up all food-related data including dietary restrictions, ingredients, menu items, recipes, and packages
 - **Key Feature:** Inserts "None" as the first dietary restriction (ID 1) for system use
 - **Warning:** This script DELETES all existing food-related data before inserting new data
 
-### insert_naruto_couples.sql
-- **Purpose:** Inserts 16+ Naruto-themed couples with realistic contact information
-- **Note:** Naruto & Hinata should already exist, but this adds additional couples
+### 02_insert_couples.sql
+- **Purpose:** Inserts 18+ Naruto-themed couples with realistic contact information
+- **Note:** Includes Naruto & Hinata and other popular pairings
 
-### insert_naruto_weddings_and_guests.sql
+### 03_insert_weddings_and_guests.sql
 - **Purpose:** Creates comprehensive test data with weddings and guests
 - **Features:**
   - 12 weddings with varied dates, venues, and costs
-  - 150+ guests with diverse dietary restrictions
+  - 186+ guests with diverse dietary restrictions
   - Proper junction table entries for guest_restrictions
   - Couple preferences with varied restrictions for testing
+  - Inventory allocations for tables
 
-### insert_naruto_inventory.sql
-- **Purpose:** Inserts Naruto-themed inventory items for wedding rentals
+### 04_insert_inventory_items.sql
+- **Purpose:** Inserts inventory items for wedding rentals
+- **Note:** Tables are auto-created via API, so they're not included here
+
+### 05_assign_packages_to_wedding1.sql
+- **Purpose:** Assigns packages to tables for wedding 1 to make it complete
+- **Note:** This is optional but recommended for testing package functionality
+
+### 06_assign_couple_restrictions.sql
+- **Purpose:** Creates multiple preferences per couple for different ceremony types
+- **Note:** This is optional and provides more comprehensive preference data for testing
+- **Difference from script 03:** Script 03 creates one preference per couple for their wedding. This script adds 2-3 additional preferences per couple for different ceremony types.
+
+---
 
 ## Testing Dietary Restrictions
 
@@ -114,50 +174,103 @@ The scripts are designed to provide comprehensive test data for dietary restrict
    - `couple_preference_restrictions`: Links couple preferences to multiple restrictions
    - Both tables properly populated in the scripts
 
-## Troubleshooting
-
-### Error: "Couple not found"
-- Make sure `insert_naruto_couples.sql` has been run
-- Check that Naruto & Hinata exist in the database
-- If they don't exist, insert them manually (see step 3 above)
-
-### Error: "Restriction not found"
-- Make sure `insert_complete_food_data.sql` has been run first
-- The "None" restriction should be ID 1
-
-### Error: "Foreign key constraint fails"
-- Make sure scripts are run in the correct order
-- Check that all referenced tables exist (run setup_database.sql first)
+---
 
 ## Quick Start
 
 For a complete setup, run these commands in order:
 
+**Using MySQL Command Line:**
 ```bash
 # 1. Setup database (if not done)
 mysql -u root -p wedding_management_db < backend/database/setup_database.sql
 
 # 2. Insert food data and restrictions
-mysql -u root -p wedding_management_db < backend/scripts/insert_complete_food_data.sql
+mysql -u root -p wedding_management_db < backend/scripts/01_insert_food_data.sql
 
 # 3. Insert couples
-mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_couples.sql
+mysql -u root -p wedding_management_db < backend/scripts/02_insert_couples.sql
 
 # 4. Insert weddings and guests
-mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_weddings_and_guests.sql
+mysql -u root -p wedding_management_db < backend/scripts/03_insert_weddings_and_guests.sql
 
 # 5. (Optional) Insert inventory
-mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_inventory.sql
+mysql -u root -p wedding_management_db < backend/scripts/04_insert_inventory_items.sql
+
+# 6. (Optional) Assign packages to wedding 1
+mysql -u root -p wedding_management_db < backend/scripts/05_assign_packages_to_wedding1.sql
+
+# 7. (Optional) Assign multiple preferences to couples
+mysql -u root -p wedding_management_db < backend/scripts/06_assign_couple_restrictions.sql
 ```
 
-Or using MySQL command line:
+**Using Node.js Script (Recommended):**
+```bash
+cd backend
+node scripts/run-all-scripts.js
+```
 
+**Using MySQL Command Line (source):**
 ```sql
 USE wedding_management_db;
 source backend/database/setup_database.sql;
-source backend/scripts/insert_complete_food_data.sql;
-source backend/scripts/insert_naruto_couples.sql;
-source backend/scripts/insert_naruto_weddings_and_guests.sql;
-source backend/scripts/insert_naruto_inventory.sql;
+source backend/scripts/01_insert_food_data.sql;
+source backend/scripts/02_insert_couples.sql;
+source backend/scripts/03_insert_weddings_and_guests.sql;
+source backend/scripts/04_insert_inventory_items.sql;
+source backend/scripts/05_assign_packages_to_wedding1.sql;
+source backend/scripts/06_assign_couple_restrictions.sql;
 ```
 
+---
+
+## ✅ Verification After Running
+
+Run this to verify everything worked:
+```sql
+SELECT 
+  (SELECT COUNT(*) FROM couple) as couples,
+  (SELECT COUNT(*) FROM wedding) as weddings,
+  (SELECT COUNT(*) FROM guest) as guests,
+  (SELECT COUNT(*) FROM menu_item) as menu_items,
+  (SELECT COUNT(*) FROM package) as packages,
+  (SELECT COUNT(*) FROM dietary_restriction) as restrictions,
+  (SELECT COUNT(*) FROM seating_table) as tables,
+  (SELECT COUNT(*) FROM inventory_items) as inventory_items;
+```
+
+**Expected Results:**
+- Couples: 18+
+- Weddings: 12
+- Guests: 186+
+- Menu Items: 40+
+- Packages: 20+
+- Restrictions: 26
+- Tables: 100+
+- Inventory Items: 40+
+
+---
+
+## ❌ Common Errors
+
+| Error | Solution |
+|-------|----------|
+| "Table doesn't exist" | Run Step 1 first (`setup_database.sql`) |
+| "Couple not found" | Run Step 3 before Step 4 |
+| "Restriction not found" | Run Step 2 before Step 3/4 |
+| "Foreign key constraint fails" | Check script execution order |
+| "Column cannot be null" | Make sure prerequisite data exists |
+
+---
+
+## Script Naming Convention
+
+Scripts are numbered in execution order:
+- `01_insert_food_data.sql` - Food data and dietary restrictions
+- `02_insert_couples.sql` - Couple records
+- `03_insert_weddings_and_guests.sql` - Weddings, guests, and preferences
+- `04_insert_inventory_items.sql` - Inventory items
+- `05_assign_packages_to_wedding1.sql` - Package assignments
+- `06_assign_couple_restrictions.sql` - Multiple preferences per couple
+
+This numbering ensures scripts are executed in the correct order when sorted alphabetically.
