@@ -14,8 +14,7 @@ async function updateWeddingCosts(weddingId) {
     );
     const equipmentRentalCost = parseFloat(inventoryCosts[0]?.equipment_rental_cost || 0);
 
-    // Calculate food cost from table packages
-    // Sum of unit costs from menu items in packages assigned to tables
+    // Calculate food cost from table packages (using unit_cost for internal cost tracking)
     const [foodCosts] = await promisePool.query(
       `SELECT COALESCE(SUM(
         COALESCE(
@@ -32,7 +31,21 @@ async function updateWeddingCosts(weddingId) {
     );
     
     const foodCost = parseFloat(foodCosts[0]?.food_cost || 0);
-    const totalCost = equipmentRentalCost + foodCost;
+    
+    // Calculate total invoice amount (what customer owes) using selling_price from packages
+    // This is what should be used for accounts receivable
+    const [invoiceAmounts] = await promisePool.query(
+      `SELECT COALESCE(SUM(p.selling_price), 0) as total_invoice_amount
+      FROM table_package tp
+      JOIN seating_table st ON tp.table_id = st.table_id
+      JOIN package p ON tp.package_id = p.package_id
+      WHERE st.wedding_id = ?`,
+      [weddingId]
+    );
+    
+    const totalInvoiceAmount = parseFloat(invoiceAmounts[0]?.total_invoice_amount || 0);
+    // Total cost = equipment rental (already at selling price) + package selling prices
+    const totalCost = equipmentRentalCost + totalInvoiceAmount;
 
     // Update wedding with calculated costs
     await promisePool.query(
