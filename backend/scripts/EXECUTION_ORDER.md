@@ -68,6 +68,18 @@ mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_inventory
 
 ---
 
+### **Step 6: Assign Packages to Wedding 1** (OPTIONAL - for complete wedding data)
+```bash
+mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_wedding1_packages.sql
+```
+
+**What it does:**
+- Assigns packages to all tables for Naruto & Hinata's wedding (wedding_id = 1)
+- Makes the wedding complete with appropriate package assignments
+- VIP tables get premium packages, family tables get full service, friends get standard/basic
+
+---
+
 ## 🚀 Quick Copy-Paste (All at Once)
 
 **For Terminal:**
@@ -77,6 +89,7 @@ mysql -u root -p wedding_management_db < backend/scripts/insert_complete_food_da
 mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_couples.sql
 mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_weddings_and_guests.sql
 mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_inventory.sql
+mysql -u root -p wedding_management_db < backend/scripts/insert_naruto_wedding1_packages.sql
 ```
 
 **For MySQL Command Line:**
@@ -87,6 +100,7 @@ source backend/scripts/insert_complete_food_data.sql;
 source backend/scripts/insert_naruto_couples.sql;
 source backend/scripts/insert_naruto_weddings_and_guests.sql;
 source backend/scripts/insert_naruto_inventory.sql;
+source backend/scripts/insert_naruto_wedding1_packages.sql;
 ```
 
 ---
@@ -95,14 +109,7 @@ source backend/scripts/insert_naruto_inventory.sql;
 
 Run this to verify everything worked:
 ```sql
-SELECT 
-  (SELECT COUNT(*) FROM couple) as couples,
-  (SELECT COUNT(*) FROM wedding) as weddings,
-  (SELECT COUNT(*) FROM guest) as guests,
-  (SELECT COUNT(*) FROM menu_item) as menu_items,
-  (SELECT COUNT(*) FROM package) as packages,
-  (SELECT COUNT(*) FROM dietary_restriction) as restrictions,
-  (SELECT COUNT(*) FROM seating_table) as tables;
+
 ```
 
 Expected:
@@ -125,3 +132,11 @@ Expected:
 | "Restriction not found" | Run Step 2 before Step 3/4 |
 | "Foreign key constraint fails" | Check script execution order |
 
+SELECT 
+  (SELECT COUNT(*) FROM couple) as couples,
+  (SELECT COUNT(*) FROM wedding) as weddings,
+  (SELECT COUNT(*) FROM guest) as guests,
+  (SELECT COUNT(*) FROM menu_item) as menu_items,
+  (SELECT COUNT(*) FROM package) as packages,
+  (SELECT COUNT(*) FROM dietary_restriction) as restrictions,
+  (SELECT COUNT(*) FROM seating_table) as tables;
