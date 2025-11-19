@@ -1012,6 +1012,31 @@ const Packages = () => {
                 })()}
               </div>
 
+              {/* Assigned To Tables */}
+              {selectedPackage.assigned_tables && selectedPackage.assigned_tables.length > 0 && (
+                <div className="border-t pt-4">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Package className="w-5 h-5 text-primary" />
+                    <h3 className="text-lg font-semibold">Assigned To Tables ({selectedPackage.assigned_tables.length})</h3>
+                  </div>
+                  <div className="space-y-2">
+                    {selectedPackage.assigned_tables.map((table: any) => (
+                      <div key={table.table_id} className="flex items-center justify-between p-3 border rounded-lg">
+                        <div className="flex items-center gap-3">
+                          <div className="font-medium">Table {table.table_number}</div>
+                          <Badge variant="outline" className="text-xs">
+                            {table.table_category || 'Guest'}
+                          </Badge>
+                        </div>
+                        <div className="text-sm text-muted-foreground">
+                          {table.guest_count || 0}/{table.capacity} guests
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Cost Summary */}
               <div className="border-t pt-4">
                 <h3 className="text-lg font-semibold mb-4">Cost Summary</h3>

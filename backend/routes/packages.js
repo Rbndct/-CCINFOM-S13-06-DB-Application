@@ -357,7 +357,51 @@ router.get('/:id', async (req, res) => {
       ORDER BY m.menu_name ASC`,
         [req.params.id]);
 
-    res.json({success: true, data: {...rows[0], menu_items: menuItems}});
+    // Get assigned tables with guest counts
+    // For couple tables, always count 2 (the couple is always seated there)
+    // For other tables, count actual guests assigned
+    const [assignedTables] = await promisePool.query(
+        `SELECT 
+        st.table_id,
+        st.table_number,
+        st.table_category,
+        st.capacity,
+        st.wedding_id,
+        COUNT(DISTINCT g.guest_id) as guest_count_from_table
+      FROM table_package tp
+      JOIN seating_table st ON tp.table_id = st.table_id
+      LEFT JOIN guest g ON st.table_id = g.table_id
+      WHERE tp.package_id = ?
+      GROUP BY st.table_id, st.table_number, st.table_category, st.capacity, st.wedding_id
+      ORDER BY st.table_number ASC`,
+        [req.params.id]);
+
+    // Format assigned tables data
+    const formattedAssignedTables = assignedTables.map((table) => {
+      const isCoupleTable = table.table_category && table.table_category.toLowerCase() === 'couple';
+      // For couple tables, always count 2 (the couple is always seated there)
+      // For other tables, count actual guests
+      const actualGuestCount = isCoupleTable ? 2 : (parseInt(table.guest_count_from_table) || 0);
+      
+      return {
+        table_id: table.table_id,
+        table_number: table.table_number,
+        table_category: table.table_category,
+        capacity: table.capacity,
+        wedding_id: table.wedding_id,
+        guest_count: actualGuestCount,
+        available_seats: table.capacity - actualGuestCount
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        ...rows[0],
+        menu_items: menuItems,
+        assigned_tables: formattedAssignedTables
+      }
+    });
   } catch (error) {
     console.error('Error fetching package:', error);
     res.status(500).json({

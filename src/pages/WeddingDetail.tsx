@@ -1116,8 +1116,13 @@ const WeddingDetail = () => {
     setGuestFormLoading(true);
     
     try {
-      // Use selected restrictions directly (MultiSelectRestrictions handles "None" logic)
-      const finalRestrictionIds = guestRestrictionIds;
+      // Filter out "None" restriction if other restrictions are selected
+      // "None" should only be used when no other restrictions are selected
+      let finalRestrictionIds = [...guestRestrictionIds];
+      if (noneRestrictionId && finalRestrictionIds.length > 0) {
+        // Explicitly remove "None" if other restrictions are present
+        finalRestrictionIds = finalRestrictionIds.filter(id => id !== noneRestrictionId);
+      }
       
       // Create guest via API
       const fullName = `${firstName.trim()} ${lastName.trim()}`;
@@ -1226,8 +1231,13 @@ const WeddingDetail = () => {
     
     setEditGuestLoading(true);
     try {
-      // Use selected restrictions directly (MultiSelectRestrictions handles "None" logic)
-      const finalRestrictionIds = editGuestRestrictionIds;
+      // Filter out "None" restriction if other restrictions are selected
+      // "None" should only be used when no other restrictions are selected
+      let finalRestrictionIds = [...editGuestRestrictionIds];
+      if (noneRestrictionId && finalRestrictionIds.length > 0) {
+        // Explicitly remove "None" if other restrictions are present
+        finalRestrictionIds = finalRestrictionIds.filter(id => id !== noneRestrictionId);
+      }
       
       const fullName = `${editGuestFirstName.trim()} ${editGuestLastName.trim()}`;
       await guestsAPI.update(editingGuest.id, {
@@ -1235,6 +1245,43 @@ const WeddingDetail = () => {
         rsvp_status: editGuestRsvpStatus,
         restriction_ids: finalRestrictionIds
       });
+      
+      // Refresh guests list to get updated data
+      const guestsResponse = await guestsAPI.getAll({ wedding_id: id });
+      if (guestsResponse && (guestsResponse as any).success && (guestsResponse as any).data) {
+        const transformedGuests = guestsResponse.data.map((g: any) => {
+          const guestName = g.guest_name || g.name || '';
+          // Parse restrictions - handle both array and JSON string formats
+          let restrictions = [];
+          if (g.restrictions) {
+            try {
+              if (typeof g.restrictions === 'string') {
+                restrictions = JSON.parse(g.restrictions);
+              } else if (Array.isArray(g.restrictions)) {
+                restrictions = g.restrictions;
+              }
+            } catch (e) {
+              console.error('Error parsing restrictions:', e);
+              restrictions = [];
+            }
+          }
+          // Filter out null values
+          restrictions = restrictions.filter((r: any) => r && (r.restriction_id || r.restriction_name));
+          
+          return {
+            id: g.guest_id || g.id,
+            guest_id: g.guest_id || g.id,
+            firstName: guestName.split(' ')[0] || '',
+            lastName: guestName.split(' ').slice(1).join(' ') || '',
+            name: guestName,
+            dietaryRestriction: g.restriction_name || null,
+            dietaryRestrictions: restrictions,
+            rsvpStatus: g.rsvp_status || 'pending',
+            weddingId: g.wedding_id
+          };
+        });
+        setGuests(transformedGuests);
+      }
       
       // Refresh wedding stats (guest counts, tables, etc.)
       await refreshWeddingStats();
