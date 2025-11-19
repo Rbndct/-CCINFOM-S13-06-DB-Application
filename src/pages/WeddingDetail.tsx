@@ -2954,7 +2954,17 @@ const WeddingDetail = () => {
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
                   <Users className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                  <span className="text-lg font-bold">{wedding?.guestCount || wedding?.guest_count || guests.length || 0}</span>
+                  <span className="text-lg font-bold">
+                    {(() => {
+                      // Calculate total from actual guest counts to ensure consistency
+                      const accepted = wedding?.acceptedGuests || 0;
+                      const pending = wedding?.pendingRSVPs || 0;
+                      const declined = wedding?.declinedGuests || 0;
+                      const calculatedTotal = accepted + pending + declined;
+                      // Use calculated total if available, otherwise fall back to guests.length or wedding data
+                      return calculatedTotal > 0 ? calculatedTotal : (guests.length || wedding?.guestCount || wedding?.guest_count || 0);
+                    })()}
+                  </span>
                   <span className="text-xs text-muted-foreground">guests</span>
                 </div>
                 
