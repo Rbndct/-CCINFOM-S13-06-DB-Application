@@ -102,7 +102,7 @@ const MenuItems = () => {
     menu_cost: '',
     menu_price: '',
     menu_type: '',
-    restriction_id: ''
+    restriction_ids: [] as number[]
   });
   const [recipe, setRecipe] = useState<Array<{ingredient_id: number; quantity: number}>>([]);
   const [defaultMarkup, setDefaultMarkup] = useState(200); // 200% markup default
@@ -336,7 +336,7 @@ const MenuItems = () => {
       menu_cost: '',
       menu_price: '',
       menu_type: '',
-      restriction_id: ''
+      restriction_ids: []
     });
     setRecipe([]);
     setDefaultMarkup(200);
@@ -347,12 +347,17 @@ const MenuItems = () => {
   // Handle edit item - load recipe
   const handleEditItem = async (item: any) => {
     setSelectedItem(item);
+    // Load restriction IDs from restrictions array if available, otherwise from single restriction_id
+    const restrictionIds = item.restrictions && Array.isArray(item.restrictions) && item.restrictions.length > 0
+      ? item.restrictions.map((r: any) => r.restriction_id).filter((id: any) => id != null)
+      : item.restriction_id ? [item.restriction_id] : [];
+    
     setFormData({
       menu_name: item.menu_name || '',
       menu_cost: (item.unit_cost || item.menu_cost || 0).toString(),
       menu_price: (item.selling_price || item.menu_price || 0).toString(),
       menu_type: item.menu_type || '',
-      restriction_id: (item.restriction_id || '').toString()
+      restriction_ids: restrictionIds
     });
     setDefaultMarkup(item.default_markup_percentage || 200);
     
@@ -434,14 +439,16 @@ const MenuItems = () => {
         return;
       }
       
+      // Filter out None restriction (ID 1) if present and convert to array format
+      const restrictionIds = formData.restriction_ids.filter(id => id !== 1);
+      
       const data: any = {
         menu_name: formData.menu_name,
         unit_cost: calculatedCost,
         selling_price: priceValue,
         menu_type: formData.menu_type,
-        restriction_id: formData.restriction_id && formData.restriction_id !== 'restriction-none' ? parseInt(formData.restriction_id) : null,
+        restriction_ids: restrictionIds.length > 0 ? restrictionIds : null,
         default_markup_percentage: defaultMarkup,
-        cost_override: false,
         recipe: recipe // Send recipe data
       };
       
@@ -472,6 +479,11 @@ const MenuItems = () => {
           makeable_quantity: item.makeable_quantity ?? 0,
           restriction_id: item.restriction_id,
           restriction_name: item.restriction_name,
+          restrictions: item.restrictions || (item.restriction_name ? [{
+            restriction_id: item.restriction_id,
+            restriction_name: item.restriction_name,
+            restriction_type: item.restriction_type || 'Dietary'
+          }] : []),
           profit_margin: parseFloat(item.profit_margin) || 0,
           is_template: true,
           usage_count: item.usage_count || 0
@@ -878,23 +890,23 @@ const MenuItems = () => {
                                 return (
                                   <div className="flex flex-col gap-1">
                                     {/* First row - max 2 items */}
-                                    <div className="flex flex-wrap gap-1">
+                                  <div className="flex flex-wrap gap-1">
                                       {displayRestrictions.slice(0, 2).map((r: any, idx: number) => {
                                         if (isNoneRestriction(r)) {
                                           return <div key={idx} className="inline-block">{getNoneRestrictionBadge(false)}</div>;
                                         }
                                         return (
-                                          <Badge 
-                                            key={idx}
-                                            variant="outline" 
-                                            className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
-                                          >
-                                            {(() => {
-                                              const Icon = getTypeIcon(r.restriction_type || 'Dietary');
-                                              return <Icon className="h-3 w-3" />;
-                                            })()}
-                                            {r.restriction_name}
-                                          </Badge>
+                                      <Badge 
+                                        key={idx}
+                                        variant="outline" 
+                                        className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
+                                      >
+                                        {(() => {
+                                          const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                          return <Icon className="h-3 w-3" />;
+                                        })()}
+                                        {r.restriction_name}
+                                      </Badge>
                                         );
                                       })}
                                     </div>
@@ -1075,23 +1087,23 @@ const MenuItems = () => {
                         return (
                           <div className="flex flex-col gap-1">
                             {/* First row - max 2 items */}
-                            <div className="flex flex-wrap gap-1">
+                          <div className="flex flex-wrap gap-1">
                               {displayRestrictions.slice(0, 2).map((r: any, idx: number) => {
                                 if (isNoneRestriction(r)) {
                                   return <div key={idx} className="inline-block">{getNoneRestrictionBadge(false)}</div>;
                                 }
                                 return (
-                                  <Badge 
-                                    key={idx}
-                                    variant="outline" 
-                                    className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
-                                  >
-                                    {(() => {
-                                      const Icon = getTypeIcon(r.restriction_type || 'Dietary');
-                                      return <Icon className="h-3 w-3" />;
-                                    })()}
-                                    {r.restriction_name}
-                                  </Badge>
+                              <Badge 
+                                key={idx}
+                                variant="outline" 
+                                className={`${getTypeColor(r.restriction_type || 'Dietary')} border text-xs flex items-center gap-1 w-fit`}
+                              >
+                                {(() => {
+                                  const Icon = getTypeIcon(r.restriction_type || 'Dietary');
+                                  return <Icon className="h-3 w-3" />;
+                                })()}
+                                {r.restriction_name}
+                              </Badge>
                                 );
                               })}
                             </div>
@@ -1213,7 +1225,7 @@ const MenuItems = () => {
               menu_cost: '',
               menu_price: '',
               menu_type: '',
-              restriction_id: ''
+              restriction_ids: []
             });
             setRecipe([]);
             setDefaultMarkup(200);
@@ -1352,8 +1364,8 @@ const MenuItems = () => {
                               handleRemoveIngredientFromRecipe(ingredientId);
                             }
                           };
-                          
-                          return (
+                      
+                      return (
                             <div 
                               key={ingredientId} 
                               className={`flex items-center space-x-3 p-3 rounded-lg border transition-all ${
@@ -1375,10 +1387,10 @@ const MenuItems = () => {
                                 </Button>
                                 <div className="w-16 text-center">
                                   {isSelected ? (
-                                    <Input
-                                      type="number"
-                                      min="0.01"
-                                      step="0.01"
+                            <Input
+                              type="number"
+                              min="0.01"
+                              step="0.01"
                                       value={quantity.toFixed(2)}
                                       onChange={(e) => handleUpdateRecipeQuantity(ingredientId, parseFloat(e.target.value) || 0.01)}
                                       className="h-8 text-sm text-center dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]"
@@ -1389,16 +1401,16 @@ const MenuItems = () => {
                                     </span>
                                   )}
                                 </div>
-                                <Button
-                                  type="button"
+                            <Button
+                              type="button"
                                   variant="outline"
-                                  size="sm"
+                              size="sm"
                                   onClick={handleIncrement}
                                   className="h-8 w-8 p-0"
-                                >
+                            >
                                   <Plus className="h-4 w-4" />
-                                </Button>
-                              </div>
+                            </Button>
+                          </div>
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center justify-between gap-2">
                                   <span className={`font-medium truncate ${isSelected ? 'text-foreground' : 'text-muted-foreground'}`}>
@@ -1407,14 +1419,14 @@ const MenuItems = () => {
                                   <span className={`text-sm flex-shrink-0 ${isSelected ? 'font-semibold text-primary' : 'text-muted-foreground'}`}>
                                     {ingredient.unit}
                                   </span>
-                                </div>
+                        </div>
                                 <div className="flex items-center gap-2 mt-1 flex-wrap">
                                   <Badge variant="outline" className="text-xs">
                                     ID: #{ingredientId}
                                   </Badge>
                                   <span className={`text-xs ${isLowStock ? 'text-red-600 dark:text-red-400 font-medium' : 'text-muted-foreground'}`}>
                                     Stock: {stockQuantity.toLocaleString()} {ingredient.unit}
-                                  </span>
+                                </span>
                                   {ingredient.unit_cost && parseFloat(ingredient.unit_cost) > 0 && (
                                     <span className="text-xs text-muted-foreground">
                                       {formatCurrency(parseFloat(ingredient.unit_cost))}/{ingredient.unit}
@@ -1513,56 +1525,17 @@ const MenuItems = () => {
                 </p>
               </div>
 
-              {/* Dietary Restriction */}
+              {/* Dietary Restrictions */}
               <div className="space-y-2 border-t pt-4 dark:border-[#2a2a2a]">
                 <div className="flex items-center gap-2">
-                  <Label htmlFor="restriction_id">Dietary Restriction</Label>
-                  <span className="text-xs text-muted-foreground">(Optional - defaults to "None" if not selected)</span>
+                  <Label>Dietary Restrictions</Label>
+                  <span className="text-xs text-muted-foreground">(Optional - select multiple)</span>
                 </div>
-                <Select value={formData.restriction_id} onValueChange={(val) => setFormData({...formData, restriction_id: val})}>
-                  <SelectTrigger id="restriction_id" className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a] dark:text-[#e5e5e5]">
-                    <SelectValue placeholder="Select restriction (defaults to 'None' if not selected)">
-                      {formData.restriction_id && formData.restriction_id !== 'restriction-none' && (() => {
-                        const selectedRestriction = dietaryRestrictions.find((r: any) => {
-                          const restrictionValue = r.restriction_id ? r.restriction_id.toString() : `restriction-${r.restriction_name || 'unknown'}`;
-                          return restrictionValue === formData.restriction_id;
-                        });
-                        if (selectedRestriction) {
-                          const Icon = getTypeIcon(selectedRestriction.restriction_type || 'Dietary');
-                          const colorClass = getTypeColor(selectedRestriction.restriction_type || 'Dietary');
-                          const iconColor = colorClass.includes('red') ? 'text-red-600 dark:text-red-400' :
-                                           colorClass.includes('yellow') ? 'text-yellow-600 dark:text-yellow-400' :
-                                           colorClass.includes('orange') ? 'text-orange-600 dark:text-orange-400' :
-                                           colorClass.includes('green') ? 'text-green-600 dark:text-green-400' :
-                                           colorClass.includes('blue') ? 'text-blue-600 dark:text-blue-400' :
-                                           colorClass.includes('purple') ? 'text-purple-600 dark:text-purple-400' :
-                                           'text-muted-foreground';
-                          return (
-                            <span className="flex items-center gap-2">
-                              <Icon className={`h-4 w-4 ${iconColor}`} />
-                              {selectedRestriction.restriction_name}
-                            </span>
-                          );
-                        }
-                        return formData.restriction_id;
-                      })()}
-                      {formData.restriction_id === 'restriction-none' && (
-                        <span className="flex items-center gap-2">
-                          <span className="h-4 w-4 rounded-full bg-gray-300 dark:bg-gray-600" />
-                          None
-                        </span>
-                      )}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent className="dark:bg-[#0f0f0f] dark:border-[#2a2a2a]">
-                    <SelectItem value="restriction-none" className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]">
-                      <div className="flex items-center gap-2">
-                        <span className="h-4 w-4 rounded-full bg-gray-300 dark:bg-gray-600" />
-                        None
-                      </div>
-                    </SelectItem>
-                    {dietaryRestrictions.map((restriction: any) => {
-                      const restrictionValue = restriction.restriction_id ? restriction.restriction_id.toString() : `restriction-${restriction.restriction_name || 'unknown'}`;
+                <div className="max-h-48 overflow-y-auto border rounded-md p-3 dark:border-[#2a2a2a] dark:bg-[#0f0f0f] space-y-2">
+                  {dietaryRestrictions
+                    .filter((r: any) => r.restriction_name !== 'None')
+                    .map((restriction: any) => {
+                      const isChecked = formData.restriction_ids.includes(restriction.restriction_id);
                       const Icon = getTypeIcon(restriction.restriction_type || 'Dietary');
                       const colorClass = getTypeColor(restriction.restriction_type || 'Dietary');
                       const iconColor = colorClass.includes('red') ? 'text-red-600 dark:text-red-400' :
@@ -1573,20 +1546,44 @@ const MenuItems = () => {
                                        colorClass.includes('purple') ? 'text-purple-600 dark:text-purple-400' :
                                        'text-muted-foreground';
                       return (
-                        <SelectItem 
-                          key={restriction.restriction_id || restrictionValue} 
-                          value={restrictionValue}
-                          className="dark:focus:bg-[#1a1a1a] dark:focus:text-[#f5f5f5] dark:text-[#d4d4d4]"
-                        >
-                          <div className="flex items-center gap-2">
+                        <div key={restriction.restriction_id} className="flex items-center space-x-2">
+                          <Checkbox
+                            id={`restriction-${restriction.restriction_id}`}
+                            checked={isChecked}
+                            onCheckedChange={(checked) => {
+                              if (checked) {
+                                setFormData({
+                                  ...formData,
+                                  restriction_ids: [...formData.restriction_ids, restriction.restriction_id]
+                                });
+                              } else {
+                                setFormData({
+                                  ...formData,
+                                  restriction_ids: formData.restriction_ids.filter(id => id !== restriction.restriction_id)
+                                });
+                              }
+                            }}
+                            className="dark:border-[#2a2a2a]"
+                          />
+                          <label
+                            htmlFor={`restriction-${restriction.restriction_id}`}
+                            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 flex items-center gap-2 cursor-pointer flex-1"
+                          >
                             <Icon className={`h-4 w-4 ${iconColor}`} />
                             {restriction.restriction_name}
-                          </div>
-                        </SelectItem>
+                          </label>
+                        </div>
                       );
                     })}
-                  </SelectContent>
-                </Select>
+                  {dietaryRestrictions.filter((r: any) => r.restriction_name !== 'None').length === 0 && (
+                    <p className="text-xs text-muted-foreground">No dietary restrictions available</p>
+                  )}
+                </div>
+                {formData.restriction_ids.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    {formData.restriction_ids.length} restriction{formData.restriction_ids.length !== 1 ? 's' : ''} selected
+                  </p>
+                )}
               </div>
             </div>
             <DialogFooter>

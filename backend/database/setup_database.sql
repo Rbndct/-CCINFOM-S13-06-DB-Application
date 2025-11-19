@@ -123,7 +123,6 @@ CREATE TABLE menu_item (
     unit_cost DECIMAL(10,2) NOT NULL DEFAULT 0,
     selling_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     default_markup_percentage DECIMAL(5,2) DEFAULT 200.00,
-    cost_override BOOLEAN DEFAULT FALSE,
     menu_type VARCHAR(100) NOT NULL,
     restriction_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -231,7 +230,7 @@ CREATE TABLE inventory_allocation (
 -- - add_preference_restrictions_junction.sql (replaced by Migration 2)
 -- - Pricing structure updates (incorporated in table definitions):
 --   * Pricing simplified: ingredients have no cost, only menu items have pricing
---   * unit_cost, selling_price, default_markup_percentage, cost_override in menu_item table
+--   * unit_cost, selling_price, default_markup_percentage in menu_item table
 --   * unit_cost, selling_price, default_markup_percentage in package table
 
 -- Migration 1: Create guest_restrictions junction table

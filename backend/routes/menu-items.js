@@ -13,7 +13,6 @@ router.get('/', async (req, res) => {
         m.unit_cost,
         m.selling_price,
         m.default_markup_percentage,
-        m.cost_override,
         m.menu_type,
         m.restriction_id,
         dr.restriction_name,
@@ -49,7 +48,6 @@ router.get('/', async (req, res) => {
           m.unit_cost,
           m.selling_price,
           m.default_markup_percentage,
-          m.cost_override,
           m.menu_type,
           m.restriction_id,
           dr.restriction_name,
@@ -77,7 +75,7 @@ router.get('/', async (req, res) => {
         LEFT JOIN table_package tp ON pmi.package_id = tp.package_id
         LEFT JOIN seating_table st ON tp.table_id = st.table_id
         WHERE st.wedding_id = ?
-        GROUP BY m.menu_item_id, m.menu_name, m.unit_cost, m.selling_price, m.default_markup_percentage, m.cost_override, m.menu_type, m.restriction_id, dr.restriction_name, dr.restriction_type, dr.severity_level
+        GROUP BY m.menu_item_id, m.menu_name, m.unit_cost, m.selling_price, m.default_markup_percentage, m.menu_type, m.restriction_id, dr.restriction_name, dr.restriction_type, dr.severity_level
       `;
       params.push(wedding_id);
     }
@@ -136,7 +134,6 @@ router.get('/:id', async (req, res) => {
         m.unit_cost,
         m.selling_price,
         m.default_markup_percentage,
-        m.cost_override,
         m.menu_type,
         m.restriction_id,
         dr.restriction_name,
@@ -232,9 +229,9 @@ router.post('/', async (req, res) => {
       unit_cost,
       selling_price,
       menu_type,
-      restriction_id,
+      restriction_id, // Backward compatibility - single restriction
+      restriction_ids, // New - array of restriction IDs
       default_markup_percentage,
-      cost_override,
       menu_cost,
       menu_price,
       recipe
@@ -310,28 +307,54 @@ router.post('/', async (req, res) => {
       });
     }
 
-    // Auto-assign "None" (ID 1) if no restriction provided
-    let finalRestrictionId = restriction_id;
-    if (!finalRestrictionId) {
-      const [noneRows] = await connection.query(
-          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-          ['None']
-      );
-      if (noneRows.length > 0) {
-        finalRestrictionId = noneRows[0].restriction_id;
-      }
+    // Handle restrictions - support both old (single) and new (array) format
+    let restrictionIdsArray = [];
+    if (restriction_ids && Array.isArray(restriction_ids) && restriction_ids.length > 0) {
+      // New format: array of restriction IDs
+      restrictionIdsArray = restriction_ids.filter(id => id !== null && id !== undefined && id !== 1); // Filter out null/undefined and "None" (ID 1)
+    } else if (restriction_id) {
+      // Old format: single restriction ID (backward compatibility)
+      restrictionIdsArray = restriction_id !== 1 ? [restriction_id] : [];
     }
+    
+    // Set single restriction_id for backward compatibility (first restriction or null)
+    const finalRestrictionId = restrictionIdsArray.length > 0 ? restrictionIdsArray[0] : null;
 
     const [result] = await connection.query(
-        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, cost_override, menu_type, restriction_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, menu_type, restriction_id)
+       VALUES (?, ?, ?, ?, ?, ?)`,
         [
           menu_name, finalUnitCost, finalSellingPrice,
-          default_markup_percentage || 200.00, cost_override || false,
+          default_markup_percentage || 200.00,
           menu_type, finalRestrictionId || null
         ]);
 
     const menuItemId = result.insertId;
+
+    // Insert restrictions into junction table
+    if (restrictionIdsArray.length > 0) {
+      // Validate all restriction IDs exist
+      const placeholders = restrictionIdsArray.map(() => '?').join(',');
+      const [restrictionCheck] = await connection.query(
+        `SELECT restriction_id FROM dietary_restriction WHERE restriction_id IN (${placeholders})`,
+        restrictionIdsArray
+      );
+      
+      if (restrictionCheck.length !== restrictionIdsArray.length) {
+        await connection.rollback();
+        return res.status(400).json({
+          success: false,
+          error: 'One or more restriction IDs are invalid'
+        });
+      }
+
+      // Insert into junction table
+      const restrictionValues = restrictionIdsArray.map(rid => [menuItemId, rid]);
+      await connection.query(
+        'INSERT INTO menu_item_restrictions (menu_item_id, restriction_id) VALUES ?',
+        [restrictionValues]
+      );
+    }
 
     // Insert recipe items
     for (const recipeItem of recipe) {
@@ -389,7 +412,6 @@ router.post('/', async (req, res) => {
         unit_cost: finalUnitCost,
         selling_price: finalSellingPrice,
         default_markup_percentage: default_markup_percentage || 200.00,
-        cost_override: cost_override || false,
         menu_type,
         restriction_id: restriction_id || null
       }
@@ -418,9 +440,9 @@ router.put('/:id', async (req, res) => {
       unit_cost,
       selling_price,
       menu_type,
-      restriction_id,
+      restriction_id, // Backward compatibility - single restriction
+      restriction_ids, // New - array of restriction IDs
       default_markup_percentage,
-      cost_override,
       menu_cost,
       menu_price,
       recipe
@@ -464,26 +486,27 @@ router.put('/:id', async (req, res) => {
       updateFields.push('default_markup_percentage = ?');
       updateValues.push(default_markup_percentage);
     }
-    if (cost_override !== undefined) {
-      updateFields.push('cost_override = ?');
-      updateValues.push(cost_override);
-    }
     if (menu_type !== undefined) {
       updateFields.push('menu_type = ?');
       updateValues.push(menu_type);
     }
-    if (restriction_id !== undefined) {
-      // Auto-assign "None" (ID 1) if restriction_id is null or undefined
-      let finalRestrictionId = restriction_id;
-      if (!finalRestrictionId) {
-        const [noneRows] = await connection.query(
-            'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-            ['None']
-        );
-        if (noneRows.length > 0) {
-          finalRestrictionId = noneRows[0].restriction_id;
-        }
+    // Handle restrictions - support both old (single) and new (array) format
+    let restrictionIdsArray = null;
+    if (restriction_ids !== undefined) {
+      // New format: array of restriction IDs
+      if (Array.isArray(restriction_ids)) {
+        restrictionIdsArray = restriction_ids.filter(id => id !== null && id !== undefined && id !== 1); // Filter out null/undefined and "None" (ID 1)
+      } else if (restriction_ids === null) {
+        restrictionIdsArray = [];
       }
+    } else if (restriction_id !== undefined) {
+      // Old format: single restriction ID (backward compatibility)
+      restrictionIdsArray = restriction_id && restriction_id !== 1 ? [restriction_id] : [];
+    }
+    
+    // Update single restriction_id field for backward compatibility
+    if (restrictionIdsArray !== null) {
+      const finalRestrictionId = restrictionIdsArray.length > 0 ? restrictionIdsArray[0] : null;
       updateFields.push('restriction_id = ?');
       updateValues.push(finalRestrictionId || null);
     }
@@ -502,6 +525,40 @@ router.put('/:id', async (req, res) => {
        SET ${updateFields.join(', ')}
        WHERE menu_item_id = ?`,
         updateValues);
+
+    // Update restrictions in junction table if restriction_ids was provided
+    if (restrictionIdsArray !== null) {
+      // Delete existing restrictions
+      await connection.query(
+        'DELETE FROM menu_item_restrictions WHERE menu_item_id = ?',
+        [menuItemId]
+      );
+
+      // Insert new restrictions if any
+      if (restrictionIdsArray.length > 0) {
+        // Validate all restriction IDs exist
+        const placeholders = restrictionIdsArray.map(() => '?').join(',');
+        const [restrictionCheck] = await connection.query(
+          `SELECT restriction_id FROM dietary_restriction WHERE restriction_id IN (${placeholders})`,
+          restrictionIdsArray
+        );
+        
+        if (restrictionCheck.length !== restrictionIdsArray.length) {
+          await connection.rollback();
+          return res.status(400).json({
+            success: false,
+            error: 'One or more restriction IDs are invalid'
+          });
+        }
+
+        // Insert into junction table
+        const restrictionValues = restrictionIdsArray.map(rid => [menuItemId, rid]);
+        await connection.query(
+          'INSERT INTO menu_item_restrictions (menu_item_id, restriction_id) VALUES ?',
+          [restrictionValues]
+        );
+      }
+    }
 
     // Update recipe if provided
     if (recipe && Array.isArray(recipe)) {
