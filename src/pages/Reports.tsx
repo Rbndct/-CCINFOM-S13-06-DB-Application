@@ -1,4 +1,4 @@
-import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package, Receipt, ArrowDownCircle, ArrowUpCircle, Minus, Percent, Activity, Building2, Wrench, TrendingUpDown } from 'lucide-react';
+import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package, Receipt, ArrowDownCircle, ArrowUpCircle, Minus, Percent, Activity, Building2, Wrench, TrendingUpDown, ShoppingCart } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -52,7 +52,6 @@ const Reports = () => {
   const [period, setPeriod] = useState<'day' | 'month' | 'year'>('month');
   const [value, setValue] = useState<string>(''); // YYYY-MM-DD, YYYY-MM, or YYYY
   const [sales, setSales] = useState<any>(null);
-  const [payments, setPayments] = useState<any>(null);
   const [financial, setFinancial] = useState<any>(null);
   const [cashFlow, setCashFlow] = useState<any>(null);
   const [accountsReceivable, setAccountsReceivable] = useState<any>(null);
@@ -68,6 +67,8 @@ const Reports = () => {
   const [seating, setSeating] = useState<any>(null);
   const [menuUsage, setMenuUsage] = useState<any>(null);
   const [ingredientUsage, setIngredientUsage] = useState<any>(null);
+  const [generalReportType, setGeneralReportType] = useState<'sales' | 'menu-usage' | 'ingredient-usage' | 'inventory-usage'>('sales');
+  const [generalLoading, setGeneralLoading] = useState(false);
 
   // Chart colors
   const CHART_COLORS = {
@@ -92,18 +93,52 @@ const Reports = () => {
 
   const fetchGeneral = async () => {
     if (!value) return;
-    setLoading(true);
+    setGeneralLoading(true);
     try {
-      const s = await api.get('/reports/sales', { params: { period, value } });
-      const p = await api.get('/reports/payments', { params: { period, value } });
-      const mu = await api.get('/reports/menu-usage', { params: { period, value } });
-      const iu = await api.get('/reports/ingredient-usage', { params: { period, value } });
-      setSales(s.data?.data || s.data || s);
-      setPayments(p.data?.data || p.data || p);
-      setMenuUsage(mu.data?.data || mu.data || mu);
-      setIngredientUsage(iu.data?.data || iu.data || iu);
+      switch (generalReportType) {
+        case 'sales':
+          const s = await api.get('/reports/sales', { params: { period, value } });
+          setSales(s.data?.data || s.data || s);
+          setMenuUsage(null);
+          setIngredientUsage(null);
+          setInventoryUsage(null);
+          break;
+        case 'menu-usage':
+          const mu = await api.get('/reports/menu-usage', { params: { period, value } });
+          const menuData = mu.data?.data || mu.data || mu;
+          console.log('Menu Usage Data:', menuData);
+          console.log('Menu Items:', menuData?.menu_items);
+          setMenuUsage(menuData);
+          setSales(null);
+          setIngredientUsage(null);
+          setInventoryUsage(null);
+          break;
+        case 'ingredient-usage':
+          const iu = await api.get('/reports/ingredient-usage', { params: { period, value } });
+          const ingredientData = iu.data?.data || iu.data || iu;
+          console.log('Ingredient Usage Data:', ingredientData);
+          console.log('Ingredients:', ingredientData?.ingredients);
+          setIngredientUsage(ingredientData);
+          setSales(null);
+          setMenuUsage(null);
+          setInventoryUsage(null);
+          break;
+        case 'inventory-usage':
+          const inv = await api.get('/reports/inventory-usage', { params: { period, value } });
+          const inventoryData = inv.data?.data || inv.data || inv;
+          console.log('Inventory Usage Data:', inventoryData);
+          console.log('Items:', inventoryData?.items);
+          console.log('Category Breakdown:', inventoryData?.category_breakdown);
+          setInventoryUsage(inventoryData);
+          setSales(null);
+          setMenuUsage(null);
+          setIngredientUsage(null);
+          break;
+      }
+    } catch (error: any) {
+      console.error('Error fetching general report:', error);
     } finally {
-      setLoading(false);
+      setGeneralLoading(false);
     }
   };
 
@@ -1477,297 +1512,321 @@ const Reports = () => {
           <TabsContent value="general" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Filters</CardTitle>
-                <CardDescription>Select a period and date</CardDescription>
+                <CardTitle>General Reports Filters</CardTitle>
+                <CardDescription>Select a report type, period, and date for analysis</CardDescription>
               </CardHeader>
-              <CardContent className="grid md:grid-cols-4 gap-3">
-                <div>
-                  <label className="text-sm text-muted-foreground">Period</label>
-                  <Select value={period} onValueChange={(v: any) => setPeriod(v)}>
-                    <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="month">Month (YYYY-MM)</SelectItem>
-                      <SelectItem value="year">Year (YYYY)</SelectItem>
-                    </SelectContent>
-                  </Select>
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="text-sm text-muted-foreground">Report Type</label>
+                    <Select value={generalReportType} onValueChange={(v: any) => {
+                      setGeneralReportType(v);
+                      setSales(null);
+                      setMenuUsage(null);
+                      setIngredientUsage(null);
+                      setInventoryUsage(null);
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Select report type" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sales">
+                          <div className="flex items-center gap-2">
+                            <ShoppingCart className="h-4 w-4" />
+                            <span>Weddings Sales Report</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="menu-usage">
+                          <div className="flex items-center gap-2">
+                            <Utensils className="h-4 w-4" />
+                            <span>Menu Item Usage Analytics</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="ingredient-usage">
+                          <div className="flex items-center gap-2">
+                            <Warehouse className="h-4 w-4" />
+                            <span>Ingredient Consumption Analytics</span>
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="inventory-usage">
+                          <div className="flex items-center gap-2">
+                            <Package className="h-4 w-4" />
+                            <span>Inventory Usage Report</span>
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">Period</label>
+                    <Select value={period} onValueChange={(v: any) => {
+                        setPeriod(v);
+                        setSales(null);
+                        setMenuUsage(null);
+                        setIngredientUsage(null);
+                        setInventoryUsage(null);
+                    }}>
+                      <SelectTrigger><SelectValue placeholder="Select period" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="month">Month (YYYY-MM)</SelectItem>
+                        <SelectItem value="year">Year (YYYY)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <label className="text-sm text-muted-foreground">{period === 'month' ? 'Month (YYYY-MM)' : 'Year (YYYY)'}</label>
+                    <Input 
+                      value={value} 
+                      onChange={(e) => {
+                        setValue(e.target.value);
+                        setSales(null);
+                        setMenuUsage(null);
+                        setIngredientUsage(null);
+                        setInventoryUsage(null);
+                      }} 
+                      placeholder={period === 'month' ? '2025-11' : '2025'} 
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={fetchGeneral} disabled={!value || generalLoading} className="w-full">
+                      {generalLoading ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Loading...
+                        </>
+                      ) : (
+                        'Generate Report'
+                      )}
+                    </Button>
+                  </div>
                 </div>
-                <div className="md:col-span-2">
-                  <label className="text-sm text-muted-foreground">{period === 'month' ? 'Month (YYYY-MM)' : 'Year (YYYY)'}</label>
-                  <Input value={value} onChange={(e) => setValue(e.target.value)} placeholder={period === 'month' ? '2025-11' : '2025'} />
-                </div>
-                <div className="flex items-end">
-                  <Button onClick={fetchGeneral} disabled={!value || loading}>Load</Button>
+                <div className="border-t pt-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <label className="text-sm font-medium">Display Currency</label>
+                      <p className="text-xs text-muted-foreground">Change currency for all amounts in this report</p>
+                    </div>
+                    <Select value={currency} onValueChange={(value) => setCurrency(value as SupportedCurrency)}>
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue>
+                          {CURRENCY_OPTIONS.find(c => c.code === currency)?.symbol} {currency}
+                        </SelectValue>
+                      </SelectTrigger>
+                      <SelectContent>
+                        {CURRENCY_OPTIONS.map((curr) => (
+                          <SelectItem key={curr.code} value={curr.code}>
+                            <div className="flex items-center gap-2">
+                              <span className="font-medium">{curr.symbol}</span>
+                              <span>{curr.name}</span>
+                              <span className="text-muted-foreground">({curr.code})</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Key Metrics Dashboard */}
-            <div className="grid gap-4 md:grid-cols-4">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Income</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-green-600">
-                    {formatCurrency(sales?.totalIncome ?? 0)}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    From {sales?.weddingCount ?? 0} wedding{sales?.weddingCount !== 1 ? 's' : ''}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Average Income</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {formatCurrency(sales?.avgIncome ?? 0)}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Per wedding
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Weddings</CardTitle>
-                  <Calendar className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {sales?.weddingCount ?? 0}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    In selected period
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Payment Status</CardTitle>
-                  <CreditCard className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">
-                    {payments?.statusCounts ? Object.keys(payments.statusCounts).length : 0}
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Status categories
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Wedding Sales Report</CardTitle>
-                    <BarChart3 className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <CardDescription>Popular packages and menu items</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Payment Methods Pie Chart */}
-                  {(sales?.paymentBreakdown) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Payment Methods Distribution</div>
-                      <div className="h-48">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <RechartsPieChart>
-                            <Pie
-                              data={[
-                                { name: 'Cash', value: sales.paymentBreakdown.cash || 0 },
-                                { name: 'Card', value: sales.paymentBreakdown.card || 0 },
-                                { name: 'Bank', value: sales.paymentBreakdown.bank || 0 }
-                              ].filter(item => item.value > 0)}
-                              cx="50%"
-                              cy="50%"
-                              labelLine={false}
-                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                              outerRadius={80}
-                              fill="#8884d8"
-                              dataKey="value"
-                            >
-                              <Cell fill={CHART_COLORS.success} />
-                              <Cell fill={CHART_COLORS.primary} />
-                              <Cell fill={CHART_COLORS.info} />
-                            </Pie>
-                            <Tooltip />
-                            <Legend />
-                          </RechartsPieChart>
-                        </ResponsiveContainer>
+            {/* Conditional Report Rendering */}
+            {generalReportType === 'sales' && sales && (
+              <>
+                {/* Weddings Sales Report */}
+                <div className="grid gap-4 md:grid-cols-3 mb-4">
+                  <Card className="border-green-200 dark:border-green-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-green-600" />
+                        Total Income
+                      </CardTitle>
+                      <TrendingUp className="h-4 w-4 text-green-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-green-600">
+                        {formatCurrency(sales?.totalIncome ?? 0)}
                       </div>
-                    </div>
-                  )}
-
-                  {/* Top Packages Bar Chart */}
-                  {(sales?.topPackages && sales.topPackages.length > 0) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Top Packages</div>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={sales.topPackages.slice(0, 10).reverse()} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                            <XAxis type="number" className="text-xs" />
-                            <YAxis dataKey="package_name" type="category" width={100} className="text-xs" />
-                            <Tooltip 
-                              formatter={(value: number) => `${value} times`}
-                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
-                            />
-                            <Bar dataKey="usage_count" fill={CHART_COLORS.primary} name="Usage Count" />
-                          </BarChart>
-                        </ResponsiveContainer>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        From {sales?.weddingCount ?? 0} wedding{sales?.weddingCount !== 1 ? 's' : ''}
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-blue-200 dark:border-blue-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4 text-blue-600" />
+                        Average Income
+                      </CardTitle>
+                      <Activity className="h-4 w-4 text-blue-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-blue-600">
+                        {formatCurrency(sales?.avgIncome ?? 0)}
                       </div>
-                    </div>
-                  )}
-
-                  {/* Top Menu Items Bar Chart */}
-                  {(sales?.topMenuItems && sales.topMenuItems.length > 0) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Top Menu Items</div>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={sales.topMenuItems.slice(0, 10).reverse()} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                            <XAxis type="number" className="text-xs" />
-                            <YAxis dataKey="menu_name" type="category" width={100} className="text-xs" />
-                            <Tooltip 
-                              formatter={(value: number) => `${value} times`}
-                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
-                            />
-                            <Bar dataKey="usage_count" fill={CHART_COLORS.success} name="Usage Count" />
-                          </BarChart>
-                        </ResponsiveContainer>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Per wedding
+                      </p>
+                    </CardContent>
+                  </Card>
+                  <Card className="border-purple-200 dark:border-purple-900">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium flex items-center gap-2">
+                        <Calendar className="h-4 w-4 text-purple-600" />
+                        Total Weddings
+                      </CardTitle>
+                      <Users className="h-4 w-4 text-purple-600" />
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-2xl font-bold text-purple-600">
+                        {sales?.weddingCount ?? 0}
                       </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        In selected period
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Payment & Receipt Report</CardTitle>
-                  <CardDescription>Status by wedding for selected period</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Payment Status Donut Chart */}
-                  {(payments?.statusCounts) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Payment Status Distribution</div>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <RechartsPieChart>
-                            <Pie
-                              data={Object.entries(payments.statusCounts).map(([name, value]: [string, any]) => ({
-                                name: name.charAt(0).toUpperCase() + name.slice(1),
-                                value: value
-                              }))}
-                              cx="40%"
-                              cy="50%"
-                              innerRadius={50}
-                              outerRadius={70}
-                              labelLine={false}
-                              label={false}
-                              fill="#8884d8"
-                              dataKey="value"
-                            >
-                              {Object.keys(payments.statusCounts).map((_, index) => (
-                                <Cell key={`cell-${index}`} fill={[CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.info][index % 4]} />
-                              ))}
-                            </Pie>
-                            <Tooltip formatter={(value: number, name: string) => {
-                              const total: number = (Object.values(payments.statusCounts) as number[]).reduce((a: number, b: number) => a + (b || 0), 0);
-                              const percentage = total > 0 ? ((value / total) * 100).toFixed(1) : '0';
-                              return [`${value} (${percentage}%)`, name] as [string, string];
-                            }} />
-                            <Legend 
-                              verticalAlign="middle" 
-                              align="right" 
-                              layout="vertical"
-                              wrapperStyle={{ paddingLeft: '20px' }}
-                            />
-                          </RechartsPieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Payments Table */}
-                  <div>
-                    <div className="text-sm font-medium mb-2">Payment Details</div>
-                    <div className="max-h-64 overflow-auto border rounded-md">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Wedding</TableHead>
-                            <TableHead>Date</TableHead>
-                            <TableHead>Total</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead>Paid</TableHead>
-                            <TableHead>Due</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {(payments?.items || []).map((it: any) => (
-                            <TableRow key={it.wedding_id}>
-                              <TableCell className="font-medium">#{it.wedding_id}</TableCell>
-                              <TableCell>{it.wedding_date?.slice(0,10)}</TableCell>
-                              <TableCell>{formatCurrency(it.total_cost || 0)}</TableCell>
-                              <TableCell>
-                                <Badge variant={
-                                  it.payment_status === 'paid' ? 'default' : 
-                                  it.payment_status === 'partial' ? 'secondary' : 'destructive'
-                                }>
-                                  {it.payment_status || 'unknown'}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="text-green-600">{formatCurrency(it.amount_paid || 0)}</TableCell>
-                              <TableCell className="text-red-600">{formatCurrency(it.amount_due || 0)}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button variant="outline">Export CSV</Button>
-                    <Button variant="outline">Print</Button>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Menu Item Usage Analytics */}
-            {menuUsage && (
-              <Card>
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <CardTitle>Menu Item Usage Analytics</CardTitle>
-                    <Utensils className="h-5 w-5 text-muted-foreground" />
-                  </div>
-                  <CardDescription>Menu item usage and profitability across all weddings</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Key Metrics */}
-                  <div className="grid gap-4 md:grid-cols-4">
+                {/* Sales Analytics - Balanced Layout */}
+                <div className="grid gap-6 md:grid-cols-2">
+                  {/* Top Packages */}
+                  {sales?.topPackages && sales.topPackages.length > 0 && (
                     <Card>
-                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Unique Menu Items</CardTitle>
-                        <Hash className="h-4 w-4 text-muted-foreground" />
+                      <CardHeader>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-bold text-lg flex items-center gap-2">
+                            <Package className="h-5 w-5 text-primary" />
+                            Top Packages by Usage
+                          </h3>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Most frequently selected packages across all weddings in this period
+                        </p>
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{menuUsage.unique_menu_items || 0}</div>
+                        <div className="h-80">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={sales.topPackages.slice(0, 8)}>
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis 
+                                dataKey="package_name" 
+                                angle={-45} 
+                                textAnchor="end" 
+                                height={100}
+                                className="text-xs"
+                                interval={0}
+                              />
+                              <YAxis className="text-xs" />
+                              <Tooltip 
+                                formatter={(value: number) => [`${value} times`, 'Usage']}
+                                contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                              />
+                              <Bar dataKey="usage_count" fill={CHART_COLORS.primary} name="Usage Count" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                          <p className="text-sm text-muted-foreground">
+                            <strong>Insight:</strong> The top package "{sales.topPackages[0]?.package_name}" was used {sales.topPackages[0]?.usage_count} times, 
+                            indicating strong customer preference. Consider promoting similar packages or bundling options.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Top Menu Items */}
+                  {sales?.topMenuItems && sales.topMenuItems.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center justify-between mb-2">
+                          <h3 className="font-bold text-lg flex items-center gap-2">
+                            <Utensils className="h-5 w-5 text-primary" />
+                            Top Menu Items by Usage
+                          </h3>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Most popular individual menu items across all packages
+                        </p>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-80">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={sales.topMenuItems.slice(0, 8)}>
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis 
+                                dataKey="menu_name" 
+                                angle={-45} 
+                                textAnchor="end" 
+                                height={100}
+                                className="text-xs"
+                                interval={0}
+                              />
+                              <YAxis className="text-xs" />
+                              <Tooltip 
+                                formatter={(value: number) => [`${value} times`, 'Usage']}
+                                contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                              />
+                              <Bar dataKey="usage_count" fill={CHART_COLORS.success} name="Usage Count" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                          <p className="text-sm text-muted-foreground">
+                            <strong>Insight:</strong> "{sales.topMenuItems[0]?.menu_name}" leads with {sales.topMenuItems[0]?.usage_count} uses. 
+                            This high-demand item should be prioritized in inventory planning and menu design.
+                          </p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              </>
+            )}
+
+            {/* Menu Item Usage Analytics */}
+            {generalReportType === 'menu-usage' && menuUsage && (
+              <Card className="border-2">
+                <CardHeader className="bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Utensils className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-2xl">Menu Item Usage Analytics</CardTitle>
+                        <CardDescription className="text-base mt-1">
+                          Menu item usage and profitability for {period === 'month' ? value : `Year ${value}`}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-sm">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {period === 'month' ? 'Monthly' : 'Annual'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-6">
+                  {/* Key Metrics */}
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card className="border-blue-200 dark:border-blue-900">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Hash className="h-4 w-4 text-blue-600" />
+                          Unique Menu Items
+                        </CardTitle>
+                        <Activity className="h-4 w-4 text-blue-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-blue-600">{menuUsage.unique_menu_items || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">Items used</p>
                       </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-green-200 dark:border-green-900">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-green-600" />
+                          Total Revenue
+                        </CardTitle>
+                        <TrendingUp className="h-4 w-4 text-green-600" />
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold text-green-600">
@@ -1776,13 +1835,16 @@ const Reports = () => {
                         <p className="text-xs text-muted-foreground mt-1">From menu items</p>
                       </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-purple-200 dark:border-purple-900">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Profit</CardTitle>
-                        <TrendingUp className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Percent className="h-4 w-4 text-purple-600" />
+                          Total Profit
+                        </CardTitle>
+                        <TrendingUpDown className="h-4 w-4 text-purple-600" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold text-blue-600">
+                        <div className="text-2xl font-bold text-purple-600">
                           {formatCurrency(menuUsage.total_profit || 0)}
                         </div>
                         <p className="text-xs text-muted-foreground mt-1">
@@ -1790,13 +1852,16 @@ const Reports = () => {
                         </p>
                       </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-orange-200 dark:border-orange-900">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Usage</CardTitle>
-                        <BarChart3 className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <BarChart3 className="h-4 w-4 text-orange-600" />
+                          Total Usage
+                        </CardTitle>
+                        <Activity className="h-4 w-4 text-orange-600" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{menuUsage.total_usage || 0}</div>
+                        <div className="text-2xl font-bold text-orange-600">{menuUsage.total_usage || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">Table assignments</p>
                         {menuUsage.usage_change_percent !== 0 && (
                           <p className={`text-xs mt-1 ${menuUsage.usage_change_percent > 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -1807,120 +1872,254 @@ const Reports = () => {
                     </Card>
                   </div>
 
-                  {/* Top Menu Items by Usage */}
-                  {(menuUsage.menu_items && menuUsage.menu_items.length > 0) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Top 10 Menu Items by Usage</div>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={menuUsage.menu_items.slice(0, 10).reverse()} layout="vertical">
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                            <XAxis type="number" className="text-xs" />
-                            <YAxis dataKey="menu_name" type="category" width={120} className="text-xs" />
-                            <Tooltip 
-                              formatter={(value: number) => `${value} times`}
-                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
-                            />
-                            <Bar dataKey="usage_count" fill={CHART_COLORS.primary} name="Usage Count" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )}
+                  {/* Menu Usage Analytics - Balanced Layout */}
+                  <div className="grid gap-6 md:grid-cols-2">
+                    {/* Top Menu Items by Usage - Area Chart */}
+                    {(menuUsage.menu_items && Array.isArray(menuUsage.menu_items) && menuUsage.menu_items.length > 0) && (
+                      <Card>
+                        <CardHeader>
+                          <div className="flex items-center gap-2 mb-2">
+                            <BarChart3 className="h-5 w-5 text-primary" />
+                            <h3 className="font-bold text-lg">Top Menu Items by Usage</h3>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Usage frequency of top menu items across all weddings
+                          </p>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="h-80">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={menuUsage.menu_items.slice(0, 8).filter((item: any) => item && item.menu_name && item.usage_count !== undefined)}>
+                                <defs>
+                                  <linearGradient id="usageGradient" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={CHART_COLORS.primary} stopOpacity={0.3}/>
+                                    <stop offset="95%" stopColor={CHART_COLORS.primary} stopOpacity={0}/>
+                                  </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                <XAxis 
+                                  dataKey="menu_name" 
+                                  angle={-45} 
+                                  textAnchor="end" 
+                                  height={100}
+                                  className="text-xs"
+                                  interval={0}
+                                />
+                                <YAxis className="text-xs" />
+                                <Tooltip 
+                                  formatter={(value: number) => [`${value} times`, 'Usage']}
+                                  contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                                />
+                                <Area 
+                                  type="monotone" 
+                                  dataKey="usage_count" 
+                                  stroke={CHART_COLORS.primary} 
+                                  fillOpacity={1} 
+                                  fill="url(#usageGradient)" 
+                                  name="Usage Count"
+                                />
+                              </AreaChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                            <p className="text-sm text-muted-foreground">
+                              <strong>Insight:</strong> "{menuUsage.menu_items[0]?.menu_name}" has the highest usage with {menuUsage.menu_items[0]?.usage_count} occurrences. 
+                              This indicates strong customer preference and should be maintained in inventory.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
 
-                  {/* Menu Items by Revenue (Stacked) */}
-                  {(menuUsage.menu_items && menuUsage.menu_items.length > 0) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Menu Items by Revenue (Cost vs Profit)</div>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={menuUsage.menu_items.slice(0, 10).reverse()}>
-                            <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                            <XAxis dataKey="menu_name" angle={-45} textAnchor="end" height={100} className="text-xs" />
-                            <YAxis className="text-xs" tickFormatter={(value) => formatCurrency(value)} />
-                            <Tooltip 
-                              formatter={(value: number) => formatCurrency(value)}
-                              contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
-                            />
-                            <Legend />
-                            <Bar dataKey="total_cost" stackId="a" fill={CHART_COLORS.danger} name="Cost" />
-                            <Bar dataKey="total_profit" stackId="a" fill={CHART_COLORS.success} name="Profit" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
-                  )}
+                    {/* Revenue vs Profit - Grouped Bar Chart */}
+                    {(menuUsage.menu_items && Array.isArray(menuUsage.menu_items) && menuUsage.menu_items.length > 0) && (
+                      <Card>
+                        <CardHeader>
+                          <div className="flex items-center gap-2 mb-2">
+                            <DollarSign className="h-5 w-5 text-primary" />
+                            <h3 className="font-bold text-lg">Revenue vs Profit Analysis</h3>
+                          </div>
+                          <p className="text-sm text-muted-foreground">
+                            Financial performance comparison across top menu items
+                          </p>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="h-80">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart data={menuUsage.menu_items.slice(0, 8).filter((item: any) => item && item.menu_name)}>
+                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                <XAxis 
+                                  dataKey="menu_name" 
+                                  angle={-45} 
+                                  textAnchor="end" 
+                                  height={100}
+                                  className="text-xs"
+                                  interval={0}
+                                />
+                                <YAxis className="text-xs" tickFormatter={(value) => formatCurrency(value)} />
+                                <Tooltip 
+                                  formatter={(value: number) => formatCurrency(value)}
+                                  contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                                />
+                                <Legend />
+                                <Bar dataKey="total_revenue" fill={CHART_COLORS.info} name="Revenue" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="total_profit" fill={CHART_COLORS.success} name="Profit" radius={[4, 4, 0, 0]} />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                          <div className="mt-4 p-4 bg-muted/50 rounded-lg">
+                            <p className="text-sm text-muted-foreground">
+                              <strong>Insight:</strong> Compare revenue generation vs profit margins. Items with high revenue but low profit may need cost optimization.
+                            </p>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
 
-                  {/* Detailed Table */}
-                  {(menuUsage.menu_items && menuUsage.menu_items.length > 0) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Detailed Menu Item Usage</div>
-                      <div className="max-h-64 overflow-auto border rounded-md">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Menu Item</TableHead>
-                              <TableHead>Type</TableHead>
-                              <TableHead>Usage Count</TableHead>
-                              <TableHead>Revenue</TableHead>
-                              <TableHead>Cost</TableHead>
-                              <TableHead>Profit</TableHead>
-                              <TableHead>Margin %</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {menuUsage.menu_items.map((item: any) => (
-                              <TableRow key={item.menu_item_id}>
-                                <TableCell className="font-medium">{item.menu_name}</TableCell>
-                                <TableCell>{item.menu_type}</TableCell>
-                                <TableCell>{item.usage_count}</TableCell>
-                                <TableCell>{formatCurrency(item.total_revenue)}</TableCell>
-                                <TableCell>{formatCurrency(item.total_cost)}</TableCell>
-                                <TableCell className={item.total_profit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                                  {formatCurrency(item.total_profit)}
-                                </TableCell>
-                                <TableCell>{item.profit_margin.toFixed(1)}%</TableCell>
+                  {/* Detailed Table with Icons */}
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <h3 className="font-bold text-lg">Detailed Menu Item Usage</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Complete breakdown of all menu items with financial metrics
+                      </p>
+                    </CardHeader>
+                    <CardContent>
+                      {menuUsage.menu_items && menuUsage.menu_items.length > 0 ? (
+                        <div className="border rounded-lg overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Utensils className="h-4 w-4" />
+                                    <span>Menu Item</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Hash className="h-4 w-4" />
+                                    <span>Usage</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <TrendingUp className="h-4 w-4" />
+                                    <span>Revenue</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <TrendingDown className="h-4 w-4" />
+                                    <span>Cost</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <DollarSign className="h-4 w-4" />
+                                    <span>Profit</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Percent className="h-4 w-4" />
+                                    <span>Margin</span>
+                                  </div>
+                                </TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </div>
-                  )}
+                            </TableHeader>
+                            <TableBody>
+                              {menuUsage.menu_items.map((item: any) => (
+                                <TableRow key={item.menu_item_id}>
+                                  <TableCell className="font-medium flex items-center gap-2">
+                                    <Utensils className="h-3 w-3 text-muted-foreground" />
+                                    {item.menu_name}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">{item.menu_type}</Badge>
+                                  </TableCell>
+                                  <TableCell className="font-medium">{item.usage_count}</TableCell>
+                                  <TableCell className="text-green-600 font-medium">{formatCurrency(item.total_revenue)}</TableCell>
+                                  <TableCell className="text-orange-600">{formatCurrency(item.total_cost)}</TableCell>
+                                  <TableCell className={`font-medium ${item.total_profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                    {item.total_profit >= 0 ? <TrendingUp className="h-3 w-3 inline mr-1" /> : <TrendingDown className="h-3 w-3 inline mr-1" />}
+                                    {formatCurrency(item.total_profit)}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant={item.profit_margin >= 30 ? 'default' : item.profit_margin >= 15 ? 'secondary' : 'destructive'}>
+                                      {item.profit_margin.toFixed(1)}%
+                                    </Badge>
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Utensils className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>No menu item usage data available for the selected period.</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
                 </CardContent>
               </Card>
             )}
 
             {/* Ingredient Consumption Analytics */}
-            {ingredientUsage && (
-              <Card>
-                <CardHeader>
+            {generalReportType === 'ingredient-usage' && ingredientUsage && (
+              <Card className="border-2">
+                <CardHeader className="bg-muted/50">
                   <div className="flex items-center justify-between">
-                    <CardTitle>Ingredient Consumption Analytics</CardTitle>
-                    <Warehouse className="h-5 w-5 text-muted-foreground" />
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Warehouse className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-2xl">Ingredient Consumption Analytics</CardTitle>
+                        <CardDescription className="text-base mt-1">
+                          Ingredient consumption and stock status for {period === 'month' ? value : `Year ${value}`}
+                        </CardDescription>
+                      </div>
+                    </div>
+                    <Badge variant="outline" className="text-sm">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {period === 'month' ? 'Monthly' : 'Annual'}
+                    </Badge>
                   </div>
-                  <CardDescription>Ingredient consumption and stock status across all weddings</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="pt-6 space-y-6">
                   {/* Key Metrics */}
                   <div className="grid gap-4 md:grid-cols-4">
-                    <Card>
+                    <Card className="border-blue-200 dark:border-blue-900">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Unique Ingredients</CardTitle>
-                        <Hash className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Hash className="h-4 w-4 text-blue-600" />
+                          Unique Ingredients
+                        </CardTitle>
+                        <Activity className="h-4 w-4 text-blue-600" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{ingredientUsage.unique_ingredients || 0}</div>
+                        <div className="text-2xl font-bold text-blue-600">{ingredientUsage.unique_ingredients || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">Ingredients used</p>
                       </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-green-200 dark:border-green-900">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Consumed</CardTitle>
-                        <Calculator className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Calculator className="h-4 w-4 text-green-600" />
+                          Total Consumed
+                        </CardTitle>
+                        <TrendingUp className="h-4 w-4 text-green-600" />
                       </CardHeader>
                       <CardContent>
-                        <div className="text-2xl font-bold">{ingredientUsage.total_consumed?.toFixed(2) || 0}</div>
+                        <div className="text-2xl font-bold text-green-600">{ingredientUsage.total_consumed?.toFixed(2) || 0}</div>
                         <p className="text-xs text-muted-foreground mt-1">Total quantity</p>
                         {ingredientUsage.consumption_change_percent !== 0 && (
                           <p className={`text-xs mt-1 ${ingredientUsage.consumption_change_percent > 0 ? 'text-green-600' : 'text-red-600'}`}>
@@ -1929,10 +2128,13 @@ const Reports = () => {
                         )}
                       </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-orange-200 dark:border-orange-900">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
-                        <DollarSign className="h-4 w-4 text-muted-foreground" />
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-orange-600" />
+                          Total Cost
+                        </CardTitle>
+                        <Receipt className="h-4 w-4 text-orange-600" />
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold text-orange-600">
@@ -1941,10 +2143,13 @@ const Reports = () => {
                         <p className="text-xs text-muted-foreground mt-1">Estimated cost</p>
                       </CardContent>
                     </Card>
-                    <Card>
+                    <Card className="border-red-200 dark:border-red-900">
                       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Low Stock Alert</CardTitle>
-                        <AlertTriangle className="h-4 w-4 text-red-600" />
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-600" />
+                          Low Stock Alert
+                        </CardTitle>
+                        <XCircle className="h-4 w-4 text-red-600" />
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold text-red-600">
@@ -1975,7 +2180,10 @@ const Reports = () => {
                   {/* Top Ingredients by Consumption */}
                   {(ingredientUsage.ingredients && ingredientUsage.ingredients.length > 0) && (
                     <div>
-                      <div className="text-sm font-medium mb-2">Top 10 Ingredients by Consumption</div>
+                      <h3 className="font-bold text-lg mb-4 flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5 text-primary" />
+                        Top 10 Ingredients by Consumption
+                      </h3>
                       <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={ingredientUsage.ingredients.slice(0, 10).reverse()} layout="vertical">
@@ -1993,80 +2201,473 @@ const Reports = () => {
                     </div>
                   )}
 
-                  {/* Ingredient Consumption Distribution */}
+                  {/* Ingredient Consumption Distribution - Fixed Pie Chart */}
                   {(ingredientUsage.ingredients && ingredientUsage.ingredients.length > 0) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Ingredient Consumption Distribution (by Cost)</div>
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <RechartsPieChart>
-                            <Pie
-                              data={ingredientUsage.ingredients.slice(0, 10).map((item: any) => ({
-                                name: item.ingredient_name,
-                                value: item.estimated_cost
-                              }))}
-                              cx="50%"
-                              cy="50%"
-                              labelLine={false}
-                              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                              outerRadius={100}
-                              fill="#8884d8"
-                              dataKey="value"
-                            >
-                              {ingredientUsage.ingredients.slice(0, 10).map((_: any, index: number) => (
-                                <Cell key={`cell-${index}`} fill={[CHART_COLORS.primary, CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.info, CHART_COLORS.purple, CHART_COLORS.orange, CHART_COLORS.pink][index % 8]} />
-                              ))}
-                            </Pie>
-                            <Tooltip formatter={(value: number) => formatCurrency(value)} />
-                            <Legend />
-                          </RechartsPieChart>
-                        </ResponsiveContainer>
-                      </div>
-                    </div>
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center gap-2 mb-2">
+                          <PieChart className="h-5 w-5 text-primary" />
+                          <h3 className="font-bold text-lg">Ingredient Consumption Distribution (by Cost)</h3>
+                        </div>
+                        <p className="text-sm text-muted-foreground">
+                          Cost breakdown of top ingredients consumed
+                        </p>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-96">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RechartsPieChart>
+                              <Pie
+                                data={ingredientUsage.ingredients.slice(0, 8).map((item: any) => ({
+                                  name: item.ingredient_name.length > 15 ? item.ingredient_name.substring(0, 15) + '...' : item.ingredient_name,
+                                  fullName: item.ingredient_name,
+                                  value: item.estimated_cost
+                                }))}
+                                cx="35%"
+                                cy="50%"
+                                labelLine={false}
+                                label={false}
+                                innerRadius={60}
+                                outerRadius={100}
+                                fill="#8884d8"
+                                dataKey="value"
+                              >
+                                {ingredientUsage.ingredients.slice(0, 8).map((_: any, index: number) => (
+                                  <Cell key={`cell-${index}`} fill={[CHART_COLORS.primary, CHART_COLORS.success, CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.info, CHART_COLORS.purple, CHART_COLORS.orange, CHART_COLORS.pink][index % 8]} />
+                                ))}
+                              </Pie>
+                              <Tooltip 
+                                formatter={(value: number, payload: any) => [
+                                  formatCurrency(value),
+                                  payload.payload?.fullName || payload.name
+                                ]}
+                                contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                              />
+                              <Legend 
+                                verticalAlign="middle" 
+                                align="right" 
+                                layout="vertical"
+                                wrapperStyle={{ paddingLeft: '20px' }}
+                                formatter={(value, entry: any) => {
+                                  const item = ingredientUsage.ingredients.slice(0, 8).find((i: any) => 
+                                    i.ingredient_name.startsWith(value) || value.startsWith(i.ingredient_name.substring(0, 15))
+                                  );
+                                  return item ? `${item.ingredient_name} (${((item.estimated_cost / ingredientUsage.ingredients.slice(0, 8).reduce((sum: number, i: any) => sum + i.estimated_cost, 0)) * 100).toFixed(1)}%)` : value;
+                                }}
+                              />
+                            </RechartsPieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </CardContent>
+                    </Card>
                   )}
 
-                  {/* Detailed Table */}
-                  {(ingredientUsage.ingredients && ingredientUsage.ingredients.length > 0) && (
-                    <div>
-                      <div className="text-sm font-medium mb-2">Detailed Ingredient Consumption</div>
-                      <div className="max-h-64 overflow-auto border rounded-md">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Ingredient</TableHead>
-                              <TableHead>Consumed</TableHead>
-                              <TableHead>Unit</TableHead>
-                              <TableHead>Weddings</TableHead>
-                              <TableHead>Stock</TableHead>
-                              <TableHead>Status</TableHead>
-                              <TableHead>Estimated Cost</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {ingredientUsage.ingredients.map((item: any) => (
-                              <TableRow key={item.ingredient_id}>
-                                <TableCell className="font-medium">{item.ingredient_name}</TableCell>
-                                <TableCell>{item.total_consumed.toFixed(2)}</TableCell>
-                                <TableCell>{item.unit}</TableCell>
-                                <TableCell>{item.wedding_count}</TableCell>
-                                <TableCell>{item.stock_quantity.toFixed(2)}</TableCell>
-                                <TableCell>
-                                  <Badge variant={
-                                    item.stock_status === 'low' ? 'destructive' :
-                                    item.stock_status === 'warning' ? 'secondary' : 'default'
-                                  }>
-                                    {item.stock_status === 'low' ? 'Low Stock' :
-                                     item.stock_status === 'warning' ? 'Warning' : 'Good'}
-                                  </Badge>
-                                </TableCell>
-                                <TableCell>{formatCurrency(item.estimated_cost)}</TableCell>
+                  {/* Detailed Table with Icons */}
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <h3 className="font-bold text-lg">Detailed Ingredient Consumption</h3>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Complete breakdown of ingredient usage and stock status
+                      </p>
+                    </CardHeader>
+                    <CardContent>
+                      {ingredientUsage.ingredients && Array.isArray(ingredientUsage.ingredients) && ingredientUsage.ingredients.length > 0 ? (
+                        <div className="border rounded-lg overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Warehouse className="h-4 w-4" />
+                                    <span>Ingredient</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Calculator className="h-4 w-4" />
+                                    <span>Consumed</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>Unit</TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4" />
+                                    <span>Weddings</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Package className="h-4 w-4" />
+                                    <span>Stock</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <span>Status</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <DollarSign className="h-4 w-4" />
+                                    <span>Cost</span>
+                                  </div>
+                                </TableHead>
                               </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
+                            </TableHeader>
+                            <TableBody>
+                              {ingredientUsage.ingredients.map((item: any) => (
+                                <TableRow key={item.ingredient_id}>
+                                  <TableCell className="font-medium flex items-center gap-2">
+                                    <Warehouse className="h-3 w-3 text-muted-foreground" />
+                                    {item.ingredient_name}
+                                  </TableCell>
+                                  <TableCell className="font-medium">{(item.total_consumed || 0).toFixed(2)}</TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">{item.unit || 'N/A'}</Badge>
+                                  </TableCell>
+                                  <TableCell>{item.wedding_count || 0}</TableCell>
+                                  <TableCell>{(item.stock_quantity || 0).toFixed(2)}</TableCell>
+                                  <TableCell>
+                                    <Badge variant={
+                                      item.stock_status === 'low' ? 'destructive' :
+                                      item.stock_status === 'warning' ? 'secondary' : 'default'
+                                    }>
+                                      {item.stock_status === 'low' ? (
+                                        <>
+                                          <AlertTriangle className="h-3 w-3 inline mr-1" />
+                                          Low Stock
+                                        </>
+                                      ) : item.stock_status === 'warning' ? (
+                                        <>
+                                          <Clock className="h-3 w-3 inline mr-1" />
+                                          Warning
+                                        </>
+                                      ) : (
+                                        <>
+                                          <CheckCircle className="h-3 w-3 inline mr-1" />
+                                          Good
+                                        </>
+                                      )}
+                                    </Badge>
+                                  </TableCell>
+                                  <TableCell className="font-medium">{formatCurrency(item.estimated_cost)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Warehouse className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>No ingredient consumption data available for the selected period.</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Inventory Usage Report */}
+            {generalReportType === 'inventory-usage' && inventoryUsage && (
+              <Card className="border-2">
+                <CardHeader className="bg-muted/50">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 bg-primary/10 rounded-lg">
+                        <Package className="h-6 w-6 text-primary" />
+                      </div>
+                      <div>
+                        <CardTitle className="text-2xl">Inventory Usage Report</CardTitle>
+                        <CardDescription className="text-base mt-1">
+                          Monitors the logistical resources used in weddings. Records allocation of items for each wedding within the given time frame, tracks current quantity available and used, and identifies items that need repair or restocking.
+                        </CardDescription>
                       </div>
                     </div>
+                    <Badge variant="outline" className="text-sm">
+                      <Calendar className="h-3 w-3 mr-1" />
+                      {period === 'month' ? 'Monthly' : 'Annual'}
+                    </Badge>
+                  </div>
+                </CardHeader>
+                <CardContent className="pt-6 space-y-6">
+                  {/* Key Metrics */}
+                  <div className="grid gap-4 md:grid-cols-4">
+                    <Card className="border-blue-200 dark:border-blue-900">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Package className="h-4 w-4 text-blue-600" />
+                          Total Items Used
+                        </CardTitle>
+                        <Activity className="h-4 w-4 text-blue-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-blue-600">{inventoryUsage.total_items || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Unique items allocated</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-green-200 dark:border-green-900">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Calculator className="h-4 w-4 text-green-600" />
+                          Total Quantity Used
+                        </CardTitle>
+                        <TrendingUp className="h-4 w-4 text-green-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-green-600">{inventoryUsage.total_used || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Total units allocated</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-purple-200 dark:border-purple-900">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <DollarSign className="h-4 w-4 text-purple-600" />
+                          Total Revenue
+                        </CardTitle>
+                        <Receipt className="h-4 w-4 text-purple-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-purple-600">
+                          {formatCurrency(inventoryUsage.total_revenue || 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">From inventory rentals</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="border-red-200 dark:border-red-900">
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <AlertTriangle className="h-4 w-4 text-red-600" />
+                          Needs Attention
+                        </CardTitle>
+                        <XCircle className="h-4 w-4 text-red-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-red-600">
+                          {inventoryUsage.needs_attention_count || 0}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">Items requiring action</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Items Needing Attention */}
+                  {inventoryUsage.needs_attention && inventoryUsage.needs_attention.length > 0 && (
+                    <Card className="border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20">
+                      <CardHeader>
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="h-5 w-5 text-red-600" />
+                          <CardTitle className="text-lg text-red-800 dark:text-red-200">Items Requiring Attention</CardTitle>
+                        </div>
+                        <CardDescription className="text-red-700 dark:text-red-300">
+                          Items that need repair or restocking to ensure service continuity
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          {inventoryUsage.needs_attention.map((item: any) => (
+                            <div key={item.inventory_id} className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-red-200 dark:border-red-800">
+                              <div className="flex items-center gap-3">
+                                {item.issue === 'repair' ? (
+                                  <Wrench className="h-5 w-5 text-red-600" />
+                                ) : (
+                                  <Package className="h-5 w-5 text-orange-600" />
+                                )}
+                                <div>
+                                  <p className="font-medium">{item.item_name}</p>
+                                  <p className="text-xs text-muted-foreground">{item.category}</p>
+                                </div>
+                              </div>
+                              <Badge variant={item.issue === 'repair' ? 'destructive' : 'secondary'}>
+                                {item.issue === 'repair' ? (
+                                  <>
+                                    <Wrench className="h-3 w-3 mr-1" />
+                                    Needs Repair
+                                  </>
+                                ) : (
+                                  <>
+                                    <AlertTriangle className="h-3 w-3 mr-1" />
+                                    Low Stock ({item.quantity_available} available)
+                                  </>
+                                )}
+                              </Badge>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
                   )}
+
+                  {/* Category Breakdown */}
+                  {inventoryUsage.category_breakdown && Array.isArray(inventoryUsage.category_breakdown) && inventoryUsage.category_breakdown.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <div className="flex items-center gap-2">
+                          <BarChart3 className="h-5 w-5 text-primary" />
+                          <CardTitle className="text-lg">Usage by Category</CardTitle>
+                        </div>
+                        <CardDescription>
+                          Inventory usage breakdown by item category
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="h-80">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={inventoryUsage.category_breakdown.filter((item: any) => item && item.category)}>
+                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                              <XAxis 
+                                dataKey="category" 
+                                angle={-45} 
+                                textAnchor="end" 
+                                height={100}
+                                className="text-xs"
+                              />
+                              <YAxis className="text-xs" />
+                              <Tooltip 
+                                formatter={(value: number) => [value, 'Quantity Used']}
+                                contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                              />
+                              <Legend />
+                              <Bar dataKey="total_used" fill={CHART_COLORS.primary} name="Quantity Used" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Detailed Inventory Usage Table */}
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <CardTitle className="text-lg">Detailed Inventory Usage</CardTitle>
+                      </div>
+                      <CardDescription>
+                        Complete breakdown of all inventory items used in weddings
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      {inventoryUsage.items && Array.isArray(inventoryUsage.items) && inventoryUsage.items.length > 0 ? (
+                        <div className="border rounded-lg overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Package className="h-4 w-4" />
+                                    <span>Item Name</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>Category</TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Calculator className="h-4 w-4" />
+                                    <span>Used</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Package className="h-4 w-4" />
+                                    <span>Available</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <Calendar className="h-4 w-4" />
+                                    <span>Weddings</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <DollarSign className="h-4 w-4" />
+                                    <span>Revenue</span>
+                                  </div>
+                                </TableHead>
+                                <TableHead>
+                                  <div className="flex items-center gap-2">
+                                    <AlertTriangle className="h-4 w-4" />
+                                    <span>Status</span>
+                                  </div>
+                                </TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {inventoryUsage.items.map((item: any) => (
+                                <TableRow key={item.inventory_id}>
+                                  <TableCell className="font-medium flex items-center gap-2">
+                                    <Package className="h-3 w-3 text-muted-foreground" />
+                                    {item.item_name}
+                                  </TableCell>
+                                  <TableCell>
+                                    <Badge variant="outline">{item.category}</Badge>
+                                  </TableCell>
+                                  <TableCell className="font-medium">{item.total_used}</TableCell>
+                                  <TableCell>{item.quantity_available}</TableCell>
+                                  <TableCell>{item.wedding_count}</TableCell>
+                                  <TableCell className="font-medium text-green-600">{formatCurrency(item.total_revenue)}</TableCell>
+                                  <TableCell>
+                                    {item.needs_repair ? (
+                                      <Badge variant="destructive">
+                                        <Wrench className="h-3 w-3 inline mr-1" />
+                                        Repair
+                                      </Badge>
+                                    ) : item.low_stock ? (
+                                      <Badge variant="secondary">
+                                        <AlertTriangle className="h-3 w-3 inline mr-1" />
+                                        Low Stock
+                                      </Badge>
+                                    ) : (
+                                      <Badge variant="default">
+                                        <CheckCircle className="h-3 w-3 inline mr-1" />
+                                        Good
+                                      </Badge>
+                                    )}
+                                  </TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <Package className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                          <p>No inventory usage data available for the selected period.</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Empty State */}
+            {!sales && !menuUsage && !ingredientUsage && !inventoryUsage && !generalLoading && value && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No Report Data</h3>
+                  <p className="text-muted-foreground">
+                    Click "Generate Report" to view {generalReportType === 'sales' ? 'Weddings Sales' : 
+                    generalReportType === 'menu-usage' ? 'Menu Item Usage' : 
+                    generalReportType === 'ingredient-usage' ? 'Ingredient Consumption' : 'Inventory Usage'} data
+                  </p>
+                </CardContent>
+              </Card>
+            )}
+
+            {!value && (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <BarChart3 className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">Select Report Type and Period</h3>
+                  <p className="text-muted-foreground">
+                    Choose a report type, select a period and date, then click "Generate Report" to view analytics
+                  </p>
                 </CardContent>
               </Card>
             )}
