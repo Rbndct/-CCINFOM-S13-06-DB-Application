@@ -1,8 +1,9 @@
 -- ============================================================================
--- Assign Packages to Naruto & Hinata's Wedding (Wedding ID = 1)
+-- Assign Packages to Wedding 1
 -- ============================================================================
--- This script assigns packages to all tables for wedding_id = 1
--- Making it complete with appropriate package assignments based on table category
+-- This script assigns packages to all tables for the first wedding (wedding_id = 1)
+-- Makes the wedding complete with appropriate package assignments based on table category
+-- VIP tables get premium packages, family tables get full service, friends get standard/basic
 -- ============================================================================
 
 USE wedding_management_db;
@@ -50,41 +51,24 @@ SET @package_gluten_free = (SELECT package_id FROM package WHERE package_name = 
 -- Friends Tables (T-006 to T-009): Standard/Basic packages with some specialty
 -- ============================================================================
 
--- Couple Table - Most premium package
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_couple, @package_sage_mode);
-
--- VIP Table 1 (T-002) - Premium package for VIP guests
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_vip1, @package_hokage);
-
--- VIP Table 2 (T-003) - Elite package for VIP guests
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_vip2, @package_uchiha_elite);
-
--- Family Table 1 (T-004) - Full Service package
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_family1, @package_hidden_leaf);
-
--- Family Table 2 (T-005) - Full Service package
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_family2, @package_akatsuki);
-
--- Friends Table 1 (T-006) - Professional package
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_friends1, @package_jonin);
-
--- Friends Table 2 (T-007) - Standard package
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_friends2, @package_chunin);
-
--- Friends Table 3 (T-008) - Vegetarian package (considering guest restrictions)
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_friends3, @package_vegetarian);
-
--- Friends Table 4 (T-009) - Starter package
-INSERT INTO table_package (table_id, package_id) VALUES
-(@table_friends4, @package_genin);
+-- Assign packages to tables with duplicate prevention
+INSERT INTO table_package (table_id, package_id)
+SELECT * FROM (
+  SELECT @table_couple as table_id, @package_sage_mode as package_id
+  UNION ALL SELECT @table_vip1, @package_hokage
+  UNION ALL SELECT @table_vip2, @package_uchiha_elite
+  UNION ALL SELECT @table_family1, @package_hidden_leaf
+  UNION ALL SELECT @table_family2, @package_akatsuki
+  UNION ALL SELECT @table_friends1, @package_jonin
+  UNION ALL SELECT @table_friends2, @package_chunin
+  UNION ALL SELECT @table_friends3, @package_vegetarian
+  UNION ALL SELECT @table_friends4, @package_genin
+) AS new_assignments
+WHERE NOT EXISTS (
+  SELECT 1 FROM table_package tp 
+  WHERE tp.table_id = new_assignments.table_id 
+    AND tp.package_id = new_assignments.package_id
+);
 
 -- ============================================================================
 -- Verification Query
@@ -101,4 +85,75 @@ INSERT INTO table_package (table_id, package_id) VALUES
 -- INNER JOIN package p ON tp.package_id = p.package_id
 -- WHERE st.wedding_id = @wedding1_id
 -- ORDER BY st.table_number;
+
+-- ============================================================================
+-- UPDATE WEDDING COSTS AFTER PACKAGE ASSIGNMENTS
+-- ============================================================================
+-- Calculate food_cost from table packages and update total_cost
+
+-- Update food_cost and total_cost for wedding 1
+UPDATE wedding w
+SET 
+  food_cost = COALESCE((
+    SELECT SUM(
+      COALESCE(
+        (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+         FROM package_menu_items pmi
+         JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+         WHERE pmi.package_id = tp.package_id), 0
+      )
+    )
+    FROM table_package tp
+    JOIN seating_table st ON tp.table_id = st.table_id
+    WHERE st.wedding_id = w.wedding_id
+  ), 0),
+  total_cost = COALESCE(equipment_rental_cost, 0) + COALESCE((
+    SELECT SUM(
+      COALESCE(
+        (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+         FROM package_menu_items pmi
+         JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+         WHERE pmi.package_id = tp.package_id), 0
+      )
+    )
+    FROM table_package tp
+    JOIN seating_table st ON tp.table_id = st.table_id
+    WHERE st.wedding_id = w.wedding_id
+  ), 0)
+WHERE w.wedding_id = @wedding1_id;
+
+-- Also update ALL other weddings that have packages assigned to ensure consistency
+UPDATE wedding w
+SET 
+  food_cost = COALESCE((
+    SELECT SUM(
+      COALESCE(
+        (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+         FROM package_menu_items pmi
+         JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+         WHERE pmi.package_id = tp.package_id), 0
+      )
+    )
+    FROM table_package tp
+    JOIN seating_table st ON tp.table_id = st.table_id
+    WHERE st.wedding_id = w.wedding_id
+  ), 0),
+  total_cost = COALESCE(equipment_rental_cost, 0) + COALESCE((
+    SELECT SUM(
+      COALESCE(
+        (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+         FROM package_menu_items pmi
+         JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+         WHERE pmi.package_id = tp.package_id), 0
+      )
+    )
+    FROM table_package tp
+    JOIN seating_table st ON tp.table_id = st.table_id
+    WHERE st.wedding_id = w.wedding_id
+  ), 0)
+WHERE EXISTS (
+  SELECT 1 FROM table_package tp
+  JOIN seating_table st ON tp.table_id = st.table_id
+  WHERE st.wedding_id = w.wedding_id
+);
 

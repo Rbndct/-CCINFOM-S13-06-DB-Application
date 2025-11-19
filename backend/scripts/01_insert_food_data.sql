@@ -1,7 +1,8 @@
 -- ============================================================================
--- Complete Food Data Insert Script
+-- Insert Food Data
+-- ============================================================================
 -- This script clears existing food-related data and inserts comprehensive
--- Naruto-themed menu items, packages, ingredients, and recipes
+-- dietary restrictions, ingredients, menu items, recipes, and packages
 -- ============================================================================
 
 USE wedding_management_db;

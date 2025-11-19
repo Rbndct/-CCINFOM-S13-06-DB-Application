@@ -1,8 +1,12 @@
 -- ============================================================================
--- Naruto-Themed Weddings and Guests Insert Script
+-- Insert Weddings and Guests
 -- ============================================================================
--- This script creates 10+ weddings from Naruto couples, each with at least
--- 10 guests, all with varied dietary restrictions for testing purposes
+-- This script creates weddings from couples, each with guests and varied
+-- dietary restrictions. Also creates couple preferences and inventory allocations.
+-- 
+-- NOTE: This script uses WHERE NOT EXISTS checks to prevent duplicates.
+-- If you see duplicate weddings, you may need to clean up the database first
+-- or run the setup_database.sql script to reset everything.
 -- ============================================================================
 
 USE wedding_management_db;
@@ -57,19 +61,35 @@ SET @low_sugar_id = (SELECT restriction_id FROM dietary_restriction WHERE restri
 -- ============================================================================
 
 -- Naruto & Hinata - 3 restrictions: Vegetarian + No Alcohol + Lactose Intolerant (scattered: Dietary, Religious, Intolerance)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@naruto_couple_id, 'Civil');
-SET @naruto_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@naruto_pref_id, @vegetarian_id),
-(@naruto_pref_id, @no_alcohol_id),
-(@naruto_pref_id, @lactose_id);
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @naruto_couple_id, 'Civil'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @naruto_couple_id AND ceremony_type = 'Civil'
+);
+SET @naruto_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @naruto_couple_id AND ceremony_type = 'Civil' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @naruto_pref_id, @vegetarian_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @naruto_pref_id AND restriction_id = @vegetarian_id)
+UNION ALL SELECT @naruto_pref_id, @no_alcohol_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @naruto_pref_id AND restriction_id = @no_alcohol_id)
+UNION ALL SELECT @naruto_pref_id, @lactose_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @naruto_pref_id AND restriction_id = @lactose_id);
 
 -- Sasuke & Sakura - 2 restrictions: Peanut Allergy + Tree Nut Allergy (scattered: Allergies)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@sasuke_couple_id, 'Church');
-SET @sasuke_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@sasuke_pref_id, @peanut_allergy_id),
-(@sasuke_pref_id, @tree_nut_allergy_id);
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @sasuke_couple_id, 'Church'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @sasuke_couple_id AND ceremony_type = 'Church'
+);
+SET @sasuke_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @sasuke_couple_id AND ceremony_type = 'Church' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @sasuke_pref_id, @peanut_allergy_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @sasuke_pref_id AND restriction_id = @peanut_allergy_id)
+UNION ALL SELECT @sasuke_pref_id, @tree_nut_allergy_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @sasuke_pref_id AND restriction_id = @tree_nut_allergy_id);
 
 -- Shikamaru & Temari - 4 restrictions: Halal + No Alcohol + No Pork + Low-Sodium (scattered: Religious, Dietary, Medical)
 INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@shikamaru_couple_id, 'Garden');
@@ -81,400 +101,640 @@ INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUE
 (@shikamaru_pref_id, @low_sodium_id);
 
 -- Ino & Sai - 4 restrictions: Vegan + No Alcohol + Low-Sugar + Low-Fat (scattered: Dietary, Religious, Medical)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@ino_couple_id, 'Beach');
-SET @ino_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@ino_pref_id, @vegan_id),
-(@ino_pref_id, @no_alcohol_id),
-(@ino_pref_id, @low_sugar_id),
-(@ino_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Low-Fat' LIMIT 1));
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @ino_couple_id, 'Beach'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @ino_couple_id AND ceremony_type = 'Beach'
+);
+SET @ino_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @ino_couple_id AND ceremony_type = 'Beach' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @ino_pref_id, @vegan_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @ino_pref_id AND restriction_id = @vegan_id)
+UNION ALL SELECT @ino_pref_id, @no_alcohol_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @ino_pref_id AND restriction_id = @no_alcohol_id)
+UNION ALL SELECT @ino_pref_id, @low_sugar_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @ino_pref_id AND restriction_id = @low_sugar_id)
+UNION ALL SELECT @ino_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Low-Fat' LIMIT 1) WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @ino_pref_id AND restriction_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Low-Fat' LIMIT 1));
 
 -- Choji & Karui - 1 restriction: Shellfish Allergy (scattered: Allergy)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@choji_couple_id, 'Outdoor');
-SET @choji_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@choji_pref_id, @shellfish_allergy_id);
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @choji_couple_id, 'Outdoor'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @choji_couple_id AND ceremony_type = 'Outdoor'
+);
+SET @choji_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @choji_couple_id AND ceremony_type = 'Outdoor' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @choji_pref_id, @shellfish_allergy_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @choji_pref_id AND restriction_id = @shellfish_allergy_id);
 
 -- Kiba & Tamaki - 3 restrictions: Pescatarian + Seafood Allergy + Dairy Allergy (scattered: Dietary, Allergies)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@kiba_couple_id, 'Indoor');
-SET @kiba_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@kiba_pref_id, @pescatarian_id),
-(@kiba_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Seafood Allergy' LIMIT 1)),
-(@kiba_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Dairy Allergy' LIMIT 1));
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @kiba_couple_id, 'Indoor'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @kiba_couple_id AND ceremony_type = 'Indoor'
+);
+SET @kiba_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @kiba_couple_id AND ceremony_type = 'Indoor' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @kiba_pref_id, @pescatarian_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @kiba_pref_id AND restriction_id = @pescatarian_id)
+UNION ALL SELECT @kiba_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Seafood Allergy' LIMIT 1) WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @kiba_pref_id AND restriction_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Seafood Allergy' LIMIT 1))
+UNION ALL SELECT @kiba_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Dairy Allergy' LIMIT 1) WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @kiba_pref_id AND restriction_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Dairy Allergy' LIMIT 1));
 
 -- Minato & Kushina - 4 restrictions: Kosher + No Alcohol + Low-Sodium + Heart-Healthy (scattered: Religious, Medical)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@minato_couple_id, 'Civil');
-SET @minato_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@minato_pref_id, @kosher_id),
-(@minato_pref_id, @no_alcohol_id),
-(@minato_pref_id, @low_sodium_id),
-(@minato_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Heart-Healthy' LIMIT 1));
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @minato_couple_id, 'Civil'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @minato_couple_id AND ceremony_type = 'Civil'
+);
+SET @minato_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @minato_couple_id AND ceremony_type = 'Civil' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @minato_pref_id, @kosher_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @minato_pref_id AND restriction_id = @kosher_id)
+UNION ALL SELECT @minato_pref_id, @no_alcohol_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @minato_pref_id AND restriction_id = @no_alcohol_id)
+UNION ALL SELECT @minato_pref_id, @low_sodium_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @minato_pref_id AND restriction_id = @low_sodium_id)
+UNION ALL SELECT @minato_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Heart-Healthy' LIMIT 1) WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @minato_pref_id AND restriction_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Heart-Healthy' LIMIT 1));
 
 -- Hashirama & Mito - 3 restrictions: Vegetarian + No Alcohol + Gluten Intolerant (scattered: Dietary, Religious, Intolerance)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@hashirama_couple_id, 'Church');
-SET @hashirama_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@hashirama_pref_id, @vegetarian_id),
-(@hashirama_pref_id, @no_alcohol_id),
-(@hashirama_pref_id, @gluten_id);
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @hashirama_couple_id, 'Church'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @hashirama_couple_id AND ceremony_type = 'Church'
+);
+SET @hashirama_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @hashirama_couple_id AND ceremony_type = 'Church' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @hashirama_pref_id, @vegetarian_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @hashirama_pref_id AND restriction_id = @vegetarian_id)
+UNION ALL SELECT @hashirama_pref_id, @no_alcohol_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @hashirama_pref_id AND restriction_id = @no_alcohol_id)
+UNION ALL SELECT @hashirama_pref_id, @gluten_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @hashirama_pref_id AND restriction_id = @gluten_id);
 
 -- Asuma & Kurenai - 4 restrictions: No Pork + Low-Sodium + Diabetic-Friendly + Egg Allergy (scattered: Dietary, Medical, Allergy)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@asuma_couple_id, 'Garden');
-SET @asuma_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@asuma_pref_id, @no_pork_id),
-(@asuma_pref_id, @low_sodium_id),
-(@asuma_pref_id, @diabetic_id),
-(@asuma_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Egg Allergy' LIMIT 1));
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @asuma_couple_id, 'Garden'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @asuma_couple_id AND ceremony_type = 'Garden'
+);
+SET @asuma_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @asuma_couple_id AND ceremony_type = 'Garden' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @asuma_pref_id, @no_pork_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @asuma_pref_id AND restriction_id = @no_pork_id)
+UNION ALL SELECT @asuma_pref_id, @low_sodium_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @asuma_pref_id AND restriction_id = @low_sodium_id)
+UNION ALL SELECT @asuma_pref_id, @diabetic_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @asuma_pref_id AND restriction_id = @diabetic_id)
+UNION ALL SELECT @asuma_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Egg Allergy' LIMIT 1) WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @asuma_pref_id AND restriction_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Egg Allergy' LIMIT 1));
 
 -- Gaara & Matsuri - 3 restrictions: Halal + No Alcohol + Wheat Allergy (scattered: Religious, Allergy)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@gaara_couple_id, 'Beach');
-SET @gaara_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@gaara_pref_id, @halal_id),
-(@gaara_pref_id, @no_alcohol_id),
-(@gaara_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Wheat Allergy' LIMIT 1));
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @gaara_couple_id, 'Beach'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @gaara_couple_id AND ceremony_type = 'Beach'
+);
+SET @gaara_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @gaara_couple_id AND ceremony_type = 'Beach' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @gaara_pref_id, @halal_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @gaara_pref_id AND restriction_id = @halal_id)
+UNION ALL SELECT @gaara_pref_id, @no_alcohol_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @gaara_pref_id AND restriction_id = @no_alcohol_id)
+UNION ALL SELECT @gaara_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Wheat Allergy' LIMIT 1) WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @gaara_pref_id AND restriction_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Wheat Allergy' LIMIT 1));
 
 -- Rock Lee & Tenten - 2 restrictions: Soy Allergy + Fructose Intolerant (scattered: Allergy, Intolerance)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@rocklee_couple_id, 'Outdoor');
-SET @rocklee_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@rocklee_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Soy Allergy' LIMIT 1)),
-(@rocklee_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Fructose Intolerant' LIMIT 1));
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @rocklee_couple_id, 'Outdoor'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @rocklee_couple_id AND ceremony_type = 'Outdoor'
+);
+SET @rocklee_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @rocklee_couple_id AND ceremony_type = 'Outdoor' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @rocklee_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Soy Allergy' LIMIT 1) WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @rocklee_pref_id AND restriction_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Soy Allergy' LIMIT 1))
+UNION ALL SELECT @rocklee_pref_id, (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Fructose Intolerant' LIMIT 1) WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @rocklee_pref_id AND restriction_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Fructose Intolerant' LIMIT 1));
 
 -- Neji & Tenten - 4 restrictions: Gluten Free + No Alcohol + Low-Sugar + Diabetic-Friendly (scattered: Intolerance, Religious, Medical)
-INSERT INTO couple_preferences (couple_id, ceremony_type) VALUES (@neji_couple_id, 'Indoor');
-SET @neji_pref_id = LAST_INSERT_ID();
-INSERT INTO couple_preference_restrictions (preference_id, restriction_id) VALUES
-(@neji_pref_id, @gluten_id),
-(@neji_pref_id, @no_alcohol_id),
-(@neji_pref_id, @low_sugar_id),
-(@neji_pref_id, @diabetic_id);
+INSERT INTO couple_preferences (couple_id, ceremony_type)
+SELECT @neji_couple_id, 'Indoor'
+WHERE NOT EXISTS (
+  SELECT 1 FROM couple_preferences 
+  WHERE couple_id = @neji_couple_id AND ceremony_type = 'Indoor'
+);
+SET @neji_pref_id = COALESCE(
+  (SELECT preference_id FROM couple_preferences WHERE couple_id = @neji_couple_id AND ceremony_type = 'Indoor' LIMIT 1),
+  LAST_INSERT_ID()
+);
+INSERT INTO couple_preference_restrictions (preference_id, restriction_id)
+SELECT @neji_pref_id, @gluten_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @neji_pref_id AND restriction_id = @gluten_id)
+UNION ALL SELECT @neji_pref_id, @no_alcohol_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @neji_pref_id AND restriction_id = @no_alcohol_id)
+UNION ALL SELECT @neji_pref_id, @low_sugar_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @neji_pref_id AND restriction_id = @low_sugar_id)
+UNION ALL SELECT @neji_pref_id, @diabetic_id WHERE NOT EXISTS (SELECT 1 FROM couple_preference_restrictions WHERE preference_id = @neji_pref_id AND restriction_id = @diabetic_id);
 
 -- ============================================================================
 -- STEP 4: CREATE WEDDINGS
 -- ============================================================================
 
 -- Wedding 1: Naruto & Hinata - Spring Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@naruto_couple_id, '2024-04-15', '14:00:00', 'Konoha Grand Hall', 120, 500000.00, 350000.00, 'paid', @naruto_pref_id);
-SET @wedding1_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @naruto_couple_id, '2024-04-15', '14:00:00', 'Konoha Grand Hall', 120, 0, 0, 0, 'paid', @naruto_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @naruto_couple_id 
+    AND wedding_date = '2024-04-15' 
+    AND venue = 'Konoha Grand Hall'
+);
+SET @wedding1_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @naruto_couple_id AND wedding_date = '2024-04-15' AND venue = 'Konoha Grand Hall' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 2: Sasuke & Sakura - Summer Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@sasuke_couple_id, '2024-06-20', '16:00:00', 'Uchiha Clan Estate', 80, 750000.00, 500000.00, 'paid', @sasuke_pref_id);
-SET @wedding2_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @sasuke_couple_id, '2024-06-20', '16:00:00', 'Uchiha Clan Estate', 80, 0, 0, 0, 'paid', @sasuke_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @sasuke_couple_id 
+    AND wedding_date = '2024-06-20' 
+    AND venue = 'Uchiha Clan Estate'
+);
+SET @wedding2_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @sasuke_couple_id AND wedding_date = '2024-06-20' AND venue = 'Uchiha Clan Estate' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 3: Shikamaru & Temari - Autumn Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@shikamaru_couple_id, '2024-09-10', '15:00:00', 'Nara Family Gardens', 100, 600000.00, 400000.00, 'pending', @shikamaru_pref_id);
-SET @wedding3_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @shikamaru_couple_id, '2024-09-10', '15:00:00', 'Nara Family Gardens', 100, 0, 0, 0, 'pending', @shikamaru_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @shikamaru_couple_id 
+    AND wedding_date = '2024-09-10' 
+    AND venue = 'Nara Family Gardens'
+);
+SET @wedding3_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @shikamaru_couple_id AND wedding_date = '2024-09-10' AND venue = 'Nara Family Gardens' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 4: Ino & Sai - Spring Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@ino_couple_id, '2024-05-05', '13:00:00', 'Yamanaka Flower Garden', 90, 550000.00, 380000.00, 'paid', @ino_pref_id);
-SET @wedding4_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @ino_couple_id, '2024-05-05', '13:00:00', 'Yamanaka Flower Garden', 90, 0, 0, 0, 'paid', @ino_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @ino_couple_id 
+    AND wedding_date = '2024-05-05' 
+    AND venue = 'Yamanaka Flower Garden'
+);
+SET @wedding4_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @ino_couple_id AND wedding_date = '2024-05-05' AND venue = 'Yamanaka Flower Garden' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 5: Choji & Karui - Summer Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@choji_couple_id, '2024-07-25', '17:00:00', 'Akimichi Banquet Hall', 150, 800000.00, 550000.00, 'paid', @choji_pref_id);
-SET @wedding5_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @choji_couple_id, '2024-07-25', '17:00:00', 'Akimichi Banquet Hall', 150, 0, 0, 0, 'paid', @choji_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @choji_couple_id 
+    AND wedding_date = '2024-07-25' 
+    AND venue = 'Akimichi Banquet Hall'
+);
+SET @wedding5_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @choji_couple_id AND wedding_date = '2024-07-25' AND venue = 'Akimichi Banquet Hall' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 6: Kiba & Tamaki - Outdoor Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@kiba_couple_id, '2024-08-15', '16:30:00', 'Inuzuka Training Grounds', 70, 450000.00, 300000.00, 'pending', @kiba_pref_id);
-SET @wedding6_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @kiba_couple_id, '2024-08-15', '16:30:00', 'Inuzuka Training Grounds', 70, 0, 0, 0, 'pending', @kiba_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @kiba_couple_id 
+    AND wedding_date = '2024-08-15' 
+    AND venue = 'Inuzuka Training Grounds'
+);
+SET @wedding6_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @kiba_couple_id AND wedding_date = '2024-08-15' AND venue = 'Inuzuka Training Grounds' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 7: Minato & Kushina - Historical Wedding (Past date for historical context)
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@minato_couple_id, '2023-10-10', '14:00:00', 'Konoha Memorial Hall', 200, 1000000.00, 700000.00, 'paid', @minato_pref_id);
-SET @wedding7_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @minato_couple_id, '2023-10-10', '14:00:00', 'Konoha Memorial Hall', 200, 0, 0, 0, 'paid', @minato_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @minato_couple_id 
+    AND wedding_date = '2023-10-10' 
+    AND venue = 'Konoha Memorial Hall'
+);
+SET @wedding7_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @minato_couple_id AND wedding_date = '2023-10-10' AND venue = 'Konoha Memorial Hall' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 8: Hashirama & Mito - Historical Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@hashirama_couple_id, '2023-11-20', '15:00:00', 'Senju Clan Temple', 180, 900000.00, 600000.00, 'paid', @hashirama_pref_id);
-SET @wedding8_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @hashirama_couple_id, '2023-11-20', '15:00:00', 'Senju Clan Temple', 180, 0, 0, 0, 'paid', @hashirama_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @hashirama_couple_id 
+    AND wedding_date = '2023-11-20' 
+    AND venue = 'Senju Clan Temple'
+);
+SET @wedding8_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @hashirama_couple_id AND wedding_date = '2023-11-20' AND venue = 'Senju Clan Temple' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 9: Asuma & Kurenai - Winter Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@asuma_couple_id, '2024-12-15', '16:00:00', 'Sarutobi Family Estate', 85, 650000.00, 450000.00, 'pending', @asuma_pref_id);
-SET @wedding9_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @asuma_couple_id, '2024-12-15', '16:00:00', 'Sarutobi Family Estate', 85, 0, 0, 0, 'pending', @asuma_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @asuma_couple_id 
+    AND wedding_date = '2024-12-15' 
+    AND venue = 'Sarutobi Family Estate'
+);
+SET @wedding9_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @asuma_couple_id AND wedding_date = '2024-12-15' AND venue = 'Sarutobi Family Estate' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 10: Gaara & Matsuri - Sand Village Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@gaara_couple_id, '2024-10-05', '17:00:00', 'Sand Village Oasis', 95, 700000.00, 480000.00, 'paid', @gaara_pref_id);
-SET @wedding10_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @gaara_couple_id, '2024-10-05', '17:00:00', 'Sand Village Oasis', 95, 0, 0, 0, 'paid', @gaara_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @gaara_couple_id 
+    AND wedding_date = '2024-10-05' 
+    AND venue = 'Sand Village Oasis'
+);
+SET @wedding10_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @gaara_couple_id AND wedding_date = '2024-10-05' AND venue = 'Sand Village Oasis' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 11: Rock Lee & Tenten - Energetic Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@rocklee_couple_id, '2024-09-30', '14:30:00', 'Konoha Training Arena', 110, 580000.00, 390000.00, 'paid', @rocklee_pref_id);
-SET @wedding11_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @rocklee_couple_id, '2024-09-30', '14:30:00', 'Konoha Training Arena', 110, 0, 0, 0, 'paid', @rocklee_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @rocklee_couple_id 
+    AND wedding_date = '2024-09-30' 
+    AND venue = 'Konoha Training Arena'
+);
+SET @wedding11_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @rocklee_couple_id AND wedding_date = '2024-09-30' AND venue = 'Konoha Training Arena' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- Wedding 12: Neji & Tenten - Traditional Wedding
-INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, total_cost, production_cost, payment_status, preference_id) VALUES
-(@neji_couple_id, '2024-11-10', '15:30:00', 'Hyuga Clan Compound', 75, 520000.00, 360000.00, 'pending', @neji_pref_id);
-SET @wedding12_id = LAST_INSERT_ID();
+INSERT INTO wedding (couple_id, wedding_date, wedding_time, venue, guest_count, equipment_rental_cost, food_cost, total_cost, payment_status, preference_id)
+SELECT @neji_couple_id, '2024-11-10', '15:30:00', 'Hyuga Clan Compound', 75, 0, 0, 0, 'pending', @neji_pref_id
+WHERE NOT EXISTS (
+  SELECT 1 FROM wedding 
+  WHERE couple_id = @neji_couple_id 
+    AND wedding_date = '2024-11-10' 
+    AND venue = 'Hyuga Clan Compound'
+);
+SET @wedding12_id = COALESCE(
+  (SELECT wedding_id FROM wedding WHERE couple_id = @neji_couple_id AND wedding_date = '2024-11-10' AND venue = 'Hyuga Clan Compound' LIMIT 1),
+  LAST_INSERT_ID()
+);
 
 -- ============================================================================
 -- STEP 5: CREATE GUESTS WITH VARIED DIETARY RESTRICTIONS
 -- ============================================================================
 
 -- Wedding 1: Naruto & Hinata (120 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding1_id, 'Kakashi Hatake', 'accepted', @none_id),
-(@wedding1_id, 'Choji Akimichi', 'pending', @none_id),
-(@wedding1_id, 'Sasuke Uchiha', 'accepted', @none_id),
-(@wedding1_id, 'Neji Hyuga', 'declined', @none_id),
-(@wedding1_id, 'Rock Lee', 'accepted', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding1_id, 'Iruka Umino', 'accepted', @vegetarian_id),
-(@wedding1_id, 'Shino Aburame', 'pending', @vegan_id),
-(@wedding1_id, 'Kurenai Yuhi', 'accepted', @lactose_id),
-(@wedding1_id, 'Guy Sensei', 'accepted', @gluten_id),
-(@wedding1_id, 'Jiraiya', 'pending', @no_alcohol_id),
-(@wedding1_id, 'Hanabi Hyuga', 'accepted', @vegetarian_id),
-(@wedding1_id, 'Hiashi Hyuga', 'accepted', @halal_id),
-(@wedding1_id, 'Kiba Inuzuka', 'declined', @pescatarian_id),
-(@wedding1_id, 'Shikamaru Nara', 'accepted', @diabetic_id),
-(@wedding1_id, 'Sakura Haruno', 'pending', @low_sugar_id),
-(@wedding1_id, 'Ino Yamanaka', 'accepted', @vegetarian_id),
-(@wedding1_id, 'Tenten', 'accepted', @gluten_id),
-(@wedding1_id, 'Sai Yamanaka', 'pending', @vegan_id),
--- 2+ restrictions (will be added via junction table - base restriction set here)
-(@wedding1_id, 'Tsunade', 'accepted', @peanut_allergy_id), -- Will add 2 more via junction
-(@wedding1_id, 'Konohamaru Sarutobi', 'accepted', @shellfish_allergy_id); -- Will add 1 more via junction
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding1_id as wedding_id, 'Kakashi Hatake' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding1_id, 'Choji Akimichi', 'pending', @none_id
+  UNION ALL SELECT @wedding1_id, 'Sasuke Uchiha', 'accepted', @none_id
+  UNION ALL SELECT @wedding1_id, 'Neji Hyuga', 'declined', @none_id
+  UNION ALL SELECT @wedding1_id, 'Rock Lee', 'accepted', @none_id
+) AS new_guests
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests.wedding_id 
+    AND g.guest_name = new_guests.guest_name
+);
+
+-- Continue with remaining guests for Wedding 1 (with duplicate prevention)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding1_id as wedding_id, 'Iruka Umino' as guest_name, 'accepted' as rsvp_status, @vegetarian_id as restriction_id
+  UNION ALL SELECT @wedding1_id, 'Shino Aburame', 'pending', @vegan_id
+  UNION ALL SELECT @wedding1_id, 'Kurenai Yuhi', 'accepted', @lactose_id
+  UNION ALL SELECT @wedding1_id, 'Guy Sensei', 'accepted', @gluten_id
+  UNION ALL SELECT @wedding1_id, 'Jiraiya', 'pending', @no_alcohol_id
+  UNION ALL SELECT @wedding1_id, 'Hanabi Hyuga', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding1_id, 'Hiashi Hyuga', 'accepted', @halal_id
+  UNION ALL SELECT @wedding1_id, 'Kiba Inuzuka', 'declined', @pescatarian_id
+  UNION ALL SELECT @wedding1_id, 'Shikamaru Nara', 'accepted', @diabetic_id
+  UNION ALL SELECT @wedding1_id, 'Sakura Haruno', 'pending', @low_sugar_id
+  UNION ALL SELECT @wedding1_id, 'Ino Yamanaka', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding1_id, 'Tenten', 'accepted', @gluten_id
+  UNION ALL SELECT @wedding1_id, 'Sai Yamanaka', 'pending', @vegan_id
+  UNION ALL SELECT @wedding1_id, 'Tsunade', 'accepted', @peanut_allergy_id
+  UNION ALL SELECT @wedding1_id, 'Konohamaru Sarutobi', 'accepted', @shellfish_allergy_id
+) AS new_guests2
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests2.wedding_id 
+    AND g.guest_name = new_guests2.guest_name
+);
 
 -- Wedding 2: Sasuke & Sakura (80 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding2_id, 'Naruto Uzumaki', 'accepted', @none_id),
-(@wedding2_id, 'Kakashi Hatake', 'pending', @none_id),
-(@wedding2_id, 'Choji Akimichi', 'accepted', @none_id),
-(@wedding2_id, 'Rock Lee', 'declined', @none_id),
-(@wedding2_id, 'Tenten', 'accepted', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding2_id, 'Hinata Hyuga', 'accepted', @vegetarian_id),
-(@wedding2_id, 'Itachi Uchiha', 'pending', @kosher_id),
-(@wedding2_id, 'Fugaku Uchiha', 'accepted', @halal_id),
-(@wedding2_id, 'Mikoto Uchiha', 'accepted', @no_pork_id),
-(@wedding2_id, 'Ino Yamanaka', 'pending', @vegan_id),
-(@wedding2_id, 'Shikamaru Nara', 'accepted', @diabetic_id),
-(@wedding2_id, 'Kiba Inuzuka', 'declined', @pescatarian_id),
-(@wedding2_id, 'Shino Aburame', 'accepted', @tree_nut_allergy_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding2_id, 'Orochimaru', 'accepted', @vegan_id),
-(@wedding2_id, 'Kabuto Yakushi', 'pending', @vegetarian_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding2_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding2_id, 'Kakashi Hatake', 'pending', @none_id
+  UNION ALL SELECT @wedding2_id, 'Choji Akimichi', 'accepted', @none_id
+  UNION ALL SELECT @wedding2_id, 'Rock Lee', 'declined', @none_id
+  UNION ALL SELECT @wedding2_id, 'Tenten', 'accepted', @none_id
+  UNION ALL SELECT @wedding2_id, 'Hinata Hyuga', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding2_id, 'Itachi Uchiha', 'pending', @kosher_id
+  UNION ALL SELECT @wedding2_id, 'Fugaku Uchiha', 'accepted', @halal_id
+  UNION ALL SELECT @wedding2_id, 'Mikoto Uchiha', 'accepted', @no_pork_id
+  UNION ALL SELECT @wedding2_id, 'Ino Yamanaka', 'pending', @vegan_id
+  UNION ALL SELECT @wedding2_id, 'Shikamaru Nara', 'accepted', @diabetic_id
+  UNION ALL SELECT @wedding2_id, 'Kiba Inuzuka', 'declined', @pescatarian_id
+  UNION ALL SELECT @wedding2_id, 'Shino Aburame', 'accepted', @tree_nut_allergy_id
+  UNION ALL SELECT @wedding2_id, 'Orochimaru', 'accepted', @vegan_id
+  UNION ALL SELECT @wedding2_id, 'Kabuto Yakushi', 'pending', @vegetarian_id
+) AS new_guests_w2
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w2.wedding_id 
+    AND g.guest_name = new_guests_w2.guest_name
+);
 
 -- Wedding 3: Shikamaru & Temari (100 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding3_id, 'Naruto Uzumaki', 'accepted', @none_id),
-(@wedding3_id, 'Choji Akimichi', 'pending', @none_id),
-(@wedding3_id, 'Rock Lee', 'accepted', @none_id),
-(@wedding3_id, 'Tenten', 'declined', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding3_id, 'Hinata Hyuga', 'accepted', @vegetarian_id),
-(@wedding3_id, 'Ino Yamanaka', 'pending', @vegan_id),
-(@wedding3_id, 'Kiba Inuzuka', 'accepted', @pescatarian_id),
-(@wedding3_id, 'Shino Aburame', 'accepted', @halal_id),
-(@wedding3_id, 'Gaara', 'accepted', @halal_id),
-(@wedding3_id, 'Kankuro', 'pending', @halal_id),
-(@wedding3_id, 'Baki', 'accepted', @halal_id),
-(@wedding3_id, 'Shikaku Nara', 'declined', @diabetic_id),
-(@wedding3_id, 'Yoshino Nara', 'accepted', @low_sodium_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding3_id, 'Kakashi Hatake', 'accepted', @halal_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding3_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding3_id, 'Choji Akimichi', 'pending', @none_id
+  UNION ALL SELECT @wedding3_id, 'Rock Lee', 'accepted', @none_id
+  UNION ALL SELECT @wedding3_id, 'Tenten', 'declined', @none_id
+  UNION ALL SELECT @wedding3_id, 'Hinata Hyuga', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding3_id, 'Ino Yamanaka', 'pending', @vegan_id
+  UNION ALL SELECT @wedding3_id, 'Kiba Inuzuka', 'accepted', @pescatarian_id
+  UNION ALL SELECT @wedding3_id, 'Shino Aburame', 'accepted', @halal_id
+  UNION ALL SELECT @wedding3_id, 'Gaara', 'accepted', @halal_id
+  UNION ALL SELECT @wedding3_id, 'Kankuro', 'pending', @halal_id
+  UNION ALL SELECT @wedding3_id, 'Baki', 'accepted', @halal_id
+  UNION ALL SELECT @wedding3_id, 'Shikaku Nara', 'declined', @diabetic_id
+  UNION ALL SELECT @wedding3_id, 'Yoshino Nara', 'accepted', @low_sodium_id
+  UNION ALL SELECT @wedding3_id, 'Kakashi Hatake', 'accepted', @halal_id
+) AS new_guests_w3
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w3.wedding_id 
+    AND g.guest_name = new_guests_w3.guest_name
+);
 
 -- Wedding 4: Ino & Sai (90 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding4_id, 'Naruto Uzumaki', 'accepted', @none_id),
-(@wedding4_id, 'Sasuke Uchiha', 'pending', @none_id),
-(@wedding4_id, 'Kakashi Hatake', 'accepted', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding4_id, 'Sakura Haruno', 'accepted', @vegan_id),
-(@wedding4_id, 'Hinata Hyuga', 'pending', @vegetarian_id),
-(@wedding4_id, 'Shikamaru Nara', 'accepted', @vegan_id),
-(@wedding4_id, 'Choji Akimichi', 'declined', @vegan_id),
-(@wedding4_id, 'Inoichi Yamanaka', 'accepted', @vegan_id),
-(@wedding4_id, 'Yamato', 'pending', @vegan_id),
-(@wedding4_id, 'Sai', 'accepted', @vegan_id),
-(@wedding4_id, 'Tenten', 'accepted', @vegan_id),
-(@wedding4_id, 'Rock Lee', 'pending', @vegan_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding4_id, 'Kurenai Yuhi', 'accepted', @vegan_id),
-(@wedding4_id, 'Asuma Sarutobi', 'accepted', @vegan_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding4_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding4_id, 'Sasuke Uchiha', 'pending', @none_id
+  UNION ALL SELECT @wedding4_id, 'Kakashi Hatake', 'accepted', @none_id
+  UNION ALL SELECT @wedding4_id, 'Sakura Haruno', 'accepted', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Hinata Hyuga', 'pending', @vegetarian_id
+  UNION ALL SELECT @wedding4_id, 'Shikamaru Nara', 'accepted', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Choji Akimichi', 'declined', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Inoichi Yamanaka', 'accepted', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Yamato', 'pending', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Sai', 'accepted', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Tenten', 'accepted', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Rock Lee', 'pending', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Kurenai Yuhi', 'accepted', @vegan_id
+  UNION ALL SELECT @wedding4_id, 'Asuma Sarutobi', 'accepted', @vegan_id
+) AS new_guests_w4
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w4.wedding_id 
+    AND g.guest_name = new_guests_w4.guest_name
+);
 
 -- Wedding 5: Choji & Karui (150 guests - showing 15 key guests with mixed RSVP)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
-(@wedding5_id, 'Naruto Uzumaki', 'accepted', @none_id),
-(@wedding5_id, 'Hinata Hyuga', 'pending', @none_id),
-(@wedding5_id, 'Shikamaru Nara', 'accepted', @none_id),
-(@wedding5_id, 'Temari', 'declined', @none_id),
-(@wedding5_id, 'Ino Yamanaka', 'accepted', @none_id),
-(@wedding5_id, 'Sai Yamanaka', 'pending', @none_id),
-(@wedding5_id, 'Kiba Inuzuka', 'accepted', @none_id),
-(@wedding5_id, 'Shino Aburame', 'accepted', @none_id),
-(@wedding5_id, 'Choza Akimichi', 'pending', @none_id),
-(@wedding5_id, 'Chocho Akimichi', 'accepted', @none_id),
-(@wedding5_id, 'Darui', 'declined', @none_id),
-(@wedding5_id, 'A', 'accepted', @none_id),
-(@wedding5_id, 'Samui', 'pending', @none_id),
-(@wedding5_id, 'Omoi', 'accepted', @none_id),
-(@wedding5_id, 'Kakashi Hatake', 'accepted', @none_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding5_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding5_id, 'Hinata Hyuga', 'pending', @none_id
+  UNION ALL SELECT @wedding5_id, 'Shikamaru Nara', 'accepted', @none_id
+  UNION ALL SELECT @wedding5_id, 'Temari', 'declined', @none_id
+  UNION ALL SELECT @wedding5_id, 'Ino Yamanaka', 'accepted', @none_id
+  UNION ALL SELECT @wedding5_id, 'Sai Yamanaka', 'pending', @none_id
+  UNION ALL SELECT @wedding5_id, 'Kiba Inuzuka', 'accepted', @none_id
+  UNION ALL SELECT @wedding5_id, 'Shino Aburame', 'accepted', @none_id
+  UNION ALL SELECT @wedding5_id, 'Choza Akimichi', 'pending', @none_id
+  UNION ALL SELECT @wedding5_id, 'Chocho Akimichi', 'accepted', @none_id
+  UNION ALL SELECT @wedding5_id, 'Darui', 'declined', @none_id
+  UNION ALL SELECT @wedding5_id, 'A', 'accepted', @none_id
+  UNION ALL SELECT @wedding5_id, 'Samui', 'pending', @none_id
+  UNION ALL SELECT @wedding5_id, 'Omoi', 'accepted', @none_id
+  UNION ALL SELECT @wedding5_id, 'Kakashi Hatake', 'accepted', @none_id
+) AS new_guests_w5
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w5.wedding_id 
+    AND g.guest_name = new_guests_w5.guest_name
+);
 
 -- Wedding 6: Kiba & Tamaki (70 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding6_id, 'Kakashi Hatake', 'accepted', @none_id),
-(@wedding6_id, 'Rock Lee', 'pending', @none_id),
-(@wedding6_id, 'Tenten', 'accepted', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding6_id, 'Naruto Uzumaki', 'accepted', @pescatarian_id),
-(@wedding6_id, 'Hinata Hyuga', 'pending', @pescatarian_id),
-(@wedding6_id, 'Shino Aburame', 'accepted', @pescatarian_id),
-(@wedding6_id, 'Tsume Inuzuka', 'declined', @pescatarian_id),
-(@wedding6_id, 'Hana Inuzuka', 'accepted', @pescatarian_id),
-(@wedding6_id, 'Akamaru', 'pending', @pescatarian_id),
-(@wedding6_id, 'Guy Sensei', 'accepted', @pescatarian_id),
-(@wedding6_id, 'Shikamaru Nara', 'accepted', @pescatarian_id),
-(@wedding6_id, 'Choji Akimichi', 'pending', @pescatarian_id),
-(@wedding6_id, 'Ino Yamanaka', 'accepted', @pescatarian_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding6_id, 'Kurenai Yuhi', 'accepted', @pescatarian_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding6_id as wedding_id, 'Kakashi Hatake' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding6_id, 'Rock Lee', 'pending', @none_id
+  UNION ALL SELECT @wedding6_id, 'Tenten', 'accepted', @none_id
+  UNION ALL SELECT @wedding6_id, 'Naruto Uzumaki', 'accepted', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Hinata Hyuga', 'pending', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Shino Aburame', 'accepted', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Tsume Inuzuka', 'declined', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Hana Inuzuka', 'accepted', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Akamaru', 'pending', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Guy Sensei', 'accepted', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Shikamaru Nara', 'accepted', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Choji Akimichi', 'pending', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Ino Yamanaka', 'accepted', @pescatarian_id
+  UNION ALL SELECT @wedding6_id, 'Kurenai Yuhi', 'accepted', @pescatarian_id
+) AS new_guests_w6
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w6.wedding_id 
+    AND g.guest_name = new_guests_w6.guest_name
+);
 
 -- Wedding 7: Minato & Kushina (200 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding7_id, 'Kushina Uzumaki', 'accepted', @none_id),
-(@wedding7_id, 'Minato Namikaze', 'accepted', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding7_id, 'Hiruzen Sarutobi', 'accepted', @kosher_id),
-(@wedding7_id, 'Jiraiya', 'pending', @kosher_id),
-(@wedding7_id, 'Tsunade', 'accepted', @kosher_id),
-(@wedding7_id, 'Orochimaru', 'declined', @kosher_id),
-(@wedding7_id, 'Fugaku Uchiha', 'accepted', @kosher_id),
-(@wedding7_id, 'Hiashi Hyuga', 'pending', @kosher_id),
-(@wedding7_id, 'Choza Akimichi', 'accepted', @kosher_id),
-(@wedding7_id, 'Shikaku Nara', 'accepted', @kosher_id),
-(@wedding7_id, 'Inoichi Yamanaka', 'pending', @kosher_id),
-(@wedding7_id, 'Tsume Inuzuka', 'accepted', @kosher_id),
-(@wedding7_id, 'Danzo Shimura', 'declined', @kosher_id),
-(@wedding7_id, 'Koharu Utatane', 'accepted', @kosher_id),
-(@wedding7_id, 'Homura Mitokado', 'pending', @kosher_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding7_id, 'Mikoto Uchiha', 'accepted', @kosher_id),
-(@wedding7_id, 'Biwa Juzo', 'accepted', @kosher_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding7_id as wedding_id, 'Kushina Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding7_id, 'Minato Namikaze', 'accepted', @none_id
+  UNION ALL SELECT @wedding7_id, 'Hiruzen Sarutobi', 'accepted', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Jiraiya', 'pending', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Tsunade', 'accepted', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Orochimaru', 'declined', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Fugaku Uchiha', 'accepted', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Hiashi Hyuga', 'pending', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Choza Akimichi', 'accepted', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Shikaku Nara', 'accepted', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Inoichi Yamanaka', 'pending', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Tsume Inuzuka', 'accepted', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Danzo Shimura', 'declined', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Koharu Utatane', 'accepted', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Homura Mitokado', 'pending', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Mikoto Uchiha', 'accepted', @kosher_id
+  UNION ALL SELECT @wedding7_id, 'Biwa Juzo', 'accepted', @kosher_id
+) AS new_guests_w7
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w7.wedding_id 
+    AND g.guest_name = new_guests_w7.guest_name
+);
 
 -- Wedding 8: Hashirama & Mito (180 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding8_id, 'Hashirama Senju', 'accepted', @none_id),
-(@wedding8_id, 'Mito Uzumaki', 'pending', @none_id),
-(@wedding8_id, 'Hagoromo Otsutsuki', 'accepted', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding8_id, 'Tobirama Senju', 'accepted', @vegetarian_id),
-(@wedding8_id, 'Madara Uchiha', 'pending', @vegetarian_id),
-(@wedding8_id, 'Izuna Uchiha', 'accepted', @vegetarian_id),
-(@wedding8_id, 'Tajima Uchiha', 'declined', @vegetarian_id),
-(@wedding8_id, 'Butsuma Senju', 'accepted', @vegetarian_id),
-(@wedding8_id, 'Kawarama Senju', 'pending', @vegetarian_id),
-(@wedding8_id, 'Itama Senju', 'accepted', @vegetarian_id),
-(@wedding8_id, 'Hamura Otsutsuki', 'accepted', @vegetarian_id),
-(@wedding8_id, 'Kaguya Otsutsuki', 'pending', @vegetarian_id),
-(@wedding8_id, 'Asura Otsutsuki', 'accepted', @vegetarian_id),
-(@wedding8_id, 'Indra Otsutsuki', 'declined', @vegetarian_id),
-(@wedding8_id, 'Black Zetsu', 'accepted', @vegetarian_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding8_id, 'Tobirama Senju', 'accepted', @vegetarian_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding8_id as wedding_id, 'Hashirama Senju' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding8_id, 'Mito Uzumaki', 'pending', @none_id
+  UNION ALL SELECT @wedding8_id, 'Hagoromo Otsutsuki', 'accepted', @none_id
+  UNION ALL SELECT @wedding8_id, 'Tobirama Senju', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Madara Uchiha', 'pending', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Izuna Uchiha', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Tajima Uchiha', 'declined', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Butsuma Senju', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Kawarama Senju', 'pending', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Itama Senju', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Hamura Otsutsuki', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Kaguya Otsutsuki', 'pending', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Asura Otsutsuki', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Indra Otsutsuki', 'declined', @vegetarian_id
+  UNION ALL SELECT @wedding8_id, 'Black Zetsu', 'accepted', @vegetarian_id
+) AS new_guests_w8
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w8.wedding_id 
+    AND g.guest_name = new_guests_w8.guest_name
+);
 
 -- Wedding 9: Asuma & Kurenai (85 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding9_id, 'Kurenai Yuhi', 'accepted', @none_id),
-(@wedding9_id, 'Asuma Sarutobi', 'pending', @none_id),
-(@wedding9_id, 'Kakashi Hatake', 'accepted', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding9_id, 'Shikamaru Nara', 'accepted', @no_pork_id),
-(@wedding9_id, 'Choji Akimichi', 'pending', @no_pork_id),
-(@wedding9_id, 'Ino Yamanaka', 'accepted', @no_pork_id),
-(@wedding9_id, 'Hiruzen Sarutobi', 'declined', @no_pork_id),
-(@wedding9_id, 'Konohamaru Sarutobi', 'accepted', @no_pork_id),
-(@wedding9_id, 'Mirai Sarutobi', 'pending', @no_pork_id),
-(@wedding9_id, 'Guy Sensei', 'accepted', @no_pork_id),
-(@wedding9_id, 'Yamato', 'accepted', @no_pork_id),
-(@wedding9_id, 'Iruka Umino', 'pending', @no_pork_id),
-(@wedding9_id, 'Naruto Uzumaki', 'accepted', @no_pork_id),
-(@wedding9_id, 'Sakura Haruno', 'declined', @no_pork_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding9_id, 'Sasuke Uchiha', 'accepted', @no_pork_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding9_id as wedding_id, 'Kurenai Yuhi' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding9_id, 'Asuma Sarutobi', 'pending', @none_id
+  UNION ALL SELECT @wedding9_id, 'Kakashi Hatake', 'accepted', @none_id
+  UNION ALL SELECT @wedding9_id, 'Shikamaru Nara', 'accepted', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Choji Akimichi', 'pending', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Ino Yamanaka', 'accepted', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Hiruzen Sarutobi', 'declined', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Konohamaru Sarutobi', 'accepted', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Mirai Sarutobi', 'pending', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Guy Sensei', 'accepted', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Yamato', 'accepted', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Iruka Umino', 'pending', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Naruto Uzumaki', 'accepted', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Sakura Haruno', 'declined', @no_pork_id
+  UNION ALL SELECT @wedding9_id, 'Sasuke Uchiha', 'accepted', @no_pork_id
+) AS new_guests_w9
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w9.wedding_id 
+    AND g.guest_name = new_guests_w9.guest_name
+);
 
 -- Wedding 10: Gaara & Matsuri (95 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding10_id, 'Matsuri', 'accepted', @none_id),
-(@wedding10_id, 'Gaara', 'pending', @none_id),
-(@wedding10_id, 'Naruto Uzumaki', 'accepted', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding10_id, 'Kankuro', 'accepted', @halal_id),
-(@wedding10_id, 'Temari', 'pending', @halal_id),
-(@wedding10_id, 'Baki', 'accepted', @halal_id),
-(@wedding10_id, 'Yashamaru', 'declined', @halal_id),
-(@wedding10_id, 'Rasa', 'accepted', @halal_id),
-(@wedding10_id, 'Shikamaru Nara', 'pending', @halal_id),
-(@wedding10_id, 'Kakashi Hatake', 'accepted', @halal_id),
-(@wedding10_id, 'Shijima', 'accepted', @halal_id),
-(@wedding10_id, 'Yodo', 'pending', @halal_id),
-(@wedding10_id, 'Pakura', 'accepted', @halal_id),
-(@wedding10_id, 'Sasori', 'declined', @halal_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding10_id, 'Chiyo', 'accepted', @halal_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding10_id as wedding_id, 'Matsuri' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding10_id, 'Gaara', 'pending', @none_id
+  UNION ALL SELECT @wedding10_id, 'Naruto Uzumaki', 'accepted', @none_id
+  UNION ALL SELECT @wedding10_id, 'Kankuro', 'accepted', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Temari', 'pending', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Baki', 'accepted', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Yashamaru', 'declined', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Rasa', 'accepted', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Shikamaru Nara', 'pending', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Kakashi Hatake', 'accepted', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Shijima', 'accepted', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Yodo', 'pending', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Pakura', 'accepted', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Sasori', 'declined', @halal_id
+  UNION ALL SELECT @wedding10_id, 'Chiyo', 'accepted', @halal_id
+) AS new_guests_w10
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w10.wedding_id 
+    AND g.guest_name = new_guests_w10.guest_name
+);
 
 -- Wedding 11: Rock Lee & Tenten (110 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - most guests have no restrictions, mixed RSVP
-(@wedding11_id, 'Guy Sensei', 'accepted', @none_id),
-(@wedding11_id, 'Neji Hyuga', 'pending', @none_id),
-(@wedding11_id, 'Naruto Uzumaki', 'accepted', @none_id),
-(@wedding11_id, 'Hinata Hyuga', 'declined', @none_id),
-(@wedding11_id, 'Sakura Haruno', 'accepted', @none_id),
-(@wedding11_id, 'Sasuke Uchiha', 'pending', @none_id),
-(@wedding11_id, 'Shikamaru Nara', 'accepted', @none_id),
-(@wedding11_id, 'Choji Akimichi', 'accepted', @none_id),
-(@wedding11_id, 'Ino Yamanaka', 'pending', @none_id),
-(@wedding11_id, 'Kiba Inuzuka', 'accepted', @none_id),
-(@wedding11_id, 'Shino Aburame', 'declined', @none_id),
-(@wedding11_id, 'Kakashi Hatake', 'accepted', @none_id),
-(@wedding11_id, 'Rock Lee', 'pending', @none_id),
-(@wedding11_id, 'Tenten', 'accepted', @none_id),
--- 1 restriction
-(@wedding11_id, 'Iruka Umino', 'accepted', @vegetarian_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding11_id, 'Tsunade', 'pending', @none_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding11_id as wedding_id, 'Guy Sensei' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding11_id, 'Neji Hyuga', 'pending', @none_id
+  UNION ALL SELECT @wedding11_id, 'Naruto Uzumaki', 'accepted', @none_id
+  UNION ALL SELECT @wedding11_id, 'Hinata Hyuga', 'declined', @none_id
+  UNION ALL SELECT @wedding11_id, 'Sakura Haruno', 'accepted', @none_id
+  UNION ALL SELECT @wedding11_id, 'Sasuke Uchiha', 'pending', @none_id
+  UNION ALL SELECT @wedding11_id, 'Shikamaru Nara', 'accepted', @none_id
+  UNION ALL SELECT @wedding11_id, 'Choji Akimichi', 'accepted', @none_id
+  UNION ALL SELECT @wedding11_id, 'Ino Yamanaka', 'pending', @none_id
+  UNION ALL SELECT @wedding11_id, 'Kiba Inuzuka', 'accepted', @none_id
+  UNION ALL SELECT @wedding11_id, 'Shino Aburame', 'declined', @none_id
+  UNION ALL SELECT @wedding11_id, 'Kakashi Hatake', 'accepted', @none_id
+  UNION ALL SELECT @wedding11_id, 'Rock Lee', 'pending', @none_id
+  UNION ALL SELECT @wedding11_id, 'Tenten', 'accepted', @none_id
+  UNION ALL SELECT @wedding11_id, 'Iruka Umino', 'accepted', @vegetarian_id
+  UNION ALL SELECT @wedding11_id, 'Tsunade', 'pending', @none_id
+) AS new_guests_w11
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w11.wedding_id 
+    AND g.guest_name = new_guests_w11.guest_name
+);
 
 -- Wedding 12: Neji & Tenten (75 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id) VALUES
--- 0 restrictions (None) - mixed RSVP statuses
-(@wedding12_id, 'Naruto Uzumaki', 'accepted', @none_id),
-(@wedding12_id, 'Sasuke Uchiha', 'pending', @none_id),
-(@wedding12_id, 'Sakura Haruno', 'declined', @none_id),
--- 1 restriction - mixed RSVP statuses
-(@wedding12_id, 'Hiashi Hyuga', 'accepted', @gluten_id),
-(@wedding12_id, 'Hizashi Hyuga', 'pending', @gluten_id),
-(@wedding12_id, 'Hinata Hyuga', 'accepted', @gluten_id),
-(@wedding12_id, 'Hanabi Hyuga', 'declined', @gluten_id),
-(@wedding12_id, 'Rock Lee', 'accepted', @gluten_id),
-(@wedding12_id, 'Guy Sensei', 'pending', @gluten_id),
-(@wedding12_id, 'Shikamaru Nara', 'accepted', @gluten_id),
-(@wedding12_id, 'Choji Akimichi', 'accepted', @gluten_id),
-(@wedding12_id, 'Ino Yamanaka', 'pending', @gluten_id),
-(@wedding12_id, 'Kakashi Hatake', 'accepted', @gluten_id),
-(@wedding12_id, 'Tenten', 'declined', @gluten_id),
--- 2+ restrictions (will be added via junction table)
-(@wedding12_id, 'Kurenai Yuhi', 'accepted', @gluten_id);
+INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+SELECT * FROM (
+  SELECT @wedding12_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
+  UNION ALL SELECT @wedding12_id, 'Sasuke Uchiha', 'pending', @none_id
+  UNION ALL SELECT @wedding12_id, 'Sakura Haruno', 'declined', @none_id
+  UNION ALL SELECT @wedding12_id, 'Hiashi Hyuga', 'accepted', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Hizashi Hyuga', 'pending', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Hinata Hyuga', 'accepted', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Hanabi Hyuga', 'declined', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Rock Lee', 'accepted', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Guy Sensei', 'pending', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Shikamaru Nara', 'accepted', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Choji Akimichi', 'accepted', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Ino Yamanaka', 'pending', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Kakashi Hatake', 'accepted', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Tenten', 'declined', @gluten_id
+  UNION ALL SELECT @wedding12_id, 'Kurenai Yuhi', 'accepted', @gluten_id
+) AS new_guests_w12
+WHERE NOT EXISTS (
+  SELECT 1 FROM guest g 
+  WHERE g.wedding_id = new_guests_w12.wedding_id 
+    AND g.guest_name = new_guests_w12.guest_name
+);
 
 -- ============================================================================
 -- STEP 6: POPULATE GUEST_RESTRICTIONS JUNCTION TABLE
@@ -663,25 +923,32 @@ SET @rocklee_ceremony = (SELECT ceremony_type FROM couple_preferences WHERE pref
 SET @neji_ceremony = (SELECT ceremony_type FROM couple_preferences WHERE preference_id = @neji_pref_id);
 
 -- Wedding 1: Naruto & Hinata - 9 tables (Couple, VIP, Family, Friends categories)
-INSERT INTO seating_table (wedding_id, table_number, table_category, capacity) VALUES
-(@wedding1_id, 'T-001', 'Couple', 2),
-(@wedding1_id, 'T-002', 'VIP', 8),
-(@wedding1_id, 'T-003', 'VIP', 6),
-(@wedding1_id, 'T-004', 'Family', 10),
-(@wedding1_id, 'T-005', 'Family', 10),
-(@wedding1_id, 'T-006', 'Friends', 8),
-(@wedding1_id, 'T-007', 'Friends', 8),
-(@wedding1_id, 'T-008', 'Friends', 8),
-(@wedding1_id, 'T-009', 'Friends', 8);
-SET @wedding1_table1 = CAST(LAST_INSERT_ID() AS SIGNED) - 8;
-SET @wedding1_table2 = CAST(LAST_INSERT_ID() AS SIGNED) - 7;
-SET @wedding1_table3 = CAST(LAST_INSERT_ID() AS SIGNED) - 6;
-SET @wedding1_table4 = CAST(LAST_INSERT_ID() AS SIGNED) - 5;
-SET @wedding1_table5 = CAST(LAST_INSERT_ID() AS SIGNED) - 4;
-SET @wedding1_table6 = CAST(LAST_INSERT_ID() AS SIGNED) - 3;
-SET @wedding1_table7 = CAST(LAST_INSERT_ID() AS SIGNED) - 2;
-SET @wedding1_table8 = CAST(LAST_INSERT_ID() AS SIGNED) - 1;
-SET @wedding1_table9 = LAST_INSERT_ID();
+INSERT INTO seating_table (wedding_id, table_number, table_category, capacity)
+SELECT * FROM (
+  SELECT @wedding1_id as wedding_id, 'T-001' as table_number, 'Couple' as table_category, 2 as capacity
+  UNION ALL SELECT @wedding1_id, 'T-002', 'VIP', 8
+  UNION ALL SELECT @wedding1_id, 'T-003', 'VIP', 6
+  UNION ALL SELECT @wedding1_id, 'T-004', 'Family', 10
+  UNION ALL SELECT @wedding1_id, 'T-005', 'Family', 10
+  UNION ALL SELECT @wedding1_id, 'T-006', 'Friends', 8
+  UNION ALL SELECT @wedding1_id, 'T-007', 'Friends', 8
+  UNION ALL SELECT @wedding1_id, 'T-008', 'Friends', 8
+  UNION ALL SELECT @wedding1_id, 'T-009', 'Friends', 8
+) AS new_tables_w1
+WHERE NOT EXISTS (
+  SELECT 1 FROM seating_table st 
+  WHERE st.wedding_id = new_tables_w1.wedding_id 
+    AND st.table_number = new_tables_w1.table_number
+);
+SET @wedding1_table1 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-001' LIMIT 1), CAST(LAST_INSERT_ID() AS SIGNED) - 8);
+SET @wedding1_table2 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-002' LIMIT 1), CAST(LAST_INSERT_ID() AS SIGNED) - 7);
+SET @wedding1_table3 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-003' LIMIT 1), CAST(LAST_INSERT_ID() AS SIGNED) - 6);
+SET @wedding1_table4 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-004' LIMIT 1), CAST(LAST_INSERT_ID() AS SIGNED) - 5);
+SET @wedding1_table5 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-005' LIMIT 1), CAST(LAST_INSERT_ID() AS SIGNED) - 4);
+SET @wedding1_table6 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-006' LIMIT 1), CAST(LAST_INSERT_ID() AS SIGNED) - 3);
+SET @wedding1_table7 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-007' LIMIT 1), CAST(LAST_INSERT_ID() AS SIGNED) - 2);
+SET @wedding1_table8 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-008' LIMIT 1), CAST(LAST_INSERT_ID() AS SIGNED) - 1);
+SET @wedding1_table9 = COALESCE((SELECT table_id FROM seating_table WHERE wedding_id = @wedding1_id AND table_number = 'T-009' LIMIT 1), LAST_INSERT_ID());
 
 -- Wedding 2: Sasuke & Sakura - 7 tables (Couple + 6 others)
 INSERT INTO seating_table (wedding_id, table_number, table_category, capacity) VALUES
@@ -1088,11 +1355,11 @@ END WHERE wedding_id = @wedding12_id;
 -- We'll create inventory items if they don't exist, then create allocations
 
 -- Create inventory items for generic seating tables (capacity-based only)
-INSERT IGNORE INTO inventory_items (item_name, category, item_condition, quantity_available, unit_rental_cost, rental_cost) VALUES
-('Seating Table - 2 seats', 'Furniture', 'Excellent', 999, 350.00, 350.00),
-('Seating Table - 6 seats', 'Furniture', 'Excellent', 999, 450.00, 450.00),
-('Seating Table - 8 seats', 'Furniture', 'Excellent', 999, 500.00, 500.00),
-('Seating Table - 10 seats', 'Furniture', 'Excellent', 999, 550.00, 550.00);
+INSERT IGNORE INTO inventory_items (item_name, category, item_condition, quantity_available, unit_rental_cost) VALUES
+('Seating Table - 2 seats', 'Furniture', 'Excellent', 999, 350.00),
+('Seating Table - 6 seats', 'Furniture', 'Excellent', 999, 450.00),
+('Seating Table - 8 seats', 'Furniture', 'Excellent', 999, 500.00),
+('Seating Table - 10 seats', 'Furniture', 'Excellent', 999, 550.00);
 
 -- Get inventory item IDs
 SET @table_2_id = (SELECT inventory_id FROM inventory_items WHERE item_name = 'Seating Table - 2 seats' LIMIT 1);
@@ -1102,107 +1369,128 @@ SET @table_10_id = (SELECT inventory_id FROM inventory_items WHERE item_name = '
 
 -- Create inventory allocations for each table
 -- Wedding 1 (Civil): 9 tables (1x2 Couple, 1x6 VIP, 1x8 VIP, 2x10 Family, 4x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding1_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding1_id, @table_6_id, 1, 450.00, 450.00),
-(@wedding1_id, @table_8_id, 5, 500.00, 2500.00),
-(@wedding1_id, @table_10_id, 2, 550.00, 1100.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding1_id, @table_2_id, 1, 350.00),
+(@wedding1_id, @table_6_id, 1, 450.00),
+(@wedding1_id, @table_8_id, 5, 500.00),
+(@wedding1_id, @table_10_id, 2, 550.00);
 
 -- Wedding 2 (Church): 7 tables (1x2 Couple, 1x8 VIP, 2x10 Family, 3x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding2_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding2_id, @table_8_id, 4, 500.00, 2000.00),
-(@wedding2_id, @table_10_id, 2, 550.00, 1100.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding2_id, @table_2_id, 1, 350.00),
+(@wedding2_id, @table_8_id, 4, 500.00),
+(@wedding2_id, @table_10_id, 2, 550.00);
 
 -- Wedding 3 (Garden): 8 tables (1x2 Couple, 1x8 VIP, 1x6 VIP, 2x10 Family, 3x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding3_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding3_id, @table_6_id, 1, 450.00, 450.00),
-(@wedding3_id, @table_8_id, 4, 500.00, 2000.00),
-(@wedding3_id, @table_10_id, 2, 550.00, 1100.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding3_id, @table_2_id, 1, 350.00),
+(@wedding3_id, @table_6_id, 1, 450.00),
+(@wedding3_id, @table_8_id, 4, 500.00),
+(@wedding3_id, @table_10_id, 2, 550.00);
 
 -- Wedding 4 (Beach): 7 tables (1x2 Couple, 1x8 VIP, 2x10 Family, 3x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding4_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding4_id, @table_8_id, 4, 500.00, 2000.00),
-(@wedding4_id, @table_10_id, 2, 550.00, 1100.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding4_id, @table_2_id, 1, 350.00),
+(@wedding4_id, @table_8_id, 4, 500.00),
+(@wedding4_id, @table_10_id, 2, 550.00);
 
 -- Wedding 5 (Outdoor): 11 tables (1x2 Couple, 2x8 VIP, 3x10 Family, 5x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding5_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding5_id, @table_8_id, 7, 500.00, 3500.00),
-(@wedding5_id, @table_10_id, 3, 550.00, 1650.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding5_id, @table_2_id, 1, 350.00),
+(@wedding5_id, @table_8_id, 7, 500.00),
+(@wedding5_id, @table_10_id, 3, 550.00);
 
 -- Wedding 6 (Indoor): 6 tables (1x2 Couple, 1x8 VIP, 1x10 Family, 3x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding6_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding6_id, @table_8_id, 4, 500.00, 2000.00),
-(@wedding6_id, @table_10_id, 1, 550.00, 550.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding6_id, @table_2_id, 1, 350.00),
+(@wedding6_id, @table_8_id, 4, 500.00),
+(@wedding6_id, @table_10_id, 1, 550.00);
 
 -- Wedding 7 (Civil): 13 tables (1x2 Couple, 2x8 VIP, 1x6 VIP, 4x10 Family, 5x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding7_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding7_id, @table_6_id, 1, 450.00, 450.00),
-(@wedding7_id, @table_8_id, 7, 500.00, 3500.00),
-(@wedding7_id, @table_10_id, 4, 550.00, 2200.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding7_id, @table_2_id, 1, 350.00),
+(@wedding7_id, @table_6_id, 1, 450.00),
+(@wedding7_id, @table_8_id, 7, 500.00),
+(@wedding7_id, @table_10_id, 4, 550.00);
 
 -- Wedding 8 (Church): 11 tables (1x2 Couple, 2x8 VIP, 3x10 Family, 5x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding8_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding8_id, @table_8_id, 7, 500.00, 3500.00),
-(@wedding8_id, @table_10_id, 3, 550.00, 1650.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding8_id, @table_2_id, 1, 350.00),
+(@wedding8_id, @table_8_id, 7, 500.00),
+(@wedding8_id, @table_10_id, 3, 550.00);
 
 -- Wedding 9 (Garden): 7 tables (1x2 Couple, 1x8 VIP, 2x10 Family, 3x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding9_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding9_id, @table_8_id, 4, 500.00, 2000.00),
-(@wedding9_id, @table_10_id, 2, 550.00, 1100.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding9_id, @table_2_id, 1, 350.00),
+(@wedding9_id, @table_8_id, 4, 500.00),
+(@wedding9_id, @table_10_id, 2, 550.00);
 
 -- Wedding 10 (Beach): 7 tables (1x2 Couple, 1x8 VIP, 2x10 Family, 3x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding10_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding10_id, @table_8_id, 4, 500.00, 2000.00),
-(@wedding10_id, @table_10_id, 2, 550.00, 1100.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding10_id, @table_2_id, 1, 350.00),
+(@wedding10_id, @table_8_id, 4, 500.00),
+(@wedding10_id, @table_10_id, 2, 550.00);
 
 -- Wedding 11 (Outdoor): 8 tables (1x2 Couple, 1x8 VIP, 1x6 VIP, 2x10 Family, 3x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding11_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding11_id, @table_6_id, 1, 450.00, 450.00),
-(@wedding11_id, @table_8_id, 4, 500.00, 2000.00),
-(@wedding11_id, @table_10_id, 2, 550.00, 1100.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding11_id, @table_2_id, 1, 350.00),
+(@wedding11_id, @table_6_id, 1, 450.00),
+(@wedding11_id, @table_8_id, 4, 500.00),
+(@wedding11_id, @table_10_id, 2, 550.00);
 
 -- Wedding 12 (Indoor): 6 tables (1x2 Couple, 1x8 VIP, 1x10 Family, 3x8 Friends)
-INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost, rental_cost) VALUES
-(@wedding12_id, @table_2_id, 1, 350.00, 350.00),
-(@wedding12_id, @table_8_id, 4, 500.00, 2000.00),
-(@wedding12_id, @table_10_id, 1, 550.00, 550.00);
+INSERT INTO inventory_allocation (wedding_id, inventory_id, quantity_used, unit_rental_cost) VALUES
+(@wedding12_id, @table_2_id, 1, 350.00),
+(@wedding12_id, @table_8_id, 4, 500.00),
+(@wedding12_id, @table_10_id, 1, 550.00);
+
+-- ============================================================================
+-- STEP 7: UPDATE WEDDING COSTS FROM INVENTORY ALLOCATIONS
+-- ============================================================================
+-- Calculate equipment_rental_cost from inventory allocations
+-- food_cost will be calculated when packages are assigned (script 05)
+-- total_cost = equipment_rental_cost + food_cost
+-- Update ALL weddings to ensure consistency
+
+UPDATE wedding w
+SET 
+  equipment_rental_cost = COALESCE((
+    SELECT SUM(quantity_used * unit_rental_cost)
+    FROM inventory_allocation
+    WHERE wedding_id = w.wedding_id
+  ), 0),
+  total_cost = COALESCE((
+    SELECT SUM(quantity_used * unit_rental_cost)
+    FROM inventory_allocation
+    WHERE wedding_id = w.wedding_id
+  ), 0) + COALESCE(food_cost, 0);
 
 -- ============================================================================
 -- ADDITIONAL NARUTO-THEMED INVENTORY ITEMS
 -- ============================================================================
 -- Add at least 10 Naruto-themed inventory items for furniture, decorations, and equipment
 
-INSERT IGNORE INTO inventory_items (item_name, category, item_condition, quantity_available, unit_rental_cost, rental_cost) VALUES
+INSERT IGNORE INTO inventory_items (item_name, category, item_condition, quantity_available, unit_rental_cost) VALUES
 -- Furniture & Seating
-('Konoha Village Archway', 'Decoration', 'Excellent', 50, 2500.00, 2500.00),
-('Uchiha Clan Banner Set', 'Decoration', 'Excellent', 30, 800.00, 800.00),
-('Hokage Monument Replica', 'Decoration', 'Excellent', 20, 3500.00, 3500.00),
-('Ninja Scroll Backdrop', 'Decoration', 'Excellent', 40, 1200.00, 1200.00),
-('Sakura Petal Centerpiece', 'Decoration', 'Excellent', 100, 150.00, 150.00),
+('Konoha Village Archway', 'Decoration', 'Excellent', 50, 2500.00),
+('Uchiha Clan Banner Set', 'Decoration', 'Excellent', 30, 800.00),
+('Hokage Monument Replica', 'Decoration', 'Excellent', 20, 3500.00),
+('Ninja Scroll Backdrop', 'Decoration', 'Excellent', 40, 1200.00),
+('Sakura Petal Centerpiece', 'Decoration', 'Excellent', 100, 150.00),
 
 -- Equipment & Lighting
-('Rasengan LED Light Display', 'Equipment', 'Excellent', 25, 1800.00, 1800.00),
-('Sharingan Projector', 'Equipment', 'Excellent', 15, 2200.00, 2200.00),
-('Chakra Glow String Lights', 'Equipment', 'Excellent', 60, 450.00, 450.00),
-('Ninja Tool Display Stand', 'Furniture', 'Excellent', 35, 600.00, 600.00),
-('Kunai & Shuriken Decorative Set', 'Decoration', 'Excellent', 50, 300.00, 300.00),
+('Rasengan LED Light Display', 'Equipment', 'Excellent', 25, 1800.00),
+('Sharingan Projector', 'Equipment', 'Excellent', 15, 2200.00),
+('Chakra Glow String Lights', 'Equipment', 'Excellent', 60, 450.00),
+('Ninja Tool Display Stand', 'Furniture', 'Excellent', 35, 600.00),
+('Kunai & Shuriken Decorative Set', 'Decoration', 'Excellent', 50, 300.00),
 
 -- Additional Items
-('Akatsuki Cloud Table Runner', 'Decoration', 'Excellent', 80, 200.00, 200.00),
-('Tailed Beast Plush Set', 'Decoration', 'Excellent', 12, 500.00, 500.00),
-('Ninja Headband Collection', 'Decoration', 'Excellent', 100, 100.00, 100.00),
-('Sage Mode Photo Booth Props', 'Equipment', 'Excellent', 20, 900.00, 900.00),
-('Hidden Leaf Village Map Backdrop', 'Decoration', 'Excellent', 30, 1500.00, 1500.00);
+('Akatsuki Cloud Table Runner', 'Decoration', 'Excellent', 80, 200.00),
+('Tailed Beast Plush Set', 'Decoration', 'Excellent', 12, 500.00),
+('Ninja Headband Collection', 'Decoration', 'Excellent', 100, 100.00),
+('Sage Mode Photo Booth Props', 'Equipment', 'Excellent', 20, 900.00),
+('Hidden Leaf Village Map Backdrop', 'Decoration', 'Excellent', 30, 1500.00);
 
 -- ============================================================================
 -- SUMMARY UPDATED
@@ -1255,5 +1543,102 @@ INSERT IGNORE INTO inventory_items (item_name, category, item_condition, quantit
 --   - Peanut Allergy, Tree Nut Allergy, Shellfish Allergy, Seafood Allergy
 --   - Dairy Allergy, Egg Allergy, Soy Allergy
 --   - Diabetic-Friendly, Low-Sodium, Low-Sugar, Low-Fat, Heart-Healthy
+-- ============================================================================
+
+-- ============================================================================
+-- FINAL CLEANUP: ENSURE ALL WEDDINGS HAVE CORRECT COSTS
+-- ============================================================================
+-- This ensures that ALL weddings in the database have correct cost calculations
+-- regardless of how they were created. This fixes any inconsistencies.
+
+UPDATE wedding w
+SET 
+  equipment_rental_cost = COALESCE((
+    SELECT SUM(quantity_used * unit_rental_cost)
+    FROM inventory_allocation
+    WHERE wedding_id = w.wedding_id
+  ), 0),
+  food_cost = COALESCE((
+    SELECT SUM(
+      COALESCE(
+        (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+         FROM package_menu_items pmi
+         JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+         WHERE pmi.package_id = tp.package_id), 0
+      )
+    )
+    FROM table_package tp
+    JOIN seating_table st ON tp.table_id = st.table_id
+    WHERE st.wedding_id = w.wedding_id
+  ), 0),
+  total_cost = COALESCE((
+    SELECT SUM(quantity_used * unit_rental_cost)
+    FROM inventory_allocation
+    WHERE wedding_id = w.wedding_id
+  ), 0) + COALESCE((
+    SELECT SUM(
+      COALESCE(
+        (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+         FROM package_menu_items pmi
+         JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+         WHERE pmi.package_id = tp.package_id), 0
+      )
+    )
+    FROM table_package tp
+    JOIN seating_table st ON tp.table_id = st.table_id
+    WHERE st.wedding_id = w.wedding_id
+  ), 0);
+
+-- ============================================================================
+-- CLEANUP: Remove duplicate weddings (same couple, date, and venue)
+-- ============================================================================
+-- This removes duplicate weddings, keeping only the first one (lowest wedding_id)
+-- for each unique combination of couple_id, wedding_date, and venue
+
+DELETE w1 FROM wedding w1
+INNER JOIN wedding w2 
+WHERE w1.wedding_id > w2.wedding_id 
+  AND w1.couple_id = w2.couple_id 
+  AND w1.wedding_date = w2.wedding_date 
+  AND w1.venue = w2.venue;
+
+-- Recalculate costs after cleanup
+UPDATE wedding w
+SET 
+  equipment_rental_cost = COALESCE((
+    SELECT SUM(quantity_used * unit_rental_cost)
+    FROM inventory_allocation
+    WHERE wedding_id = w.wedding_id
+  ), 0),
+  food_cost = COALESCE((
+    SELECT SUM(
+      COALESCE(
+        (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+         FROM package_menu_items pmi
+         JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+         WHERE pmi.package_id = tp.package_id), 0
+      )
+    )
+    FROM table_package tp
+    JOIN seating_table st ON tp.table_id = st.table_id
+    WHERE st.wedding_id = w.wedding_id
+  ), 0),
+  total_cost = COALESCE((
+    SELECT SUM(quantity_used * unit_rental_cost)
+    FROM inventory_allocation
+    WHERE wedding_id = w.wedding_id
+  ), 0) + COALESCE((
+    SELECT SUM(
+      COALESCE(
+        (SELECT SUM(mi.unit_cost * COALESCE(pmi.quantity, 1))
+         FROM package_menu_items pmi
+         JOIN menu_item mi ON pmi.menu_item_id = mi.menu_item_id
+         WHERE pmi.package_id = tp.package_id), 0
+      )
+    )
+    FROM table_package tp
+    JOIN seating_table st ON tp.table_id = st.table_id
+    WHERE st.wedding_id = w.wedding_id
+  ), 0);
 -- ============================================================================
 
