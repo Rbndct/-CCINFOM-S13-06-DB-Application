@@ -1,4 +1,4 @@
-import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle } from 'lucide-react';
+import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -113,7 +113,10 @@ const Reports = () => {
     setArLoading(true);
     try {
       const response = await api.get('/reports/accounts-receivable', { params: { period, value } });
-      setAccountsReceivable(response.data?.data || response.data || response);
+      const data = response.data?.data || response.data || response;
+      console.log('Accounts Receivable Data:', data);
+      console.log('Receivables:', data.receivables);
+      setAccountsReceivable(data);
     } catch (error: any) {
       console.error('Error fetching accounts receivable report:', error);
     } finally {
@@ -744,74 +747,223 @@ const Reports = () => {
               </CardContent>
             </Card>
 
-            {accountsReceivable && (
-              <>
-                {/* Summary Cards */}
-                <div className="grid gap-4 md:grid-cols-5">
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Total Receivables</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold">{formatCurrency(accountsReceivable.total_receivables || 0)}</div>
-                      <p className="text-xs text-muted-foreground">{accountsReceivable.total_count || 0} invoices</p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Current (0-30)</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-green-600">
-                        {formatCurrency(accountsReceivable.aging_buckets?.current?.amount || 0)}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {accountsReceivable.aging_buckets?.current?.count || 0} invoices
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">31-60 Days</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-yellow-600">
-                        {formatCurrency(accountsReceivable.aging_buckets?.days_31_60?.amount || 0)}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {accountsReceivable.aging_buckets?.days_31_60?.count || 0} invoices
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">61-90 Days</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-orange-600">
-                        {formatCurrency(accountsReceivable.aging_buckets?.days_61_90?.amount || 0)}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {accountsReceivable.aging_buckets?.days_61_90?.count || 0} invoices
-                      </p>
-                    </CardContent>
-                  </Card>
-                  <Card>
-                    <CardHeader className="pb-2">
-                      <CardTitle className="text-sm font-medium">Over 90 Days</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-2xl font-bold text-red-600">
-                        {formatCurrency(accountsReceivable.aging_buckets?.over_90?.amount || 0)}
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {accountsReceivable.aging_buckets?.over_90?.count || 0} invoices
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
+            {accountsReceivable && (() => {
+              const totalReceivables = accountsReceivable.total_receivables || 0;
+              const totalCount = accountsReceivable.total_count || 0;
+              const avgInvoiceAmount = totalCount > 0 ? totalReceivables / totalCount : 0;
+              
+              // Calculate payment status breakdown
+              const receivables = accountsReceivable.receivables || [];
+              const pendingAmount = receivables
+                .filter((r: any) => (r.payment_status || '').toLowerCase() === 'pending')
+                .reduce((sum: number, r: any) => sum + (parseFloat(r.outstanding_balance) || 0), 0);
+              const partialAmount = receivables
+                .filter((r: any) => (r.payment_status || '').toLowerCase() === 'partial')
+                .reduce((sum: number, r: any) => sum + (parseFloat(r.outstanding_balance) || 0), 0);
+              const pendingCount = receivables.filter((r: any) => (r.payment_status || '').toLowerCase() === 'pending').length;
+              const partialCount = receivables.filter((r: any) => (r.payment_status || '').toLowerCase() === 'partial').length;
+              
+              // Calculate average days overdue
+              const totalDaysOverdue = receivables.reduce((sum: number, r: any) => sum + (parseInt(r.days_overdue) || 0), 0);
+              const avgDaysOverdue = totalCount > 0 ? Math.round(totalDaysOverdue / totalCount) : 0;
+              
+              // Find oldest invoice
+              const oldestInvoice = receivables.length > 0 
+                ? receivables.reduce((oldest: any, current: any) => 
+                    (parseInt(current.days_overdue) || 0) > (parseInt(oldest.days_overdue) || 0) ? current : oldest
+                  )
+                : null;
+              
+              return (
+                <>
+                  {/* Key Metrics Overview */}
+                  <div className="grid gap-4 md:grid-cols-4 mb-4">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Total Outstanding Receivables</CardTitle>
+                        <CreditCard className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{formatCurrency(totalReceivables)}</div>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-muted-foreground">{totalCount} outstanding invoice{totalCount !== 1 ? 's' : ''}</p>
+                          <p className="text-xs text-muted-foreground">Avg: {formatCurrency(avgInvoiceAmount)}</p>
+                        </div>
+                        <div className="mt-2 pt-2 border-t">
+                          <div className="flex justify-between text-xs">
+                            <span className="text-muted-foreground">Pending:</span>
+                            <span className="font-medium">{formatCurrency(pendingAmount)} ({pendingCount})</span>
+                          </div>
+                          <div className="flex justify-between text-xs mt-1">
+                            <span className="text-muted-foreground">Partial:</span>
+                            <span className="font-medium">{formatCurrency(partialAmount)} ({partialCount})</span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Average Days Overdue</CardTitle>
+                        <Clock className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold">{avgDaysOverdue} days</div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {oldestInvoice ? (
+                            <>Oldest: {oldestInvoice.days_overdue} days (Invoice #{oldestInvoice.wedding_id})</>
+                          ) : (
+                            'No overdue invoices'
+                          )}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Collection Risk</CardTitle>
+                        <AlertTriangle className="h-4 w-4 text-muted-foreground" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-red-600">
+                          {formatCurrency(accountsReceivable.aging_buckets?.over_90?.amount || 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {accountsReceivable.aging_buckets?.over_90?.count || 0} invoice{accountsReceivable.aging_buckets?.over_90?.count !== 1 ? 's' : ''} over 90 days
+                        </p>
+                        <p className="text-xs text-red-600 font-medium mt-1">
+                          {totalReceivables > 0 
+                            ? `${((accountsReceivable.aging_buckets?.over_90?.amount || 0) / totalReceivables * 100).toFixed(1)}% of total`
+                            : '0% of total'}
+                        </p>
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Current Status</CardTitle>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-green-600">
+                          {formatCurrency(accountsReceivable.aging_buckets?.current?.amount || 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          {accountsReceivable.aging_buckets?.current?.count || 0} invoice{accountsReceivable.aging_buckets?.current?.count !== 1 ? 's' : ''} (0-30 days)
+                        </p>
+                        <p className="text-xs text-green-600 font-medium mt-1">
+                          {totalReceivables > 0 
+                            ? `${((accountsReceivable.aging_buckets?.current?.amount || 0) / totalReceivables * 100).toFixed(1)}% of total`
+                            : '0% of total'}
+                        </p>
+                      </CardContent>
+                    </Card>
+                  </div>
 
-                {/* Aging Chart */}
+                  {/* Aging Buckets Detail */}
+                  <div className="grid gap-4 md:grid-cols-4 mb-4">
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Current (0-30 days)</CardTitle>
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-green-600">
+                          {formatCurrency(accountsReceivable.aging_buckets?.current?.amount || 0)}
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-muted-foreground">
+                            {accountsReceivable.aging_buckets?.current?.count || 0} invoice{accountsReceivable.aging_buckets?.current?.count !== 1 ? 's' : ''}
+                          </p>
+                          <p className="text-xs font-medium text-green-600">
+                            {accountsReceivable.aging_buckets?.current?.percentage?.toFixed(1) || '0.0'}%
+                          </p>
+                        </div>
+                        {accountsReceivable.aging_buckets?.current?.count > 0 && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Avg: {formatCurrency((accountsReceivable.aging_buckets?.current?.amount || 0) / (accountsReceivable.aging_buckets?.current?.count || 1))}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">31-60 Days Overdue</CardTitle>
+                        <Clock className="h-4 w-4 text-yellow-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-yellow-600">
+                          {formatCurrency(accountsReceivable.aging_buckets?.days_31_60?.amount || 0)}
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-muted-foreground">
+                            {accountsReceivable.aging_buckets?.days_31_60?.count || 0} invoice{accountsReceivable.aging_buckets?.days_31_60?.count !== 1 ? 's' : ''}
+                          </p>
+                          <p className="text-xs font-medium text-yellow-600">
+                            {accountsReceivable.aging_buckets?.days_31_60?.percentage?.toFixed(1) || '0.0'}%
+                          </p>
+                        </div>
+                        {accountsReceivable.aging_buckets?.days_31_60?.count > 0 && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Avg: {formatCurrency((accountsReceivable.aging_buckets?.days_31_60?.amount || 0) / (accountsReceivable.aging_buckets?.days_31_60?.count || 1))}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">61-90 Days Overdue</CardTitle>
+                        <AlertTriangle className="h-4 w-4 text-orange-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-orange-600">
+                          {formatCurrency(accountsReceivable.aging_buckets?.days_61_90?.amount || 0)}
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-muted-foreground">
+                            {accountsReceivable.aging_buckets?.days_61_90?.count || 0} invoice{accountsReceivable.aging_buckets?.days_61_90?.count !== 1 ? 's' : ''}
+                          </p>
+                          <p className="text-xs font-medium text-orange-600">
+                            {accountsReceivable.aging_buckets?.days_61_90?.percentage?.toFixed(1) || '0.0'}%
+                          </p>
+                        </div>
+                        {accountsReceivable.aging_buckets?.days_61_90?.count > 0 && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Avg: {formatCurrency((accountsReceivable.aging_buckets?.days_61_90?.amount || 0) / (accountsReceivable.aging_buckets?.days_61_90?.count || 1))}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">Over 90 Days Overdue</CardTitle>
+                        <XCircle className="h-4 w-4 text-red-600" />
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-2xl font-bold text-red-600">
+                          {formatCurrency(accountsReceivable.aging_buckets?.over_90?.amount || 0)}
+                        </div>
+                        <div className="flex items-center justify-between mt-2">
+                          <p className="text-xs text-muted-foreground">
+                            {accountsReceivable.aging_buckets?.over_90?.count || 0} invoice{accountsReceivable.aging_buckets?.over_90?.count !== 1 ? 's' : ''}
+                          </p>
+                          <p className="text-xs font-medium text-red-600">
+                            {accountsReceivable.aging_buckets?.over_90?.percentage?.toFixed(1) || '0.0'}%
+                          </p>
+                        </div>
+                        {accountsReceivable.aging_buckets?.over_90?.count > 0 && (
+                          <p className="text-xs text-muted-foreground mt-2">
+                            Avg: {formatCurrency((accountsReceivable.aging_buckets?.over_90?.amount || 0) / (accountsReceivable.aging_buckets?.over_90?.count || 1))}
+                          </p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Aging Chart */}
                 <Card>
                   <CardHeader>
                     <CardTitle>Accounts Receivable Aging</CardTitle>
@@ -884,14 +1036,54 @@ const Reports = () => {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Wedding ID</TableHead>
-                            <TableHead>Couple</TableHead>
-                            <TableHead>Venue</TableHead>
-                            <TableHead>Wedding Date</TableHead>
-                            <TableHead>Total Cost</TableHead>
-                            <TableHead>Outstanding</TableHead>
-                            <TableHead>Days Overdue</TableHead>
-                            <TableHead>Status</TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <Hash className="h-4 w-4 text-muted-foreground" />
+                                Wedding ID
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <Users className="h-4 w-4 text-muted-foreground" />
+                                Couple
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <MapPin className="h-4 w-4 text-muted-foreground" />
+                                Venue
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <Calendar className="h-4 w-4 text-muted-foreground" />
+                                Wedding Date
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <DollarSign className="h-4 w-4 text-muted-foreground" />
+                                Total Cost
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <CreditCard className="h-4 w-4 text-muted-foreground" />
+                                Outstanding
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                Days Overdue
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <FileText className="h-4 w-4 text-muted-foreground" />
+                                Status
+                              </div>
+                            </TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -920,8 +1112,9 @@ const Reports = () => {
                     </CardContent>
                   </Card>
                 )}
-              </>
-            )}
+                </>
+              );
+            })()}
 
             {!accountsReceivable && !arLoading && value && (
               <Card>
