@@ -17,31 +17,35 @@ router.get('/', async (req, res) => {
       whereClauses.push('cp.ceremony_type = ?');
       params.push(ceremony_type);
     }
-    
+
     // Handle multiple restriction IDs
     let restrictionFilter = '';
     if (restriction_ids) {
       let restrictionIdArray = [];
       if (Array.isArray(restriction_ids)) {
-        restrictionIdArray = restriction_ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id));
+        restrictionIdArray = restriction_ids.map(id => parseInt(id, 10))
+                                 .filter(id => !isNaN(id));
       } else if (typeof restriction_ids === 'string') {
         // Handle comma-separated string or single value
-        restrictionIdArray = restriction_ids.split(',').map(id => parseInt(id.trim(), 10)).filter(id => !isNaN(id));
+        restrictionIdArray = restriction_ids.split(',')
+                                 .map(id => parseInt(id.trim(), 10))
+                                 .filter(id => !isNaN(id));
       }
-      
+
       if (restrictionIdArray.length > 0) {
         // Filter couples that have at least one of the selected restrictions
         restrictionFilter = `EXISTS (
           SELECT 1 FROM couple_preference_restrictions cpr2
           INNER JOIN couple_preferences cp2 ON cpr2.preference_id = cp2.preference_id
           WHERE cp2.couple_id = c.couple_id
-          AND cpr2.restriction_id IN (${restrictionIdArray.map(() => '?').join(',')})
+          AND cpr2.restriction_id IN (${
+            restrictionIdArray.map(() => '?').join(',')})
         )`;
         params.push(...restrictionIdArray);
         whereClauses.push(restrictionFilter);
       }
     }
-    
+
     const whereSql =
         whereClauses.length ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
@@ -233,8 +237,7 @@ router.post('/preferences', async (req, res) => {
         // Get "None" restriction ID
         const [noneRows] = await connection.query(
             'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-            ['None']
-        );
+            ['None']);
         if (noneRows.length > 0) {
           uniqueRestrictionIds = [noneRows[0].restriction_id];
         }
@@ -436,8 +439,7 @@ router.put('/preferences/:preference_id', async (req, res) => {
         if (uniqueRestrictionIds.length === 0) {
           const [noneRows] = await connection.query(
               'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-              ['None']
-          );
+              ['None']);
           if (noneRows.length > 0) {
             uniqueRestrictionIds = [noneRows[0].restriction_id];
           }
@@ -617,8 +619,8 @@ router.get('/:id/weddings', async (req, res) => {
         'LEFT JOIN couple_preferences cp ON w.preference_id = cp.preference_id' :
         'LEFT JOIN couple_preferences cp ON 1=0';
     const groupByFields = hasPreferenceColumn ?
-        'w.wedding_id, w.couple_id, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.equipment_rental_cost, w.food_cost, w.total_cost, w.production_cost, w.payment_status, cp.ceremony_type, w.preference_id, cp.preference_id' :
-        'w.wedding_id, w.couple_id, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.equipment_rental_cost, w.food_cost, w.total_cost, w.production_cost, w.payment_status, cp.ceremony_type';
+        'w.wedding_id, w.couple_id, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.equipment_rental_cost, w.food_cost, w.total_cost, w.payment_status, cp.ceremony_type, w.preference_id, cp.preference_id' :
+        'w.wedding_id, w.couple_id, w.wedding_date, w.wedding_time, w.venue, w.guest_count, w.equipment_rental_cost, w.food_cost, w.total_cost, w.payment_status, cp.ceremony_type';
 
     const [rows] = await promisePool.query(
         `SELECT 
@@ -628,10 +630,9 @@ router.get('/:id/weddings', async (req, res) => {
         w.wedding_time as weddingTime,
         w.venue,
         w.guest_count as guestCount,
-        COALESCE(w.equipment_rental_cost, w.total_cost) as equipmentRentalCost,
-        COALESCE(w.food_cost, w.production_cost) as foodCost,
+        w.equipment_rental_cost as equipmentRentalCost,
+        w.food_cost as foodCost,
         w.total_cost as totalCost,
-        w.production_cost as productionCost,
         w.payment_status as paymentStatus,
         ${preferenceSelect}
         cp.ceremony_type,
