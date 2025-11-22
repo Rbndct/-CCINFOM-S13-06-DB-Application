@@ -42,11 +42,6 @@ DELETE FROM guest_restrictions;
 -- Clear couple_preference_restrictions junction table (if it references dietary restrictions)
 DELETE FROM couple_preference_restrictions;
 
--- Update guest table to set restriction_id to NULL (to allow deletion of dietary_restrictions)
-UPDATE guest SET restriction_id = NULL WHERE restriction_id IS NOT NULL;
-
--- Update couple_preferences table to set restriction_id to NULL (to allow deletion of dietary_restrictions)
-UPDATE couple_preferences SET restriction_id = NULL WHERE restriction_id IS NOT NULL;
 
 -- Delete all dietary restrictions (will be re-inserted fresh)
 DELETE FROM dietary_restriction;
@@ -171,54 +166,54 @@ INSERT INTO ingredient (ingredient_id, ingredient_name, unit, stock_quantity, re
 -- STEP 5: INSERT MENU ITEMS (at least 10 with balanced dietary restrictions)
 -- ============================================================================
 
-INSERT INTO menu_item (menu_name, unit_cost, selling_price, menu_type, restriction_id) VALUES
+INSERT INTO menu_item (menu_name, unit_cost, selling_price, menu_type) VALUES
 -- Appetizers
-('Ramen Appetizer Bowl', 150.00, 280.00, 'Appetizer', NULL),
-('Miso Soup Shot', 45.00, 95.00, 'Appetizer', @vegetarian_id),
-('Edamame (Steamed Soybeans)', 60.00, 120.00, 'Appetizer', @vegan_id),
-('Takoyaki (Octopus Balls)', 180.00, 320.00, 'Appetizer', @pescatarian_id),
-('Gyoza (Dumplings)', 120.00, 240.00, 'Appetizer', NULL),
-('Tempura Shrimp', 200.00, 380.00, 'Appetizer', @pescatarian_id),
-('Vegetable Spring Rolls', 90.00, 170.00, 'Appetizer', @vegan_id),
-('Chicken Yakitori', 140.00, 260.00, 'Appetizer', @no_pork_id),
-('Tofu Skewers', 100.00, 190.00, 'Appetizer', @vegan_id),
-('Seaweed Salad', 70.00, 140.00, 'Appetizer', @vegan_id),
+('Ramen Appetizer Bowl', 150.00, 280.00, 'Appetizer'),
+('Miso Soup Shot', 45.00, 95.00, 'Appetizer'),
+('Edamame (Steamed Soybeans)', 60.00, 120.00, 'Appetizer'),
+('Takoyaki (Octopus Balls)', 180.00, 320.00, 'Appetizer'),
+('Gyoza (Dumplings)', 120.00, 240.00, 'Appetizer'),
+('Tempura Shrimp', 200.00, 380.00, 'Appetizer'),
+('Vegetable Spring Rolls', 90.00, 170.00, 'Appetizer'),
+('Chicken Yakitori', 140.00, 260.00, 'Appetizer'),
+('Tofu Skewers', 100.00, 190.00, 'Appetizer'),
+('Seaweed Salad', 70.00, 140.00, 'Appetizer'),
 
 -- Main Courses
-('Ichiraku Ramen Special', 350.00, 650.00, 'Main Course', NULL),
-('Naruto Udon Bowl', 280.00, 520.00, 'Main Course', @vegetarian_id),
-('Sasuke Teriyaki Chicken', 420.00, 780.00, 'Main Course', @no_pork_id),
-('Sakura Sushi Platter', 550.00, 980.00, 'Main Course', @pescatarian_id),
-('Kakashi Grilled Fish', 380.00, 720.00, 'Main Course', @pescatarian_id),
-('Beef Sukiyaki', 450.00, 850.00, 'Main Course', @no_pork_id),
-('Vegetarian Curry Bowl', 320.00, 600.00, 'Main Course', @vegan_id),
-('Tofu Teriyaki Bowl', 280.00, 520.00, 'Main Course', @vegan_id),
-('Chicken Katsu Curry', 400.00, 750.00, 'Main Course', @no_pork_id),
-('Salmon Teriyaki', 390.00, 730.00, 'Main Course', @pescatarian_id),
+('Ichiraku Ramen Special', 350.00, 650.00, 'Main Course'),
+('Naruto Udon Bowl', 280.00, 520.00, 'Main Course'),
+('Sasuke Teriyaki Chicken', 420.00, 780.00, 'Main Course'),
+('Sakura Sushi Platter', 550.00, 980.00, 'Main Course'),
+('Kakashi Grilled Fish', 380.00, 720.00, 'Main Course'),
+('Beef Sukiyaki', 450.00, 850.00, 'Main Course'),
+('Vegetarian Curry Bowl', 320.00, 600.00, 'Main Course'),
+('Tofu Teriyaki Bowl', 280.00, 520.00, 'Main Course'),
+('Chicken Katsu Curry', 400.00, 750.00, 'Main Course'),
+('Salmon Teriyaki', 390.00, 730.00, 'Main Course'),
 
 -- Beverages
-('Green Tea', 25.00, 50.00, 'Beverage', @vegan_id),
-('Matcha Latte', 45.00, 90.00, 'Beverage', @vegetarian_id),
-('Japanese Iced Coffee', 40.00, 80.00, 'Beverage', @vegan_id),
-('Sake (Premium)', 120.00, 240.00, 'Beverage', NULL),
-('Plum Wine', 100.00, 200.00, 'Beverage', NULL),
-('Fresh Orange Juice', 35.00, 70.00, 'Beverage', @vegan_id),
-('Mango Smoothie', 50.00, 100.00, 'Beverage', @vegetarian_id),
-('Sparkling Water', 20.00, 40.00, 'Beverage', @vegan_id),
-('Yuzu Lemonade', 40.00, 80.00, 'Beverage', @vegan_id),
-('Hot Sake', 110.00, 220.00, 'Beverage', NULL),
+('Green Tea', 25.00, 50.00, 'Beverage'),
+('Matcha Latte', 45.00, 90.00, 'Beverage'),
+('Japanese Iced Coffee', 40.00, 80.00, 'Beverage'),
+('Sake (Premium)', 120.00, 240.00, 'Beverage'),
+('Plum Wine', 100.00, 200.00, 'Beverage'),
+('Fresh Orange Juice', 35.00, 70.00, 'Beverage'),
+('Mango Smoothie', 50.00, 100.00, 'Beverage'),
+('Sparkling Water', 20.00, 40.00, 'Beverage'),
+('Yuzu Lemonade', 40.00, 80.00, 'Beverage'),
+('Hot Sake', 110.00, 220.00, 'Beverage'),
 
 -- Desserts
-('Dango Trio (Sweet Rice Balls)', 90.00, 180.00, 'Dessert', @vegan_id),
-('Mochi Ice Cream', 110.00, 220.00, 'Dessert', @vegetarian_id),
-('Matcha Green Tea Cake', 140.00, 280.00, 'Dessert', @vegetarian_id),
-('Red Bean Mochi', 95.00, 190.00, 'Dessert', @vegan_id),
-('Sesame Balls', 85.00, 170.00, 'Dessert', @vegan_id),
-('Taiyaki (Fish-shaped Cake)', 80.00, 160.00, 'Dessert', @vegetarian_id),
-('Warabimochi', 75.00, 150.00, 'Dessert', @vegan_id),
-('Green Tea Ice Cream', 100.00, 200.00, 'Dessert', @vegetarian_id),
-('Anmitsu', 120.00, 240.00, 'Dessert', @vegan_id),
-('Dorayaki', 85.00, 170.00, 'Dessert', @vegetarian_id);
+('Dango Trio (Sweet Rice Balls)', 90.00, 180.00, 'Dessert'),
+('Mochi Ice Cream', 110.00, 220.00, 'Dessert'),
+('Matcha Green Tea Cake', 140.00, 280.00, 'Dessert'),
+('Red Bean Mochi', 95.00, 190.00, 'Dessert'),
+('Sesame Balls', 85.00, 170.00, 'Dessert'),
+('Taiyaki (Fish-shaped Cake)', 80.00, 160.00, 'Dessert'),
+('Warabimochi', 75.00, 150.00, 'Dessert'),
+('Green Tea Ice Cream', 100.00, 200.00, 'Dessert'),
+('Anmitsu', 120.00, 240.00, 'Dessert'),
+('Dorayaki', 85.00, 170.00, 'Dessert');
 
 -- ============================================================================
 -- STEP 6: INSERT RECIPES (for all menu items)
@@ -490,19 +485,114 @@ SET @shellfish_allergy_id = (SELECT restriction_id FROM dietary_restriction WHER
 SET @dairy_allergy_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Dairy Allergy' LIMIT 1);
 SET @egg_allergy_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Egg Allergy' LIMIT 1);
 
--- First, migrate existing single restrictions from menu_item.restriction_id to junction table
-INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
-SELECT menu_item_id, restriction_id FROM menu_item 
-WHERE restriction_id IS NOT NULL
-AND NOT EXISTS (
-    SELECT 1 FROM menu_item_restrictions mir 
-    WHERE mir.menu_item_id = menu_item.menu_item_id 
-    AND mir.restriction_id = menu_item.restriction_id
-);
+-- Add restrictions to menu items via junction table (1-4 restrictions each)
 
--- Add multiple restrictions to specific menu items (2-4 restrictions each)
+-- Single restrictions for menu items
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Miso Soup Shot'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Edamame (Steamed Soybeans)'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @pescatarian_id FROM menu_item mi WHERE mi.menu_name = 'Takoyaki (Octopus Balls)'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @pescatarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @pescatarian_id FROM menu_item mi WHERE mi.menu_name = 'Tempura Shrimp'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @pescatarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Vegetable Spring Rolls'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @no_pork_id FROM menu_item mi WHERE mi.menu_name = 'Chicken Yakitori'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @no_pork_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Skewers'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Seaweed Salad'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Naruto Udon Bowl'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @no_pork_id FROM menu_item mi WHERE mi.menu_name = 'Sasuke Teriyaki Chicken'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @no_pork_id)
+UNION ALL
+SELECT mi.menu_item_id, @pescatarian_id FROM menu_item mi WHERE mi.menu_name = 'Sakura Sushi Platter'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @pescatarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @pescatarian_id FROM menu_item mi WHERE mi.menu_name = 'Kakashi Grilled Fish'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @pescatarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @no_pork_id FROM menu_item mi WHERE mi.menu_name = 'Beef Sukiyaki'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @no_pork_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Vegetarian Curry Bowl'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Teriyaki Bowl'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @no_pork_id FROM menu_item mi WHERE mi.menu_name = 'Chicken Katsu Curry'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @no_pork_id)
+UNION ALL
+SELECT mi.menu_item_id, @pescatarian_id FROM menu_item mi WHERE mi.menu_name = 'Salmon Teriyaki'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @pescatarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Green Tea'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Matcha Latte'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Japanese Iced Coffee'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Fresh Orange Juice'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Mango Smoothie'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Sparkling Water'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Yuzu Lemonade'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Dango Trio (Sweet Rice Balls)'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Mochi Ice Cream'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Matcha Green Tea Cake'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Red Bean Mochi'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Sesame Balls'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Taiyaki (Fish-shaped Cake)'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Warabimochi'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Green Tea Ice Cream'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegan_id FROM menu_item mi WHERE mi.menu_name = 'Anmitsu'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegan_id)
+UNION ALL
+SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Dorayaki'
+AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id);
 
 -- Miso Soup Shot: 2 restrictions (Vegetarian + Low-Sodium)
+-- Note: Vegetarian is already added above, adding Low-Sodium
 INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Miso Soup Shot'
 AND NOT EXISTS (
@@ -512,6 +602,7 @@ AND NOT EXISTS (
 );
 
 -- Edamame: 3 restrictions (Vegan + Gluten Free + Low-Sodium)
+-- Note: Vegan is already added above, adding Gluten Free and Low-Sodium
 INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Edamame (Steamed Soybeans)'
 AND NOT EXISTS (

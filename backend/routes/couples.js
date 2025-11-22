@@ -232,14 +232,23 @@ router.post('/preferences', async (req, res) => {
           [...new Set(normalizedRestrictionIds)] :
           [];
 
+      // Get "None" restriction ID for filtering
+      const [noneRows] = await connection.query(
+          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+          ['None']
+      );
+      const noneRestrictionId = noneRows.length > 0 ? noneRows[0].restriction_id : null;
+
+      // Filter out "None" if other restrictions are provided
+      // "None" should only be present when no other restrictions are selected
+      if (noneRestrictionId !== null && uniqueRestrictionIds.length > 0) {
+        uniqueRestrictionIds = uniqueRestrictionIds.filter(id => id !== noneRestrictionId);
+      }
+
       // Auto-assign "None" if no restrictions provided
       if (uniqueRestrictionIds.length === 0) {
-        // Get "None" restriction ID
-        const [noneRows] = await connection.query(
-            'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-            ['None']);
-        if (noneRows.length > 0) {
-          uniqueRestrictionIds = [noneRows[0].restriction_id];
+        if (noneRestrictionId !== null) {
+          uniqueRestrictionIds = [noneRestrictionId];
         }
       }
 
@@ -435,13 +444,23 @@ router.put('/preferences/:preference_id', async (req, res) => {
         // Remove duplicates
         let uniqueRestrictionIds = [...new Set(normalizedRestrictionIds)];
 
-        // Auto-assign "None" if empty array
+        // Get "None" restriction ID for filtering
+        const [noneRows] = await connection.query(
+            'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+            ['None']
+        );
+        const noneRestrictionId = noneRows.length > 0 ? noneRows[0].restriction_id : null;
+
+        // Filter out "None" if other restrictions are provided
+        // "None" should only be present when no other restrictions are selected
+        if (noneRestrictionId !== null) {
+          uniqueRestrictionIds = uniqueRestrictionIds.filter(id => id !== noneRestrictionId);
+        }
+
+        // Auto-assign "None" if empty array (no restrictions selected)
         if (uniqueRestrictionIds.length === 0) {
-          const [noneRows] = await connection.query(
-              'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
-              ['None']);
-          if (noneRows.length > 0) {
-            uniqueRestrictionIds = [noneRows[0].restriction_id];
+          if (noneRestrictionId !== null) {
+            uniqueRestrictionIds = [noneRestrictionId];
           }
         }
 

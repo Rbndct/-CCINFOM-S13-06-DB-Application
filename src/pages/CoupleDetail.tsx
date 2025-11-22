@@ -320,12 +320,18 @@ const CoupleDetail = () => {
       return;
     }
 
-    // Use the selected restrictions directly (MultiSelectRestrictions handles "None" logic)
-    // Backend will auto-assign "None" (ID 1) if empty array is sent
+    // Filter out "None" if other restrictions are present
+    // "None" should only be present when no other restrictions are selected
     let finalRestrictionIds = preferenceForm.restriction_ids;
     
-    // If no restrictions selected, send empty array - backend will auto-assign "None"
-    // No need to fetch or assign "None" on frontend, backend handles it
+    // Get "None" restriction ID for filtering
+    if (noneRestrictionId && finalRestrictionIds.length > 0) {
+      // Filter out "None" if other restrictions are present
+      finalRestrictionIds = finalRestrictionIds.filter(id => id !== noneRestrictionId);
+    }
+    
+    // If no restrictions selected after filtering, send empty array - backend will auto-assign "None"
+    // Backend handles the logic of adding "None" when array is empty
 
     setPreferenceLoading(true);
     try {

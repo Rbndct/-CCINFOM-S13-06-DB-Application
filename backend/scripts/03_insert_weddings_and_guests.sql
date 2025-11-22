@@ -425,13 +425,13 @@ SET @wedding12_id = COALESCE(
 -- ============================================================================
 
 -- Wedding 1: Naruto & Hinata (120 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding1_id as wedding_id, 'Kakashi Hatake' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding1_id, 'Choji Akimichi', 'pending', @none_id
-  UNION ALL SELECT @wedding1_id, 'Sasuke Uchiha', 'accepted', @none_id
-  UNION ALL SELECT @wedding1_id, 'Neji Hyuga', 'declined', @none_id
-  UNION ALL SELECT @wedding1_id, 'Rock Lee', 'accepted', @none_id
+  SELECT @wedding1_id as wedding_id, 'Kakashi Hatake' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding1_id, 'Choji Akimichi', 'pending'
+  UNION ALL SELECT @wedding1_id, 'Sasuke Uchiha', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Neji Hyuga', 'declined'
+  UNION ALL SELECT @wedding1_id, 'Rock Lee', 'accepted'
 ) AS new_guests
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -440,23 +440,23 @@ WHERE NOT EXISTS (
 );
 
 -- Continue with remaining guests for Wedding 1 (with duplicate prevention)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding1_id as wedding_id, 'Iruka Umino' as guest_name, 'accepted' as rsvp_status, @vegetarian_id as restriction_id
-  UNION ALL SELECT @wedding1_id, 'Shino Aburame', 'pending', @vegan_id
-  UNION ALL SELECT @wedding1_id, 'Kurenai Yuhi', 'accepted', @lactose_id
-  UNION ALL SELECT @wedding1_id, 'Guy Sensei', 'accepted', @gluten_id
-  UNION ALL SELECT @wedding1_id, 'Jiraiya', 'pending', @no_alcohol_id
-  UNION ALL SELECT @wedding1_id, 'Hanabi Hyuga', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding1_id, 'Hiashi Hyuga', 'accepted', @halal_id
-  UNION ALL SELECT @wedding1_id, 'Kiba Inuzuka', 'declined', @pescatarian_id
-  UNION ALL SELECT @wedding1_id, 'Shikamaru Nara', 'accepted', @diabetic_id
-  UNION ALL SELECT @wedding1_id, 'Sakura Haruno', 'pending', @low_sugar_id
-  UNION ALL SELECT @wedding1_id, 'Ino Yamanaka', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding1_id, 'Tenten', 'accepted', @gluten_id
-  UNION ALL SELECT @wedding1_id, 'Sai Yamanaka', 'pending', @vegan_id
-  UNION ALL SELECT @wedding1_id, 'Tsunade', 'accepted', @peanut_allergy_id
-  UNION ALL SELECT @wedding1_id, 'Konohamaru Sarutobi', 'accepted', @shellfish_allergy_id
+  SELECT @wedding1_id as wedding_id, 'Iruka Umino' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding1_id, 'Shino Aburame', 'pending'
+  UNION ALL SELECT @wedding1_id, 'Kurenai Yuhi', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Guy Sensei', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Jiraiya', 'pending'
+  UNION ALL SELECT @wedding1_id, 'Hanabi Hyuga', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Hiashi Hyuga', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Kiba Inuzuka', 'declined'
+  UNION ALL SELECT @wedding1_id, 'Shikamaru Nara', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Sakura Haruno', 'pending'
+  UNION ALL SELECT @wedding1_id, 'Ino Yamanaka', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Tenten', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Sai Yamanaka', 'pending'
+  UNION ALL SELECT @wedding1_id, 'Tsunade', 'accepted'
+  UNION ALL SELECT @wedding1_id, 'Konohamaru Sarutobi', 'accepted'
 ) AS new_guests2
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -465,23 +465,23 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 2: Sasuke & Sakura (80 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding2_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding2_id, 'Kakashi Hatake', 'pending', @none_id
-  UNION ALL SELECT @wedding2_id, 'Choji Akimichi', 'accepted', @none_id
-  UNION ALL SELECT @wedding2_id, 'Rock Lee', 'declined', @none_id
-  UNION ALL SELECT @wedding2_id, 'Tenten', 'accepted', @none_id
-  UNION ALL SELECT @wedding2_id, 'Hinata Hyuga', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding2_id, 'Itachi Uchiha', 'pending', @kosher_id
-  UNION ALL SELECT @wedding2_id, 'Fugaku Uchiha', 'accepted', @halal_id
-  UNION ALL SELECT @wedding2_id, 'Mikoto Uchiha', 'accepted', @no_pork_id
-  UNION ALL SELECT @wedding2_id, 'Ino Yamanaka', 'pending', @vegan_id
-  UNION ALL SELECT @wedding2_id, 'Shikamaru Nara', 'accepted', @diabetic_id
-  UNION ALL SELECT @wedding2_id, 'Kiba Inuzuka', 'declined', @pescatarian_id
-  UNION ALL SELECT @wedding2_id, 'Shino Aburame', 'accepted', @tree_nut_allergy_id
-  UNION ALL SELECT @wedding2_id, 'Orochimaru', 'accepted', @vegan_id
-  UNION ALL SELECT @wedding2_id, 'Kabuto Yakushi', 'pending', @vegetarian_id
+  SELECT @wedding2_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding2_id, 'Kakashi Hatake', 'pending'
+  UNION ALL SELECT @wedding2_id, 'Choji Akimichi', 'accepted'
+  UNION ALL SELECT @wedding2_id, 'Rock Lee', 'declined'
+  UNION ALL SELECT @wedding2_id, 'Tenten', 'accepted'
+  UNION ALL SELECT @wedding2_id, 'Hinata Hyuga', 'accepted'
+  UNION ALL SELECT @wedding2_id, 'Itachi Uchiha', 'pending'
+  UNION ALL SELECT @wedding2_id, 'Fugaku Uchiha', 'accepted'
+  UNION ALL SELECT @wedding2_id, 'Mikoto Uchiha', 'accepted'
+  UNION ALL SELECT @wedding2_id, 'Ino Yamanaka', 'pending'
+  UNION ALL SELECT @wedding2_id, 'Shikamaru Nara', 'accepted'
+  UNION ALL SELECT @wedding2_id, 'Kiba Inuzuka', 'declined'
+  UNION ALL SELECT @wedding2_id, 'Shino Aburame', 'accepted'
+  UNION ALL SELECT @wedding2_id, 'Orochimaru', 'accepted'
+  UNION ALL SELECT @wedding2_id, 'Kabuto Yakushi', 'pending'
 ) AS new_guests_w2
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -490,22 +490,22 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 3: Shikamaru & Temari (100 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding3_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding3_id, 'Choji Akimichi', 'pending', @none_id
-  UNION ALL SELECT @wedding3_id, 'Rock Lee', 'accepted', @none_id
-  UNION ALL SELECT @wedding3_id, 'Tenten', 'declined', @none_id
-  UNION ALL SELECT @wedding3_id, 'Hinata Hyuga', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding3_id, 'Ino Yamanaka', 'pending', @vegan_id
-  UNION ALL SELECT @wedding3_id, 'Kiba Inuzuka', 'accepted', @pescatarian_id
-  UNION ALL SELECT @wedding3_id, 'Shino Aburame', 'accepted', @halal_id
-  UNION ALL SELECT @wedding3_id, 'Gaara', 'accepted', @halal_id
-  UNION ALL SELECT @wedding3_id, 'Kankuro', 'pending', @halal_id
-  UNION ALL SELECT @wedding3_id, 'Baki', 'accepted', @halal_id
-  UNION ALL SELECT @wedding3_id, 'Shikaku Nara', 'declined', @diabetic_id
-  UNION ALL SELECT @wedding3_id, 'Yoshino Nara', 'accepted', @low_sodium_id
-  UNION ALL SELECT @wedding3_id, 'Kakashi Hatake', 'accepted', @halal_id
+  SELECT @wedding3_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding3_id, 'Choji Akimichi', 'pending'
+  UNION ALL SELECT @wedding3_id, 'Rock Lee', 'accepted'
+  UNION ALL SELECT @wedding3_id, 'Tenten', 'declined'
+  UNION ALL SELECT @wedding3_id, 'Hinata Hyuga', 'accepted'
+  UNION ALL SELECT @wedding3_id, 'Ino Yamanaka', 'pending'
+  UNION ALL SELECT @wedding3_id, 'Kiba Inuzuka', 'accepted'
+  UNION ALL SELECT @wedding3_id, 'Shino Aburame', 'accepted'
+  UNION ALL SELECT @wedding3_id, 'Gaara', 'accepted'
+  UNION ALL SELECT @wedding3_id, 'Kankuro', 'pending'
+  UNION ALL SELECT @wedding3_id, 'Baki', 'accepted'
+  UNION ALL SELECT @wedding3_id, 'Shikaku Nara', 'declined'
+  UNION ALL SELECT @wedding3_id, 'Yoshino Nara', 'accepted'
+  UNION ALL SELECT @wedding3_id, 'Kakashi Hatake', 'accepted'
 ) AS new_guests_w3
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -514,22 +514,22 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 4: Ino & Sai (90 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding4_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding4_id, 'Sasuke Uchiha', 'pending', @none_id
-  UNION ALL SELECT @wedding4_id, 'Kakashi Hatake', 'accepted', @none_id
-  UNION ALL SELECT @wedding4_id, 'Sakura Haruno', 'accepted', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Hinata Hyuga', 'pending', @vegetarian_id
-  UNION ALL SELECT @wedding4_id, 'Shikamaru Nara', 'accepted', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Choji Akimichi', 'declined', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Inoichi Yamanaka', 'accepted', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Yamato', 'pending', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Sai', 'accepted', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Tenten', 'accepted', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Rock Lee', 'pending', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Kurenai Yuhi', 'accepted', @vegan_id
-  UNION ALL SELECT @wedding4_id, 'Asuma Sarutobi', 'accepted', @vegan_id
+  SELECT @wedding4_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding4_id, 'Sasuke Uchiha', 'pending'
+  UNION ALL SELECT @wedding4_id, 'Kakashi Hatake', 'accepted'
+  UNION ALL SELECT @wedding4_id, 'Sakura Haruno', 'accepted'
+  UNION ALL SELECT @wedding4_id, 'Hinata Hyuga', 'pending'
+  UNION ALL SELECT @wedding4_id, 'Shikamaru Nara', 'accepted'
+  UNION ALL SELECT @wedding4_id, 'Choji Akimichi', 'declined'
+  UNION ALL SELECT @wedding4_id, 'Inoichi Yamanaka', 'accepted'
+  UNION ALL SELECT @wedding4_id, 'Yamato', 'pending'
+  UNION ALL SELECT @wedding4_id, 'Sai', 'accepted'
+  UNION ALL SELECT @wedding4_id, 'Tenten', 'accepted'
+  UNION ALL SELECT @wedding4_id, 'Rock Lee', 'pending'
+  UNION ALL SELECT @wedding4_id, 'Kurenai Yuhi', 'accepted'
+  UNION ALL SELECT @wedding4_id, 'Asuma Sarutobi', 'accepted'
 ) AS new_guests_w4
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -538,23 +538,23 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 5: Choji & Karui (150 guests - showing 15 key guests with mixed RSVP)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding5_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding5_id, 'Hinata Hyuga', 'pending', @none_id
-  UNION ALL SELECT @wedding5_id, 'Shikamaru Nara', 'accepted', @none_id
-  UNION ALL SELECT @wedding5_id, 'Temari', 'declined', @none_id
-  UNION ALL SELECT @wedding5_id, 'Ino Yamanaka', 'accepted', @none_id
-  UNION ALL SELECT @wedding5_id, 'Sai Yamanaka', 'pending', @none_id
-  UNION ALL SELECT @wedding5_id, 'Kiba Inuzuka', 'accepted', @none_id
-  UNION ALL SELECT @wedding5_id, 'Shino Aburame', 'accepted', @none_id
-  UNION ALL SELECT @wedding5_id, 'Choza Akimichi', 'pending', @none_id
-  UNION ALL SELECT @wedding5_id, 'Chocho Akimichi', 'accepted', @none_id
-  UNION ALL SELECT @wedding5_id, 'Darui', 'declined', @none_id
-  UNION ALL SELECT @wedding5_id, 'A', 'accepted', @none_id
-  UNION ALL SELECT @wedding5_id, 'Samui', 'pending', @none_id
-  UNION ALL SELECT @wedding5_id, 'Omoi', 'accepted', @none_id
-  UNION ALL SELECT @wedding5_id, 'Kakashi Hatake', 'accepted', @none_id
+  SELECT @wedding5_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding5_id, 'Hinata Hyuga', 'pending'
+  UNION ALL SELECT @wedding5_id, 'Shikamaru Nara', 'accepted'
+  UNION ALL SELECT @wedding5_id, 'Temari', 'declined'
+  UNION ALL SELECT @wedding5_id, 'Ino Yamanaka', 'accepted'
+  UNION ALL SELECT @wedding5_id, 'Sai Yamanaka', 'pending'
+  UNION ALL SELECT @wedding5_id, 'Kiba Inuzuka', 'accepted'
+  UNION ALL SELECT @wedding5_id, 'Shino Aburame', 'accepted'
+  UNION ALL SELECT @wedding5_id, 'Choza Akimichi', 'pending'
+  UNION ALL SELECT @wedding5_id, 'Chocho Akimichi', 'accepted'
+  UNION ALL SELECT @wedding5_id, 'Darui', 'declined'
+  UNION ALL SELECT @wedding5_id, 'A', 'accepted'
+  UNION ALL SELECT @wedding5_id, 'Samui', 'pending'
+  UNION ALL SELECT @wedding5_id, 'Omoi', 'accepted'
+  UNION ALL SELECT @wedding5_id, 'Kakashi Hatake', 'accepted'
 ) AS new_guests_w5
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -563,22 +563,22 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 6: Kiba & Tamaki (70 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding6_id as wedding_id, 'Kakashi Hatake' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding6_id, 'Rock Lee', 'pending', @none_id
-  UNION ALL SELECT @wedding6_id, 'Tenten', 'accepted', @none_id
-  UNION ALL SELECT @wedding6_id, 'Naruto Uzumaki', 'accepted', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Hinata Hyuga', 'pending', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Shino Aburame', 'accepted', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Tsume Inuzuka', 'declined', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Hana Inuzuka', 'accepted', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Akamaru', 'pending', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Guy Sensei', 'accepted', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Shikamaru Nara', 'accepted', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Choji Akimichi', 'pending', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Ino Yamanaka', 'accepted', @pescatarian_id
-  UNION ALL SELECT @wedding6_id, 'Kurenai Yuhi', 'accepted', @pescatarian_id
+  SELECT @wedding6_id as wedding_id, 'Kakashi Hatake' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding6_id, 'Rock Lee', 'pending'
+  UNION ALL SELECT @wedding6_id, 'Tenten', 'accepted'
+  UNION ALL SELECT @wedding6_id, 'Naruto Uzumaki', 'accepted'
+  UNION ALL SELECT @wedding6_id, 'Hinata Hyuga', 'pending'
+  UNION ALL SELECT @wedding6_id, 'Shino Aburame', 'accepted'
+  UNION ALL SELECT @wedding6_id, 'Tsume Inuzuka', 'declined'
+  UNION ALL SELECT @wedding6_id, 'Hana Inuzuka', 'accepted'
+  UNION ALL SELECT @wedding6_id, 'Akamaru', 'pending'
+  UNION ALL SELECT @wedding6_id, 'Guy Sensei', 'accepted'
+  UNION ALL SELECT @wedding6_id, 'Shikamaru Nara', 'accepted'
+  UNION ALL SELECT @wedding6_id, 'Choji Akimichi', 'pending'
+  UNION ALL SELECT @wedding6_id, 'Ino Yamanaka', 'accepted'
+  UNION ALL SELECT @wedding6_id, 'Kurenai Yuhi', 'accepted'
 ) AS new_guests_w6
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -587,25 +587,25 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 7: Minato & Kushina (200 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding7_id as wedding_id, 'Kushina Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding7_id, 'Minato Namikaze', 'accepted', @none_id
-  UNION ALL SELECT @wedding7_id, 'Hiruzen Sarutobi', 'accepted', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Jiraiya', 'pending', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Tsunade', 'accepted', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Orochimaru', 'declined', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Fugaku Uchiha', 'accepted', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Hiashi Hyuga', 'pending', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Choza Akimichi', 'accepted', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Shikaku Nara', 'accepted', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Inoichi Yamanaka', 'pending', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Tsume Inuzuka', 'accepted', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Danzo Shimura', 'declined', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Koharu Utatane', 'accepted', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Homura Mitokado', 'pending', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Mikoto Uchiha', 'accepted', @kosher_id
-  UNION ALL SELECT @wedding7_id, 'Biwa Juzo', 'accepted', @kosher_id
+  SELECT @wedding7_id as wedding_id, 'Kushina Uzumaki' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding7_id, 'Minato Namikaze', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Hiruzen Sarutobi', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Jiraiya', 'pending'
+  UNION ALL SELECT @wedding7_id, 'Tsunade', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Orochimaru', 'declined'
+  UNION ALL SELECT @wedding7_id, 'Fugaku Uchiha', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Hiashi Hyuga', 'pending'
+  UNION ALL SELECT @wedding7_id, 'Choza Akimichi', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Shikaku Nara', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Inoichi Yamanaka', 'pending'
+  UNION ALL SELECT @wedding7_id, 'Tsume Inuzuka', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Danzo Shimura', 'declined'
+  UNION ALL SELECT @wedding7_id, 'Koharu Utatane', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Homura Mitokado', 'pending'
+  UNION ALL SELECT @wedding7_id, 'Mikoto Uchiha', 'accepted'
+  UNION ALL SELECT @wedding7_id, 'Biwa Juzo', 'accepted'
 ) AS new_guests_w7
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -614,23 +614,23 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 8: Hashirama & Mito (180 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding8_id as wedding_id, 'Hashirama Senju' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding8_id, 'Mito Uzumaki', 'pending', @none_id
-  UNION ALL SELECT @wedding8_id, 'Hagoromo Otsutsuki', 'accepted', @none_id
-  UNION ALL SELECT @wedding8_id, 'Tobirama Senju', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Madara Uchiha', 'pending', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Izuna Uchiha', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Tajima Uchiha', 'declined', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Butsuma Senju', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Kawarama Senju', 'pending', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Itama Senju', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Hamura Otsutsuki', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Kaguya Otsutsuki', 'pending', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Asura Otsutsuki', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Indra Otsutsuki', 'declined', @vegetarian_id
-  UNION ALL SELECT @wedding8_id, 'Black Zetsu', 'accepted', @vegetarian_id
+  SELECT @wedding8_id as wedding_id, 'Hashirama Senju' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding8_id, 'Mito Uzumaki', 'pending'
+  UNION ALL SELECT @wedding8_id, 'Hagoromo Otsutsuki', 'accepted'
+  UNION ALL SELECT @wedding8_id, 'Tobirama Senju', 'accepted'
+  UNION ALL SELECT @wedding8_id, 'Madara Uchiha', 'pending'
+  UNION ALL SELECT @wedding8_id, 'Izuna Uchiha', 'accepted'
+  UNION ALL SELECT @wedding8_id, 'Tajima Uchiha', 'declined'
+  UNION ALL SELECT @wedding8_id, 'Butsuma Senju', 'accepted'
+  UNION ALL SELECT @wedding8_id, 'Kawarama Senju', 'pending'
+  UNION ALL SELECT @wedding8_id, 'Itama Senju', 'accepted'
+  UNION ALL SELECT @wedding8_id, 'Hamura Otsutsuki', 'accepted'
+  UNION ALL SELECT @wedding8_id, 'Kaguya Otsutsuki', 'pending'
+  UNION ALL SELECT @wedding8_id, 'Asura Otsutsuki', 'accepted'
+  UNION ALL SELECT @wedding8_id, 'Indra Otsutsuki', 'declined'
+  UNION ALL SELECT @wedding8_id, 'Black Zetsu', 'accepted'
 ) AS new_guests_w8
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -639,23 +639,23 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 9: Asuma & Kurenai (85 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding9_id as wedding_id, 'Kurenai Yuhi' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding9_id, 'Asuma Sarutobi', 'pending', @none_id
-  UNION ALL SELECT @wedding9_id, 'Kakashi Hatake', 'accepted', @none_id
-  UNION ALL SELECT @wedding9_id, 'Shikamaru Nara', 'accepted', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Choji Akimichi', 'pending', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Ino Yamanaka', 'accepted', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Hiruzen Sarutobi', 'declined', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Konohamaru Sarutobi', 'accepted', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Mirai Sarutobi', 'pending', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Guy Sensei', 'accepted', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Yamato', 'accepted', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Iruka Umino', 'pending', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Naruto Uzumaki', 'accepted', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Sakura Haruno', 'declined', @no_pork_id
-  UNION ALL SELECT @wedding9_id, 'Sasuke Uchiha', 'accepted', @no_pork_id
+  SELECT @wedding9_id as wedding_id, 'Kurenai Yuhi' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding9_id, 'Asuma Sarutobi', 'pending'
+  UNION ALL SELECT @wedding9_id, 'Kakashi Hatake', 'accepted'
+  UNION ALL SELECT @wedding9_id, 'Shikamaru Nara', 'accepted'
+  UNION ALL SELECT @wedding9_id, 'Choji Akimichi', 'pending'
+  UNION ALL SELECT @wedding9_id, 'Ino Yamanaka', 'accepted'
+  UNION ALL SELECT @wedding9_id, 'Hiruzen Sarutobi', 'declined'
+  UNION ALL SELECT @wedding9_id, 'Konohamaru Sarutobi', 'accepted'
+  UNION ALL SELECT @wedding9_id, 'Mirai Sarutobi', 'pending'
+  UNION ALL SELECT @wedding9_id, 'Guy Sensei', 'accepted'
+  UNION ALL SELECT @wedding9_id, 'Yamato', 'accepted'
+  UNION ALL SELECT @wedding9_id, 'Iruka Umino', 'pending'
+  UNION ALL SELECT @wedding9_id, 'Naruto Uzumaki', 'accepted'
+  UNION ALL SELECT @wedding9_id, 'Sakura Haruno', 'declined'
+  UNION ALL SELECT @wedding9_id, 'Sasuke Uchiha', 'accepted'
 ) AS new_guests_w9
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -664,23 +664,23 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 10: Gaara & Matsuri (95 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding10_id as wedding_id, 'Matsuri' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding10_id, 'Gaara', 'pending', @none_id
-  UNION ALL SELECT @wedding10_id, 'Naruto Uzumaki', 'accepted', @none_id
-  UNION ALL SELECT @wedding10_id, 'Kankuro', 'accepted', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Temari', 'pending', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Baki', 'accepted', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Yashamaru', 'declined', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Rasa', 'accepted', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Shikamaru Nara', 'pending', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Kakashi Hatake', 'accepted', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Shijima', 'accepted', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Yodo', 'pending', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Pakura', 'accepted', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Sasori', 'declined', @halal_id
-  UNION ALL SELECT @wedding10_id, 'Chiyo', 'accepted', @halal_id
+  SELECT @wedding10_id as wedding_id, 'Matsuri' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding10_id, 'Gaara', 'pending'
+  UNION ALL SELECT @wedding10_id, 'Naruto Uzumaki', 'accepted'
+  UNION ALL SELECT @wedding10_id, 'Kankuro', 'accepted'
+  UNION ALL SELECT @wedding10_id, 'Temari', 'pending'
+  UNION ALL SELECT @wedding10_id, 'Baki', 'accepted'
+  UNION ALL SELECT @wedding10_id, 'Yashamaru', 'declined'
+  UNION ALL SELECT @wedding10_id, 'Rasa', 'accepted'
+  UNION ALL SELECT @wedding10_id, 'Shikamaru Nara', 'pending'
+  UNION ALL SELECT @wedding10_id, 'Kakashi Hatake', 'accepted'
+  UNION ALL SELECT @wedding10_id, 'Shijima', 'accepted'
+  UNION ALL SELECT @wedding10_id, 'Yodo', 'pending'
+  UNION ALL SELECT @wedding10_id, 'Pakura', 'accepted'
+  UNION ALL SELECT @wedding10_id, 'Sasori', 'declined'
+  UNION ALL SELECT @wedding10_id, 'Chiyo', 'accepted'
 ) AS new_guests_w10
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -689,24 +689,24 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 11: Rock Lee & Tenten (110 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding11_id as wedding_id, 'Guy Sensei' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding11_id, 'Neji Hyuga', 'pending', @none_id
-  UNION ALL SELECT @wedding11_id, 'Naruto Uzumaki', 'accepted', @none_id
-  UNION ALL SELECT @wedding11_id, 'Hinata Hyuga', 'declined', @none_id
-  UNION ALL SELECT @wedding11_id, 'Sakura Haruno', 'accepted', @none_id
-  UNION ALL SELECT @wedding11_id, 'Sasuke Uchiha', 'pending', @none_id
-  UNION ALL SELECT @wedding11_id, 'Shikamaru Nara', 'accepted', @none_id
-  UNION ALL SELECT @wedding11_id, 'Choji Akimichi', 'accepted', @none_id
-  UNION ALL SELECT @wedding11_id, 'Ino Yamanaka', 'pending', @none_id
-  UNION ALL SELECT @wedding11_id, 'Kiba Inuzuka', 'accepted', @none_id
-  UNION ALL SELECT @wedding11_id, 'Shino Aburame', 'declined', @none_id
-  UNION ALL SELECT @wedding11_id, 'Kakashi Hatake', 'accepted', @none_id
-  UNION ALL SELECT @wedding11_id, 'Rock Lee', 'pending', @none_id
-  UNION ALL SELECT @wedding11_id, 'Tenten', 'accepted', @none_id
-  UNION ALL SELECT @wedding11_id, 'Iruka Umino', 'accepted', @vegetarian_id
-  UNION ALL SELECT @wedding11_id, 'Tsunade', 'pending', @none_id
+  SELECT @wedding11_id as wedding_id, 'Guy Sensei' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding11_id, 'Neji Hyuga', 'pending'
+  UNION ALL SELECT @wedding11_id, 'Naruto Uzumaki', 'accepted'
+  UNION ALL SELECT @wedding11_id, 'Hinata Hyuga', 'declined'
+  UNION ALL SELECT @wedding11_id, 'Sakura Haruno', 'accepted'
+  UNION ALL SELECT @wedding11_id, 'Sasuke Uchiha', 'pending'
+  UNION ALL SELECT @wedding11_id, 'Shikamaru Nara', 'accepted'
+  UNION ALL SELECT @wedding11_id, 'Choji Akimichi', 'accepted'
+  UNION ALL SELECT @wedding11_id, 'Ino Yamanaka', 'pending'
+  UNION ALL SELECT @wedding11_id, 'Kiba Inuzuka', 'accepted'
+  UNION ALL SELECT @wedding11_id, 'Shino Aburame', 'declined'
+  UNION ALL SELECT @wedding11_id, 'Kakashi Hatake', 'accepted'
+  UNION ALL SELECT @wedding11_id, 'Rock Lee', 'pending'
+  UNION ALL SELECT @wedding11_id, 'Tenten', 'accepted'
+  UNION ALL SELECT @wedding11_id, 'Iruka Umino', 'accepted'
+  UNION ALL SELECT @wedding11_id, 'Tsunade', 'pending'
 ) AS new_guests_w11
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -715,23 +715,23 @@ WHERE NOT EXISTS (
 );
 
 -- Wedding 12: Neji & Tenten (75 guests - at least 10 shown with varied restrictions 0-4)
-INSERT INTO guest (wedding_id, guest_name, rsvp_status, restriction_id)
+INSERT INTO guest (wedding_id, guest_name, rsvp_status)
 SELECT * FROM (
-  SELECT @wedding12_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status, @none_id as restriction_id
-  UNION ALL SELECT @wedding12_id, 'Sasuke Uchiha', 'pending', @none_id
-  UNION ALL SELECT @wedding12_id, 'Sakura Haruno', 'declined', @none_id
-  UNION ALL SELECT @wedding12_id, 'Hiashi Hyuga', 'accepted', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Hizashi Hyuga', 'pending', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Hinata Hyuga', 'accepted', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Hanabi Hyuga', 'declined', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Rock Lee', 'accepted', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Guy Sensei', 'pending', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Shikamaru Nara', 'accepted', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Choji Akimichi', 'accepted', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Ino Yamanaka', 'pending', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Kakashi Hatake', 'accepted', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Tenten', 'declined', @gluten_id
-  UNION ALL SELECT @wedding12_id, 'Kurenai Yuhi', 'accepted', @gluten_id
+  SELECT @wedding12_id as wedding_id, 'Naruto Uzumaki' as guest_name, 'accepted' as rsvp_status
+  UNION ALL SELECT @wedding12_id, 'Sasuke Uchiha', 'pending'
+  UNION ALL SELECT @wedding12_id, 'Sakura Haruno', 'declined'
+  UNION ALL SELECT @wedding12_id, 'Hiashi Hyuga', 'accepted'
+  UNION ALL SELECT @wedding12_id, 'Hizashi Hyuga', 'pending'
+  UNION ALL SELECT @wedding12_id, 'Hinata Hyuga', 'accepted'
+  UNION ALL SELECT @wedding12_id, 'Hanabi Hyuga', 'declined'
+  UNION ALL SELECT @wedding12_id, 'Rock Lee', 'accepted'
+  UNION ALL SELECT @wedding12_id, 'Guy Sensei', 'pending'
+  UNION ALL SELECT @wedding12_id, 'Shikamaru Nara', 'accepted'
+  UNION ALL SELECT @wedding12_id, 'Choji Akimichi', 'accepted'
+  UNION ALL SELECT @wedding12_id, 'Ino Yamanaka', 'pending'
+  UNION ALL SELECT @wedding12_id, 'Kakashi Hatake', 'accepted'
+  UNION ALL SELECT @wedding12_id, 'Tenten', 'declined'
+  UNION ALL SELECT @wedding12_id, 'Kurenai Yuhi', 'accepted'
 ) AS new_guests_w12
 WHERE NOT EXISTS (
   SELECT 1 FROM guest g 
@@ -742,18 +742,58 @@ WHERE NOT EXISTS (
 -- ============================================================================
 -- STEP 6: POPULATE GUEST_RESTRICTIONS JUNCTION TABLE
 -- ============================================================================
--- Note: This adds multiple restrictions (2-4) to some guests for testing
--- Guests with 0 restrictions (None) and 1 restriction are already set in main table
+-- This assigns restrictions to guests based on their names and wedding IDs
+-- Direct assignment instead of reading from guest.restriction_id column
 
--- Add junction table entries for guests with 1 restriction (from main table)
+-- Wedding 1: Assign restrictions based on guest names
 INSERT INTO guest_restrictions (guest_id, restriction_id)
-SELECT g.guest_id, g.restriction_id FROM guest g 
-WHERE g.wedding_id IN (@wedding1_id, @wedding2_id, @wedding3_id, @wedding4_id, @wedding5_id, @wedding6_id, @wedding7_id, @wedding8_id, @wedding9_id, @wedding10_id, @wedding11_id, @wedding12_id)
-AND g.restriction_id IS NOT NULL
-AND g.restriction_id != @none_id
-AND NOT EXISTS (
-    SELECT 1 FROM guest_restrictions gr WHERE gr.guest_id = g.guest_id AND gr.restriction_id = g.restriction_id
-);
+-- Guests with "None" restriction
+SELECT g.guest_id, @none_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name IN ('Kakashi Hatake', 'Choji Akimichi', 'Sasuke Uchiha', 'Neji Hyuga', 'Rock Lee')
+UNION ALL
+-- Iruka Umino: Vegetarian
+SELECT g.guest_id, @vegetarian_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Iruka Umino'
+UNION ALL
+-- Shino Aburame: Vegan
+SELECT g.guest_id, @vegan_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Shino Aburame'
+UNION ALL
+-- Kurenai Yuhi: Lactose Intolerant
+SELECT g.guest_id, @lactose_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Kurenai Yuhi'
+UNION ALL
+-- Guy Sensei: Gluten Intolerant
+SELECT g.guest_id, @gluten_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Guy Sensei'
+UNION ALL
+-- Jiraiya: No Alcohol
+SELECT g.guest_id, @no_alcohol_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Jiraiya'
+UNION ALL
+-- Hanabi Hyuga: Vegetarian
+SELECT g.guest_id, @vegetarian_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Hanabi Hyuga'
+UNION ALL
+-- Hiashi Hyuga: Halal (will add more restrictions later for 4 total)
+SELECT g.guest_id, @halal_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Hiashi Hyuga'
+UNION ALL
+-- Kiba Inuzuka: Pescatarian
+SELECT g.guest_id, @pescatarian_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Kiba Inuzuka'
+UNION ALL
+-- Shikamaru Nara: Diabetic-Friendly (will add Low-Sugar later for 2 total)
+SELECT g.guest_id, @diabetic_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Shikamaru Nara'
+UNION ALL
+-- Sakura Haruno: Low-Sugar (will add more restrictions later for 3 total)
+SELECT g.guest_id, @low_sugar_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Sakura Haruno'
+UNION ALL
+-- Ino Yamanaka: Vegetarian
+SELECT g.guest_id, @vegetarian_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Ino Yamanaka'
+UNION ALL
+-- Tenten: Gluten Intolerant
+SELECT g.guest_id, @gluten_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Tenten'
+UNION ALL
+-- Sai Yamanaka: Vegan
+SELECT g.guest_id, @vegan_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Sai Yamanaka'
+UNION ALL
+-- Tsunade: Peanut Allergy (will add more restrictions later for 3 total)
+SELECT g.guest_id, @peanut_allergy_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Tsunade'
+UNION ALL
+-- Konohamaru Sarutobi: Shellfish Allergy (will add Seafood Allergy later for 2 total)
+SELECT g.guest_id, @shellfish_allergy_id FROM guest g WHERE g.wedding_id = @wedding1_id AND g.guest_name = 'Konohamaru Sarutobi';
 
 -- Add multiple restrictions (2-4) to specific guests for testing
 -- Wedding 1: Guests with 2-4 restrictions
@@ -888,24 +928,6 @@ SELECT g.guest_id, @diabetic_id FROM guest g WHERE g.wedding_id = @wedding12_id 
 UNION ALL
 SELECT g.guest_id, @low_sodium_id FROM guest g WHERE g.wedding_id = @wedding12_id AND g.guest_name = 'Hiashi Hyuga';
 
--- Add "None" restriction to guests who have no specific restrictions (0 restrictions)
-INSERT INTO guest_restrictions (guest_id, restriction_id)
-SELECT g.guest_id, @none_id FROM guest g 
-WHERE g.wedding_id IN (@wedding1_id, @wedding2_id, @wedding3_id, @wedding4_id, @wedding5_id, @wedding6_id, @wedding7_id, @wedding8_id, @wedding9_id, @wedding10_id, @wedding11_id, @wedding12_id)
-AND g.restriction_id = @none_id
-AND NOT EXISTS (
-    SELECT 1 FROM guest_restrictions gr WHERE gr.guest_id = g.guest_id
-);
-
--- Add single restriction to guests who have 1 restriction (not already added via junction table above)
-INSERT INTO guest_restrictions (guest_id, restriction_id)
-SELECT g.guest_id, g.restriction_id FROM guest g 
-WHERE g.wedding_id IN (@wedding1_id, @wedding2_id, @wedding3_id, @wedding4_id, @wedding5_id, @wedding6_id, @wedding7_id, @wedding8_id, @wedding9_id, @wedding10_id, @wedding11_id, @wedding12_id)
-AND g.restriction_id IS NOT NULL
-AND g.restriction_id != @none_id
-AND NOT EXISTS (
-    SELECT 1 FROM guest_restrictions gr WHERE gr.guest_id = g.guest_id AND gr.restriction_id = g.restriction_id
-);
 
 -- ============================================================================
 -- STEP 7: CREATE TABLES FOR EACH WEDDING (5+ tables per wedding)

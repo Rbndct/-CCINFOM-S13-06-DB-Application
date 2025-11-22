@@ -63,11 +63,9 @@ CREATE TABLE couple_preferences (
     preference_id INT AUTO_INCREMENT PRIMARY KEY,
     couple_id INT NOT NULL,
     ceremony_type VARCHAR(100) NOT NULL,
-    restriction_id INT NULL, -- Made nullable for junction table support
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (couple_id) REFERENCES couple(couple_id) ON DELETE CASCADE,
-    FOREIGN KEY (restriction_id) REFERENCES dietary_restriction(restriction_id) ON DELETE SET NULL
+    FOREIGN KEY (couple_id) REFERENCES couple(couple_id) ON DELETE CASCADE
 );
 
 -- Create wedding table
@@ -107,13 +105,11 @@ CREATE TABLE guest (
     wedding_id INT NOT NULL,
     guest_name VARCHAR(255) NOT NULL,
     table_id INT,
-    restriction_id INT NULL, -- Made nullable for junction table support
     rsvp_status VARCHAR(50) NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     FOREIGN KEY (wedding_id) REFERENCES wedding(wedding_id) ON DELETE CASCADE,
-    FOREIGN KEY (table_id) REFERENCES seating_table(table_id) ON DELETE SET NULL,
-    FOREIGN KEY (restriction_id) REFERENCES dietary_restriction(restriction_id) ON DELETE SET NULL
+    FOREIGN KEY (table_id) REFERENCES seating_table(table_id) ON DELETE SET NULL
 );
 
 -- Create menu_item table
@@ -124,10 +120,8 @@ CREATE TABLE menu_item (
     selling_price DECIMAL(10,2) NOT NULL DEFAULT 0,
     default_markup_percentage DECIMAL(5,2) DEFAULT 200.00,
     menu_type VARCHAR(100) NOT NULL,
-    restriction_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (restriction_id) REFERENCES dietary_restriction(restriction_id) ON DELETE SET NULL,
     INDEX idx_menu_item_unit_cost (unit_cost),
     INDEX idx_menu_item_selling_price (selling_price)
 );

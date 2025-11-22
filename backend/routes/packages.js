@@ -273,13 +273,9 @@ router.get('/', async (req, res) => {
           m.menu_type,
           m.unit_cost,
           m.selling_price,
-          m.restriction_id,
-          dr.restriction_name,
-          dr.restriction_type,
           pmi.quantity
         FROM package_menu_items pmi
         JOIN menu_item m ON pmi.menu_item_id = m.menu_item_id
-        LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
         WHERE pmi.package_id = ?`,
           [pkg.package_id]);
 
@@ -345,14 +341,10 @@ router.get('/:id', async (req, res) => {
         m.menu_type,
         m.unit_cost,
         m.selling_price,
-        m.restriction_id,
-        dr.restriction_name,
-        dr.restriction_type,
         pmi.quantity,
         (m.unit_cost * pmi.quantity) as total_item_cost
       FROM package_menu_items pmi
       JOIN menu_item m ON pmi.menu_item_id = m.menu_item_id
-      LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE pmi.package_id = ?
       ORDER BY m.menu_name ASC`,
         [req.params.id]);

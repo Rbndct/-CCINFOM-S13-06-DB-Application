@@ -17,20 +17,12 @@ router.get('/', async (req, res) => {
         FROM dietary_restriction dr
         LEFT JOIN (
           SELECT restriction_id, COUNT(DISTINCT guest_id) as guest_count
-          FROM (
-            SELECT restriction_id, guest_id
-            FROM guest
-            WHERE restriction_id IS NOT NULL
-            UNION
-            SELECT restriction_id, guest_id
-            FROM guest_restrictions
-          ) combined_guests
+          FROM guest_restrictions
           GROUP BY restriction_id
         ) guest_counts ON dr.restriction_id = guest_counts.restriction_id
         LEFT JOIN (
           SELECT restriction_id, COUNT(*) as menu_count
-          FROM menu_item
-          WHERE restriction_id IS NOT NULL
+          FROM menu_item_restrictions
           GROUP BY restriction_id
         ) menu_counts ON dr.restriction_id = menu_counts.restriction_id
         LEFT JOIN (
@@ -74,20 +66,13 @@ router.get('/:restriction_id', async (req, res) => {
         FROM dietary_restriction dr
         LEFT JOIN (
           SELECT restriction_id, COUNT(DISTINCT guest_id) as guest_count
-          FROM (
-            SELECT restriction_id, guest_id
-            FROM guest
-            WHERE restriction_id = ?
-            UNION
-            SELECT restriction_id, guest_id
-            FROM guest_restrictions
-            WHERE restriction_id = ?
-          ) combined_guests
+          FROM guest_restrictions
+          WHERE restriction_id = ?
           GROUP BY restriction_id
         ) guest_counts ON dr.restriction_id = guest_counts.restriction_id
         LEFT JOIN (
           SELECT restriction_id, COUNT(*) as menu_count
-          FROM menu_item
+          FROM menu_item_restrictions
           WHERE restriction_id = ?
           GROUP BY restriction_id
         ) menu_counts ON dr.restriction_id = menu_counts.restriction_id
@@ -106,7 +91,7 @@ router.get('/:restriction_id', async (req, res) => {
         ) couple_counts ON dr.restriction_id = couple_counts.restriction_id
         WHERE dr.restriction_id = ?`,
         [
-          restrictionId, restrictionId, restrictionId, restrictionId,
+          restrictionId, restrictionId, restrictionId,
           restrictionId, restrictionId
         ]);
 
@@ -115,30 +100,24 @@ router.get('/:restriction_id', async (req, res) => {
           {success: false, error: 'Dietary restriction not found'});
     }
 
-    // Get affected guest names (from both sources)
+    // Get affected guest names (from junction table)
     const [guestRows] = await promisePool.query(
         `SELECT DISTINCT g.guest_id, g.guest_name, w.wedding_id, w.wedding_date, c.partner1_name, c.partner2_name
-         FROM (
-           SELECT guest_id, restriction_id
-           FROM guest
-           WHERE restriction_id = ?
-           UNION
-           SELECT guest_id, restriction_id
-           FROM guest_restrictions
-           WHERE restriction_id = ?
-         ) combined
-         INNER JOIN guest g ON combined.guest_id = g.guest_id
+         FROM guest_restrictions gr
+         INNER JOIN guest g ON gr.guest_id = g.guest_id
          INNER JOIN wedding w ON g.wedding_id = w.wedding_id
          INNER JOIN couple c ON w.couple_id = c.couple_id
+         WHERE gr.restriction_id = ?
          ORDER BY w.wedding_date DESC, g.guest_name`,
-        [restrictionId, restrictionId]);
+        [restrictionId]);
 
-    // Get affected menu items
+    // Get affected menu items (from junction table)
     const [menuRows] = await promisePool.query(
-        `SELECT menu_item_id, menu_name as item_name, menu_type as category, selling_price as price
-         FROM menu_item
-         WHERE restriction_id = ?
-         ORDER BY menu_type, menu_name`,
+        `SELECT mi.menu_item_id, mi.menu_name as item_name, mi.menu_type as category, mi.selling_price as price
+         FROM menu_item_restrictions mir
+         INNER JOIN menu_item mi ON mir.menu_item_id = mi.menu_item_id
+         WHERE mir.restriction_id = ?
+         ORDER BY mi.menu_type, mi.menu_name`,
         [restrictionId]);
 
     // Get affected couples list
@@ -241,9 +220,9 @@ router.delete('/:restriction_id', async (req, res) => {
     const restrictionId = req.params.restriction_id;
     const [refs] = await promisePool.query(
         `SELECT 
-        (SELECT COUNT(*) FROM guest WHERE restriction_id = ?) AS guest_refs,
+        (SELECT COUNT(*) FROM guest_restrictions WHERE restriction_id = ?) AS guest_refs,
         (SELECT COUNT(*) FROM couple_preference_restrictions WHERE restriction_id = ?) AS pref_refs,
-        (SELECT COUNT(*) FROM menu_item WHERE restriction_id = ?) AS menu_refs`,
+        (SELECT COUNT(*) FROM menu_item_restrictions WHERE restriction_id = ?) AS menu_refs`,
         [restrictionId, restrictionId, restrictionId]);
     const {guest_refs, pref_refs, menu_refs} = refs[0];
     if ((guest_refs || 0) > 0 || (pref_refs || 0) > 0 || (menu_refs || 0) > 0) {

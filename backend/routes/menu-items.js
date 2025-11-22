@@ -14,10 +14,6 @@ router.get('/', async (req, res) => {
         m.selling_price,
         m.default_markup_percentage,
         m.menu_type,
-        m.restriction_id,
-        dr.restriction_name,
-        dr.restriction_type,
-        dr.severity_level,
         (m.selling_price - m.unit_cost) as profit_margin,
         (m.selling_price - m.unit_cost) / NULLIF(m.unit_cost, 0) * 100 as profit_margin_percentage,
         m.unit_cost * (1 + m.default_markup_percentage / 100) as suggested_price,
@@ -34,7 +30,6 @@ router.get('/', async (req, res) => {
           WHERE pmi.menu_item_id = m.menu_item_id
         ) AS usage_count
       FROM menu_item m
-      LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE 1=1
     `;
     const params = [];
@@ -49,10 +44,6 @@ router.get('/', async (req, res) => {
           m.selling_price,
           m.default_markup_percentage,
           m.menu_type,
-          m.restriction_id,
-          dr.restriction_name,
-          dr.restriction_type,
-          dr.severity_level,
           (m.selling_price - m.unit_cost) as profit_margin,
           (m.selling_price - m.unit_cost) / NULLIF(m.unit_cost, 0) * 100 as profit_margin_percentage,
           m.unit_cost * (1 + m.default_markup_percentage / 100) as suggested_price,
@@ -70,12 +61,11 @@ router.get('/', async (req, res) => {
             WHERE pmi2.menu_item_id = m.menu_item_id
           ) AS usage_count
         FROM menu_item m
-        LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
         LEFT JOIN package_menu_items pmi ON m.menu_item_id = pmi.menu_item_id
         LEFT JOIN table_package tp ON pmi.package_id = tp.package_id
         LEFT JOIN seating_table st ON tp.table_id = st.table_id
         WHERE st.wedding_id = ?
-        GROUP BY m.menu_item_id, m.menu_name, m.unit_cost, m.selling_price, m.default_markup_percentage, m.menu_type, m.restriction_id, dr.restriction_name, dr.restriction_type, dr.severity_level
+        GROUP BY m.menu_item_id, m.menu_name, m.unit_cost, m.selling_price, m.default_markup_percentage, m.menu_type
       `;
       params.push(wedding_id);
     }
@@ -86,7 +76,10 @@ router.get('/', async (req, res) => {
     }
 
     if (restriction_id && !wedding_id) {
-      query += ' AND m.restriction_id = ?';
+      // Filter by restriction using junction table
+      query += ` AND m.menu_item_id IN (
+        SELECT menu_item_id FROM menu_item_restrictions WHERE restriction_id = ?
+      )`;
       params.push(restriction_id);
     }
 
@@ -135,10 +128,6 @@ router.get('/:id', async (req, res) => {
         m.selling_price,
         m.default_markup_percentage,
         m.menu_type,
-        m.restriction_id,
-        dr.restriction_name,
-        dr.restriction_type,
-        dr.severity_level,
         (m.selling_price - m.unit_cost) as profit_margin,
         (m.selling_price - m.unit_cost) / NULLIF(m.unit_cost, 0) * 100 as profit_margin_percentage,
         m.unit_cost * (1 + m.default_markup_percentage / 100) as suggested_price,
@@ -150,7 +139,6 @@ router.get('/:id', async (req, res) => {
           WHERE r2.menu_item_id = m.menu_item_id
         ) AS makeable_quantity
       FROM menu_item m
-      LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
       WHERE m.menu_item_id = ?`,
         [req.params.id]);
 
@@ -317,16 +305,14 @@ router.post('/', async (req, res) => {
       restrictionIdsArray = restriction_id !== 1 ? [restriction_id] : [];
     }
     
-    // Set single restriction_id for backward compatibility (first restriction or null)
-    const finalRestrictionId = restrictionIdsArray.length > 0 ? restrictionIdsArray[0] : null;
-
+    // Insert menu item (restriction_id column no longer exists)
     const [result] = await connection.query(
-        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, menu_type, restriction_id)
-       VALUES (?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO menu_item (menu_name, unit_cost, selling_price, default_markup_percentage, menu_type)
+       VALUES (?, ?, ?, ?, ?)`,
         [
           menu_name, finalUnitCost, finalSellingPrice,
           default_markup_percentage || 200.00,
-          menu_type, finalRestrictionId || null
+          menu_type
         ]);
 
     const menuItemId = result.insertId;
@@ -404,6 +390,12 @@ router.post('/', async (req, res) => {
 
     await connection.commit();
 
+    // Get restrictions from junction table for response
+    let primaryRestrictionId = null;
+    if (restrictionIdsArray.length > 0) {
+      primaryRestrictionId = restrictionIdsArray[0];
+    }
+
     res.json({
       success: true,
       data: {
@@ -413,7 +405,7 @@ router.post('/', async (req, res) => {
         selling_price: finalSellingPrice,
         default_markup_percentage: default_markup_percentage || 200.00,
         menu_type,
-        restriction_id: restriction_id || null
+        restriction_id: primaryRestrictionId // For backward compatibility, use first restriction
       }
     });
   } catch (error) {
@@ -504,12 +496,7 @@ router.put('/:id', async (req, res) => {
       restrictionIdsArray = restriction_id && restriction_id !== 1 ? [restriction_id] : [];
     }
     
-    // Update single restriction_id field for backward compatibility
-    if (restrictionIdsArray !== null) {
-      const finalRestrictionId = restrictionIdsArray.length > 0 ? restrictionIdsArray[0] : null;
-      updateFields.push('restriction_id = ?');
-      updateValues.push(finalRestrictionId || null);
-    }
+    // Note: restriction_id column no longer exists, restrictions are handled via junction table only
 
     if (updateFields.length === 0) {
       await connection.rollback();
