@@ -235,11 +235,33 @@ router.get('/wedding/:id/seating', async (req, res) => {
        ORDER BY st.table_number ASC`,
         [id]);
 
-    // Guests assigned to each table
+    // Guests assigned to each table with dietary restrictions
     const [guests] = await promisePool.query(
-        `SELECT g.guest_id, g.guest_name, g.table_id, g.rsvp_status
+        `SELECT 
+         g.guest_id, 
+         g.guest_name, 
+         g.table_id, 
+         g.rsvp_status,
+         COALESCE(
+           JSON_ARRAYAGG(
+             CASE 
+               WHEN dr.restriction_id IS NOT NULL THEN
+                 JSON_OBJECT(
+                   'restriction_id', dr.restriction_id,
+                   'restriction_name', dr.restriction_name,
+                   'restriction_type', dr.restriction_type,
+                   'severity_level', dr.severity_level
+                 )
+               ELSE NULL
+             END
+           ),
+           JSON_ARRAY()
+         ) as dietary_restrictions
        FROM guest g
+       LEFT JOIN guest_restrictions gr ON g.guest_id = gr.guest_id
+       LEFT JOIN dietary_restriction dr ON gr.restriction_id = dr.restriction_id
        WHERE g.wedding_id = ?
+       GROUP BY g.guest_id, g.guest_name, g.table_id, g.rsvp_status
        ORDER BY g.guest_name ASC`,
         [id]);
 
@@ -251,7 +273,28 @@ router.get('/wedding/:id/seating', async (req, res) => {
        WHERE tp.table_id IN (SELECT table_id FROM seating_table WHERE wedding_id = ?)`,
         [id]);
 
-    const tableIdToGuests = guests.reduce((acc, g) => {
+    // Parse dietary restrictions JSON for each guest
+    const guestsWithRestrictions = guests.map(g => {
+      let dietaryRestrictions = [];
+      if (g.dietary_restrictions) {
+        try {
+          dietaryRestrictions = typeof g.dietary_restrictions === 'string' 
+            ? JSON.parse(g.dietary_restrictions) 
+            : g.dietary_restrictions;
+          dietaryRestrictions = Array.isArray(dietaryRestrictions) 
+            ? dietaryRestrictions.filter(r => r && r.restriction_name) 
+            : [];
+        } catch (e) {
+          dietaryRestrictions = [];
+        }
+      }
+      return {
+        ...g,
+        dietary_restrictions: dietaryRestrictions
+      };
+    });
+
+    const tableIdToGuests = guestsWithRestrictions.reduce((acc, g) => {
       const key = g.table_id || 0;
       acc[key] = acc[key] || [];
       acc[key].push(g);

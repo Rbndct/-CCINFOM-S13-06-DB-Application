@@ -2567,13 +2567,7 @@ const Reports = () => {
                                 <TableHead>
                                   <div className="flex items-center gap-2">
                                     <Calculator className="h-4 w-4" />
-                                    <span>Used</span>
-                                  </div>
-                                </TableHead>
-                                <TableHead>
-                                  <div className="flex items-center gap-2">
-                                    <Package className="h-4 w-4" />
-                                    <span>Available</span>
+                                    <span>Total Used</span>
                                   </div>
                                 </TableHead>
                                 <TableHead>
@@ -2606,9 +2600,8 @@ const Reports = () => {
                                   <TableCell>
                                     <Badge variant="outline">{item.category}</Badge>
                                   </TableCell>
-                                  <TableCell className="font-medium">{item.total_used}</TableCell>
-                                  <TableCell>{item.quantity_available}</TableCell>
-                                  <TableCell>{item.wedding_count}</TableCell>
+                                  <TableCell className="font-semibold text-lg">{item.total_used}</TableCell>
+                                  <TableCell className="font-medium">{item.wedding_count}</TableCell>
                                   <TableCell className="font-medium text-green-600">{formatCurrency(item.total_revenue)}</TableCell>
                                   <TableCell>
                                     {item.needs_repair ? (
@@ -2875,9 +2868,24 @@ const Reports = () => {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Item</TableHead>
-                            <TableHead>Qty Used</TableHead>
-                            <TableHead>Avail</TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <Package className="h-4 w-4" />
+                                <span>Item</span>
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <Calculator className="h-4 w-4" />
+                                <span>Quantity Used</span>
+                              </div>
+                            </TableHead>
+                            <TableHead>
+                              <div className="flex items-center gap-2">
+                                <DollarSign className="h-4 w-4" />
+                                <span>Cost</span>
+                              </div>
+                            </TableHead>
                             <TableHead>Status</TableHead>
                           </TableRow>
                         </TableHeader>
@@ -2885,8 +2893,10 @@ const Reports = () => {
                           {(inventoryUsage?.allocations || []).map((a: any) => (
                             <TableRow key={a.allocation_id}>
                               <TableCell className="font-medium">{a.item_name}</TableCell>
-                              <TableCell>{a.quantity_used}</TableCell>
-                              <TableCell>{a.quantity_available}</TableCell>
+                              <TableCell className="font-semibold">{a.quantity_used}</TableCell>
+                              <TableCell className="text-green-600 font-medium">
+                                {formatCurrency((a.quantity_used || 0) * (a.unit_rental_cost || 0))}
+                              </TableCell>
                               <TableCell>
                                 {(inventoryUsage?.needsAttention || []).some((n: any) => n.allocation_id === a.allocation_id) ? (
                                   <Badge variant="destructive" className="flex items-center gap-1 w-fit">
@@ -2991,33 +3001,34 @@ const Reports = () => {
                     const categoryColor = categoryColors[t.table_category] || categoryColors['Others'];
 
                     return (
-                      <Card key={t.table_id} className="border-2">
+                      <Card key={t.table_id} className="border-2 hover:shadow-md transition-shadow">
                         <CardHeader className="pb-3">
                           <div className="flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              <Badge variant="outline" className="text-lg font-bold">
+                              <Badge variant="outline" className="text-lg font-bold px-3 py-1">
                                 #{t.table_number || t.table_id}
                               </Badge>
                               {t.table_category && (
-                                <Badge className={categoryColor}>
+                                <Badge className={`${categoryColor} px-2 py-1`}>
                                   {t.table_category}
                                 </Badge>
                               )}
                             </div>
-                            <div className="text-xs text-muted-foreground">
-                              {guestCount}/{capacity} guests
+                            <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              <span>{guestCount}/{capacity}</span>
                             </div>
                           </div>
                           {t.package && (
                             <div className="mt-2">
-                              <Badge variant="secondary" className="flex items-center gap-1 w-fit">
-                                <Package className="h-3 w-3" />
-                                {t.package.package_name}
+                              <Badge variant="secondary" className="flex items-center gap-1.5 w-fit px-2 py-1">
+                                <Package className="h-3.5 w-3.5" />
+                                <span className="font-medium">{t.package.package_name}</span>
                               </Badge>
                             </div>
                           )}
                         </CardHeader>
-                        <CardContent className="space-y-2">
+                        <CardContent className="space-y-3">
                           {/* Occupancy Progress Bar */}
                           <div className="space-y-1">
                             <div className="flex justify-between text-xs text-muted-foreground">
@@ -3035,30 +3046,111 @@ const Reports = () => {
                             </div>
                           </div>
 
-                          {/* Guests List */}
-                          <div className="space-y-1">
-                            <div className="text-xs font-medium text-muted-foreground">Guests:</div>
-                            <div className="flex flex-wrap gap-1 max-h-32 overflow-y-auto">
-                              {(t.guests || []).map((g: any) => (
-                                <Badge
-                                  key={g.guest_id}
-                                  variant={
-                                    g.rsvp_status === 'confirmed' ? 'default' :
-                                    g.rsvp_status === 'pending' ? 'secondary' : 'outline'
+                          {/* Guests List with Dietary Restrictions */}
+                          <div className="space-y-2">
+                            <div className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                              <Users className="h-3 w-3" />
+                              <span>Guests ({guestCount})</span>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {(t.guests || []).map((g: any) => {
+                                // Parse dietary restrictions if it's a JSON string
+                                let restrictions: any[] = [];
+                                if (g.dietary_restrictions) {
+                                  try {
+                                    restrictions = typeof g.dietary_restrictions === 'string' 
+                                      ? JSON.parse(g.dietary_restrictions) 
+                                      : g.dietary_restrictions;
+                                    restrictions = Array.isArray(restrictions) 
+                                      ? restrictions.filter((r: any) => r && r.restriction_name) 
+                                      : [];
+                                  } catch (e) {
+                                    restrictions = [];
                                   }
-                                  className="text-xs"
-                                >
-                                  {g.rsvp_status === 'confirmed' && <CheckCircle className="h-3 w-3 mr-1" />}
-                                  {g.rsvp_status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
-                                  {g.rsvp_status === 'no_response' && <XCircle className="h-3 w-3 mr-1" />}
-                                  {g.guest_name}
-                                </Badge>
-                              ))}
+                                }
+                                
+                                return (
+                                  <div key={g.guest_id} className="border rounded-md p-2 space-y-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <Badge
+                                        variant={
+                                          g.rsvp_status === 'confirmed' ? 'default' :
+                                          g.rsvp_status === 'pending' ? 'secondary' : 'outline'
+                                        }
+                                        className="text-xs"
+                                      >
+                                        {g.rsvp_status === 'confirmed' && <CheckCircle className="h-3 w-3 mr-1" />}
+                                        {g.rsvp_status === 'pending' && <Clock className="h-3 w-3 mr-1" />}
+                                        {g.rsvp_status === 'no_response' && <XCircle className="h-3 w-3 mr-1" />}
+                                        {g.guest_name}
+                                      </Badge>
+                                    </div>
+                                    {restrictions.length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mt-1">
+                                        {restrictions.map((r: any) => (
+                                          <Badge 
+                                            key={r.restriction_id} 
+                                            variant="outline" 
+                                            className="text-xs"
+                                          >
+                                            {r.restriction_name}
+                                          </Badge>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                );
+                              })}
                               {guestCount === 0 && (
-                                <span className="text-xs text-muted-foreground italic">No guests assigned</span>
+                                <div className="text-xs text-muted-foreground italic text-center py-2">
+                                  No guests assigned
+                                </div>
                               )}
                             </div>
                           </div>
+                          
+                          {/* Table Dietary Restrictions Summary */}
+                          {(() => {
+                            const allTableRestrictions: Map<string, number> = new Map();
+                            (t.guests || []).forEach((g: any) => {
+                              let restrictions: any[] = [];
+                              if (g.dietary_restrictions) {
+                                try {
+                                  restrictions = typeof g.dietary_restrictions === 'string' 
+                                    ? JSON.parse(g.dietary_restrictions) 
+                                    : g.dietary_restrictions;
+                                  restrictions = Array.isArray(restrictions) 
+                                    ? restrictions.filter((r: any) => r && r.restriction_name) 
+                                    : [];
+                                } catch (e) {
+                                  restrictions = [];
+                                }
+                              }
+                              restrictions.forEach((r: any) => {
+                                const name = r.restriction_name;
+                                allTableRestrictions.set(name, (allTableRestrictions.get(name) || 0) + 1);
+                              });
+                            });
+                            
+                            if (allTableRestrictions.size > 0) {
+                              return (
+                                <div className="mt-2 pt-2 border-t">
+                                  <div className="text-xs font-medium text-muted-foreground mb-1 flex items-center gap-1">
+                                    <AlertTriangle className="h-3 w-3" />
+                                    <span>Table Dietary Restrictions</span>
+                                  </div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {Array.from(allTableRestrictions.entries()).map(([name, count]) => (
+                                      <Badge key={name} variant="secondary" className="text-xs">
+                                        {name} ({count})
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </CardContent>
                       </Card>
                     );
