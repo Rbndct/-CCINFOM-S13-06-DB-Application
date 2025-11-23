@@ -5082,17 +5082,27 @@ const WeddingDetail = () => {
                                   const fullPackage = packages.find(p => (p.package_id || p.id) === (pkg.packageId || pkg.package_id));
                                   const packageRestrictions: any[] = [];
                                   if (fullPackage && fullPackage.menu_items && Array.isArray(fullPackage.menu_items)) {
-                                    const restrictionSet = new Set<string>();
+                                    const restrictionSet = new Set<number>();
                                     fullPackage.menu_items.forEach((item: any) => {
-                                      if (item.restriction_name && item.restriction_name !== 'None') {
-                                        if (!restrictionSet.has(item.restriction_name)) {
-                                          restrictionSet.add(item.restriction_name);
-                                          packageRestrictions.push({
-                                            restriction_name: item.restriction_name,
-                                            restriction_type: item.restriction_type || 'Dietary'
-                                          });
+                                      // Get restrictions from junction table (menu_item_restrictions)
+                                      const itemRestrictions = item.restrictions && Array.isArray(item.restrictions)
+                                        ? item.restrictions
+                                        : (item.restriction_name && !isNoneRestriction({ restriction_name: item.restriction_name })
+                                          ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type, restriction_id: item.restriction_id }]
+                                          : []);
+                                      itemRestrictions.forEach((r: any) => {
+                                        if (r && r.restriction_name && !isNoneRestriction(r)) {
+                                          const restrictionId = r.restriction_id || r.id;
+                                          if (restrictionId && !restrictionSet.has(restrictionId)) {
+                                            restrictionSet.add(restrictionId);
+                                            packageRestrictions.push({
+                                              restriction_id: restrictionId,
+                                              restriction_name: r.restriction_name,
+                                              restriction_type: r.restriction_type || 'Dietary'
+                                            });
+                                          }
                                         }
-                                      }
+                                      });
                                     });
                                   }
                                   return (
@@ -5159,17 +5169,27 @@ const WeddingDetail = () => {
                                         const pkgId = pkg.package_id || pkg.id;
                                         const packageRestrictions: any[] = [];
                                         if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
-                                          const restrictionSet = new Set<string>();
+                                          const restrictionSet = new Set<number>();
                                           pkg.menu_items.forEach((item: any) => {
-                                            if (item.restriction_name && item.restriction_name !== 'None') {
-                                              if (!restrictionSet.has(item.restriction_name)) {
-                                                restrictionSet.add(item.restriction_name);
-                                                packageRestrictions.push({
-                                                  restriction_name: item.restriction_name,
-                                                  restriction_type: item.restriction_type || 'Dietary'
-                                                });
+                                            // Get restrictions from junction table (menu_item_restrictions)
+                                            const itemRestrictions = item.restrictions && Array.isArray(item.restrictions)
+                                              ? item.restrictions
+                                              : (item.restriction_name && !isNoneRestriction({ restriction_name: item.restriction_name })
+                                                ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type, restriction_id: item.restriction_id }]
+                                                : []);
+                                            itemRestrictions.forEach((r: any) => {
+                                              if (r && r.restriction_name && !isNoneRestriction(r)) {
+                                                const restrictionId = r.restriction_id || r.id;
+                                                if (restrictionId && !restrictionSet.has(restrictionId)) {
+                                                  restrictionSet.add(restrictionId);
+                                                  packageRestrictions.push({
+                                                    restriction_id: restrictionId,
+                                                    restriction_name: r.restriction_name,
+                                                    restriction_type: r.restriction_type || 'Dietary'
+                                                  });
+                                                }
                                               }
-                                            }
+                                            });
                                           });
                                         }
                                         return (
@@ -5441,20 +5461,30 @@ const WeddingDetail = () => {
                             const tableId = packageAssignTableId ? parseInt(packageAssignTableId) : null;
                             const compatibility = tableId && pkgId ? checkPackageCompatibility(pkgId, tableId) : { compatible: true, conflicts: [] };
                             
-                            // Get package restrictions
+                            // Get package restrictions from junction table
                             const packageRestrictions: any[] = [];
                             if (pkg.menu_items && Array.isArray(pkg.menu_items)) {
-                              const restrictionSet = new Set<string>();
+                              const restrictionSet = new Set<number>();
                               pkg.menu_items.forEach((item: any) => {
-                                if (item.restriction_name && item.restriction_name !== 'None') {
-                                  if (!restrictionSet.has(item.restriction_name)) {
-                                    restrictionSet.add(item.restriction_name);
-                                    packageRestrictions.push({
-                                      restriction_name: item.restriction_name,
-                                      restriction_type: item.restriction_type || 'Dietary'
-                                    });
+                                // Get restrictions from junction table (menu_item_restrictions)
+                                const itemRestrictions = item.restrictions && Array.isArray(item.restrictions)
+                                  ? item.restrictions
+                                  : (item.restriction_name && !isNoneRestriction({ restriction_name: item.restriction_name })
+                                    ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type, restriction_id: item.restriction_id }]
+                                    : []);
+                                itemRestrictions.forEach((r: any) => {
+                                  if (r && r.restriction_name && !isNoneRestriction(r)) {
+                                    const restrictionId = r.restriction_id || r.id;
+                                    if (restrictionId && !restrictionSet.has(restrictionId)) {
+                                      restrictionSet.add(restrictionId);
+                                      packageRestrictions.push({
+                                        restriction_id: restrictionId,
+                                        restriction_name: r.restriction_name,
+                                        restriction_type: r.restriction_type || 'Dietary'
+                                      });
+                                    }
                                   }
-                                }
+                                });
                               });
                             }
                             
@@ -5676,20 +5706,30 @@ const WeddingDetail = () => {
                         const tableRestrictions = getTableRestrictions(assignment.tableId);
                         const pkg = packages.find(p => (p.package_id || p.id) === assignment.packageId);
                         
-                        // Get package restrictions
+                        // Get package restrictions from junction table
                         const packageRestrictions: any[] = [];
                         if (pkg && pkg.menu_items && Array.isArray(pkg.menu_items)) {
-                          const restrictionSet = new Set<string>();
+                          const restrictionSet = new Set<number>();
                           pkg.menu_items.forEach((item: any) => {
-                            if (item.restriction_name && item.restriction_name !== 'None') {
-                              if (!restrictionSet.has(item.restriction_name)) {
-                                restrictionSet.add(item.restriction_name);
-                                packageRestrictions.push({
-                                  restriction_name: item.restriction_name,
-                                  restriction_type: item.restriction_type || 'Dietary'
-                                });
+                            // Get restrictions from junction table (menu_item_restrictions)
+                            const itemRestrictions = item.restrictions && Array.isArray(item.restrictions)
+                              ? item.restrictions
+                              : (item.restriction_name && !isNoneRestriction({ restriction_name: item.restriction_name })
+                                ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type, restriction_id: item.restriction_id }]
+                                : []);
+                            itemRestrictions.forEach((r: any) => {
+                              if (r && r.restriction_name && !isNoneRestriction(r)) {
+                                const restrictionId = r.restriction_id || r.id;
+                                if (restrictionId && !restrictionSet.has(restrictionId)) {
+                                  restrictionSet.add(restrictionId);
+                                  packageRestrictions.push({
+                                    restriction_id: restrictionId,
+                                    restriction_name: r.restriction_name,
+                                    restriction_type: r.restriction_type || 'Dietary'
+                                  });
+                                }
                               }
-                            }
+                            });
                           });
                         }
                         
@@ -5891,7 +5931,12 @@ const WeddingDetail = () => {
                         </TableHeader>
                         <TableBody>
                           {menuItemsList.map((item) => {
-                            const restrictions = item.restriction_name ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type }] : [];
+                            // Get restrictions from junction table (menu_item_restrictions)
+                            const restrictions = item.restrictions && Array.isArray(item.restrictions)
+                              ? item.restrictions.filter((r: any) => r && r.restriction_name && !isNoneRestriction(r))
+                              : (item.restriction_name && !isNoneRestriction({ restriction_name: item.restriction_name })
+                                ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type }]
+                                : []);
                             const itemId = item.menu_item_id || item.id;
                             
                             return (
@@ -6175,13 +6220,27 @@ const WeddingDetail = () => {
                                                   <Badge key={startIdx + idx} variant="outline" className={`text-xs ${menuColorClass} border flex items-center gap-1`}>
                                                     <MenuIconComponent className="h-3 w-3" />
                                                     {item.menu_name || item.name} {item.quantity > 1 ? `x${item.quantity}` : ''}
-                                                    {item.restriction_name && item.restriction_name !== 'None' && (() => {
-                                                      const RestrictionIcon = restrictionIcon;
-                                                      return (
-                                                        <span className="ml-1 flex items-center gap-0.5">
-                                                          <RestrictionIcon className="h-2.5 w-2.5" />
-                                                        </span>
-                                                      );
+                                                    {(() => {
+                                                      // Get restrictions from junction table (menu_item_restrictions)
+                                                      const itemRestrictions = item.restrictions && Array.isArray(item.restrictions)
+                                                        ? item.restrictions.filter((r: any) => r && r.restriction_name && !isNoneRestriction(r))
+                                                        : (item.restriction_name && !isNoneRestriction({ restriction_name: item.restriction_name })
+                                                          ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type }]
+                                                          : []);
+                                                      if (itemRestrictions.length > 0) {
+                                                        return (
+                                                          <span className="ml-1 flex items-center gap-0.5">
+                                                            {itemRestrictions.slice(0, 1).map((r: any, rIdx: number) => {
+                                                              const RestrictionIcon = getTypeIcon(r.restriction_type || '');
+                                                              return <RestrictionIcon key={rIdx} className="h-2.5 w-2.5" />;
+                                                            })}
+                                                            {itemRestrictions.length > 1 && (
+                                                              <span className="text-xs">+{itemRestrictions.length - 1}</span>
+                                                            )}
+                                                          </span>
+                                                        );
+                                                      }
+                                                      return null;
                                                     })()}
                                                   </Badge>
                                                 );
@@ -7416,9 +7475,15 @@ const WeddingDetail = () => {
                 })
                 .filter(Boolean);
               
-              // Calculate total quantity served
+              // Calculate total quantity served (for couple tables, count couple as 2)
               const totalQuantityServed = tablesUsingPackage.reduce((total, table) => {
+                const tableObj = tables.find(t => (t.id || t.table_id) === table.table_id);
+                const isCoupleTable = (tableObj?.category || tableObj?.table_category || '').toLowerCase() === 'couple';
                 const tableGuests = guests.filter(g => g && g.table_id === table.table_id);
+                // For couple tables, always count 2 for the couple, plus any additional guests
+                if (isCoupleTable) {
+                  return total + 2 + tableGuests.length;
+                }
                 return total + tableGuests.length;
               }, 0);
               
@@ -7504,16 +7569,29 @@ const WeddingDetail = () => {
                                   {menuType}
                                 </Badge>
                               </div>
-                              {item.restriction_name && item.restriction_name !== 'None' && (() => {
-                                const RestrictionIcon = restrictionIcon;
-                                return (
-                                  <div className="mt-2">
-                                    <Badge variant="outline" className={`text-xs ${getTypeColor(item.restriction_type || '')} border flex items-center gap-1`}>
-                                      <RestrictionIcon className="h-3 w-3" />
-                                      {item.restriction_name}
-                                    </Badge>
-                                  </div>
-                                );
+                              {(() => {
+                                // Get restrictions from junction table (menu_item_restrictions)
+                                const itemRestrictions = item.restrictions && Array.isArray(item.restrictions)
+                                  ? item.restrictions.filter((r: any) => r && r.restriction_name && !isNoneRestriction(r))
+                                  : (item.restriction_name && !isNoneRestriction({ restriction_name: item.restriction_name })
+                                    ? [{ restriction_name: item.restriction_name, restriction_type: item.restriction_type }]
+                                    : []);
+                                if (itemRestrictions.length > 0) {
+                                  return (
+                                    <div className="mt-2 flex flex-wrap gap-1">
+                                      {itemRestrictions.map((r: any, rIdx: number) => {
+                                        const RestrictionIcon = getTypeIcon(r.restriction_type || '');
+                                        return (
+                                          <Badge key={rIdx} variant="outline" className={`text-xs ${getTypeColor(r.restriction_type || '')} border flex items-center gap-1`}>
+                                            <RestrictionIcon className="h-3 w-3" />
+                                            {r.restriction_name}
+                                          </Badge>
+                                        );
+                                      })}
+                                    </div>
+                                  );
+                                }
+                                return null;
                               })()}
                             </div>
                           );
@@ -7534,7 +7612,9 @@ const WeddingDetail = () => {
                           const tableGuests = guests.filter(g => g && g.table_id === t.table_id);
                           const table = tables.find(tbl => (tbl.id || tbl.table_id) === t.table_id);
                           const capacity = table?.capacity || 0;
-                          const assignedCount = tableGuests.length;
+                          const isCoupleTable = (table?.category || table?.table_category || '').toLowerCase() === 'couple';
+                          // For couple tables, count couple as 2, plus any additional guests
+                          const assignedCount = isCoupleTable ? 2 + tableGuests.length : tableGuests.length;
                           
                           return (
                             <div key={idx} className="p-3 border rounded-lg bg-muted/50 hover:bg-muted transition-colors">
@@ -7595,9 +7675,12 @@ const WeddingDetail = () => {
               </div>
             ) : selectedMenuItem && (() => {
               const itemId = selectedMenuItem.menu_item_id || selectedMenuItem.id;
-              const restrictions = selectedMenuItem.restriction_name 
-                ? [{ restriction_name: selectedMenuItem.restriction_name, restriction_type: selectedMenuItem.restriction_type }] 
-                : [];
+              // Get restrictions from junction table (menu_item_restrictions)
+              const restrictions = selectedMenuItem.restrictions && Array.isArray(selectedMenuItem.restrictions)
+                ? selectedMenuItem.restrictions.filter((r: any) => r && r.restriction_name && !isNoneRestriction(r))
+                : (selectedMenuItem.restriction_name && !isNoneRestriction({ restriction_name: selectedMenuItem.restriction_name })
+                  ? [{ restriction_name: selectedMenuItem.restriction_name, restriction_type: selectedMenuItem.restriction_type }] 
+                  : []);
               
               return (
                 <div className="space-y-4 py-4">

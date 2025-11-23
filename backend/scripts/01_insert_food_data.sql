@@ -30,10 +30,10 @@ DELETE FROM package;
 -- Delete recipes
 DELETE FROM recipe;
 
--- Clear menu_item_restrictions junction table (must be deleted before menu items)
+-- Clear menu_item_restrictions junction table (must be deleted before menu_item due to foreign key)
 DELETE FROM menu_item_restrictions;
 
--- Delete menu items
+-- Delete menu items (junction table entries will be deleted via CASCADE if not already deleted)
 DELETE FROM menu_item;
 
 -- Delete ingredients
@@ -491,7 +491,7 @@ SET @egg_allergy_id = (SELECT restriction_id FROM dietary_restriction WHERE rest
 -- Add restrictions to menu items via junction table (1-4 restrictions each)
 
 -- Single restrictions for menu items
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @vegetarian_id FROM menu_item mi WHERE mi.menu_name = 'Miso Soup Shot'
 AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id = mi.menu_item_id AND mir.restriction_id = @vegetarian_id)
 UNION ALL
@@ -596,7 +596,7 @@ AND NOT EXISTS (SELECT 1 FROM menu_item_restrictions mir WHERE mir.menu_item_id 
 
 -- Miso Soup Shot: 2 restrictions (Vegetarian + Low-Sodium)
 -- Note: Vegetarian is already added above, adding Low-Sodium
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Miso Soup Shot'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -606,7 +606,7 @@ AND NOT EXISTS (
 
 -- Edamame: 3 restrictions (Vegan + Gluten Free + Low-Sodium)
 -- Note: Vegan is already added above, adding Gluten Free and Low-Sodium
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Edamame (Steamed Soybeans)'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -623,7 +623,7 @@ AND NOT EXISTS (
 
 -- Vegetable Spring Rolls: 3 restrictions (Vegan + Gluten Free + Low-Fat)
 SET @low_fat_id = (SELECT restriction_id FROM dietary_restriction WHERE restriction_name = 'Low-Fat' LIMIT 1);
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Vegetable Spring Rolls'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -639,7 +639,7 @@ AND NOT EXISTS (
 );
 
 -- Tofu Skewers: 4 restrictions (Vegan + Gluten Free + Low-Sodium + Low-Fat)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Skewers'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -662,7 +662,7 @@ AND NOT EXISTS (
 );
 
 -- Naruto Udon Bowl: 2 restrictions (Vegetarian + Low-Sodium)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @low_sodium_id FROM menu_item mi WHERE mi.menu_name = 'Naruto Udon Bowl'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -671,7 +671,7 @@ AND NOT EXISTS (
 );
 
 -- Vegetarian Curry Bowl: 3 restrictions (Vegan + Gluten Free + Low-Sodium)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Vegetarian Curry Bowl'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -687,7 +687,7 @@ AND NOT EXISTS (
 );
 
 -- Tofu Teriyaki Bowl: 4 restrictions (Vegan + Gluten Free + Low-Sodium + Low-Fat)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Tofu Teriyaki Bowl'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -710,7 +710,7 @@ AND NOT EXISTS (
 );
 
 -- Green Tea: 2 restrictions (Vegan + Low-Sugar)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Green Tea'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -719,7 +719,7 @@ AND NOT EXISTS (
 );
 
 -- Matcha Latte: 3 restrictions (Vegetarian + Low-Sugar + Diabetic-Friendly)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Matcha Latte'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -735,7 +735,7 @@ AND NOT EXISTS (
 );
 
 -- Japanese Iced Coffee: 2 restrictions (Vegan + Low-Sugar)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Japanese Iced Coffee'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -744,7 +744,7 @@ AND NOT EXISTS (
 );
 
 -- Dango Trio: 2 restrictions (Vegan + Gluten Free)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Dango Trio (Sweet Rice Balls)'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -753,7 +753,7 @@ AND NOT EXISTS (
 );
 
 -- Red Bean Mochi: 3 restrictions (Vegan + Gluten Free + Low-Sodium)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Red Bean Mochi'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -769,7 +769,7 @@ AND NOT EXISTS (
 );
 
 -- Sesame Balls: 4 restrictions (Vegan + Gluten Free + Low-Sodium + Low-Fat)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Sesame Balls'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -792,7 +792,7 @@ AND NOT EXISTS (
 );
 
 -- Warabimochi: 3 restrictions (Vegan + Gluten Free + Low-Sugar)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @gluten_id FROM menu_item mi WHERE mi.menu_name = 'Warabimochi'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 
@@ -808,7 +808,7 @@ AND NOT EXISTS (
 );
 
 -- Anmitsu: 2 restrictions (Vegan + Low-Sugar)
-INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id)
+INSERT INTO menu_item_restrictions (menu_item_id, restriction_id)
 SELECT mi.menu_item_id, @low_sugar_id FROM menu_item mi WHERE mi.menu_name = 'Anmitsu'
 AND NOT EXISTS (
     SELECT 1 FROM menu_item_restrictions mir 

@@ -264,7 +264,7 @@ router.get('/', async (req, res) => {
       }
     }));
 
-    // Get menu items for each package (include unit_cost and selling_price)
+    // Get menu items for each package (include unit_cost, selling_price, and restrictions from junction table)
     const packagesWithItems = await Promise.all(rows.map(async (pkg) => {
       const [menuItems] = await promisePool.query(
           `SELECT 
@@ -279,7 +279,24 @@ router.get('/', async (req, res) => {
         WHERE pmi.package_id = ?`,
           [pkg.package_id]);
 
-      return {...pkg, menu_items: menuItems};
+      // Fetch restrictions for each menu item from menu_item_restrictions junction table
+      const menuItemsWithRestrictions = await Promise.all(menuItems.map(async (item) => {
+        const [restrictionRows] = await promisePool.query(
+            `SELECT 
+            dr.restriction_id,
+            dr.restriction_name,
+            dr.restriction_type,
+            dr.severity_level
+          FROM menu_item_restrictions mir
+          JOIN dietary_restriction dr ON mir.restriction_id = dr.restriction_id
+          WHERE mir.menu_item_id = ?
+          ORDER BY dr.restriction_name ASC`,
+            [item.menu_item_id]);
+
+        return {...item, restrictions: restrictionRows};
+      }));
+
+      return {...pkg, menu_items: menuItemsWithRestrictions};
     }));
 
     res.json({success: true, data: packagesWithItems});
@@ -333,7 +350,7 @@ router.get('/:id', async (req, res) => {
         [req.params.id]);
     rows[0].usage_count = usageRows[0]?.wedding_count || 0;
 
-    // Get menu items for this package (include unit_cost and selling_price)
+    // Get menu items for this package (include unit_cost, selling_price, and restrictions from junction table)
     const [menuItems] = await promisePool.query(
         `SELECT 
         m.menu_item_id,
@@ -348,6 +365,23 @@ router.get('/:id', async (req, res) => {
       WHERE pmi.package_id = ?
       ORDER BY m.menu_name ASC`,
         [req.params.id]);
+
+    // Fetch restrictions for each menu item from menu_item_restrictions junction table
+    const menuItemsWithRestrictions = await Promise.all(menuItems.map(async (item) => {
+      const [restrictionRows] = await promisePool.query(
+          `SELECT 
+          dr.restriction_id,
+          dr.restriction_name,
+          dr.restriction_type,
+          dr.severity_level
+        FROM menu_item_restrictions mir
+        JOIN dietary_restriction dr ON mir.restriction_id = dr.restriction_id
+        WHERE mir.menu_item_id = ?
+        ORDER BY dr.restriction_name ASC`,
+          [item.menu_item_id]);
+
+      return {...item, restrictions: restrictionRows};
+    }));
 
     // Get assigned tables with guest counts
     // For couple tables, always count 2 (the couple is always seated there)
@@ -390,7 +424,7 @@ router.get('/:id', async (req, res) => {
       success: true,
       data: {
         ...rows[0],
-        menu_items: menuItems,
+        menu_items: menuItemsWithRestrictions,
         assigned_tables: formattedAssignedTables
       }
     });
