@@ -314,8 +314,11 @@ router.get('/wedding/:id/seating', async (req, res) => {
         }));
 
     // Calculate summary stats
+    // For couple tables, always count 2 guests (the couple is always seated)
     const totalTables = seating.length;
-    const totalGuests = guests.length;
+    const coupleTablesCount = seating.filter(t => t.table_category && t.table_category.toLowerCase() === 'couple').length;
+    const regularGuestsCount = guests.length;
+    const totalGuests = regularGuestsCount + (coupleTablesCount * 2); // Add 2 for each couple table
     const totalCapacity = seating.reduce((sum, t) => sum + (parseInt(t.capacity) || 0), 0);
     const occupancyRate = totalCapacity > 0 ? (totalGuests / totalCapacity) * 100 : 0;
 

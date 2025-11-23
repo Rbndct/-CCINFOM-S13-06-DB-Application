@@ -1,4 +1,4 @@
-import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package, Receipt, ArrowDownCircle, ArrowUpCircle, Minus, Percent, Activity, Building2, Wrench, TrendingUpDown, ShoppingCart } from 'lucide-react';
+import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package, Receipt, ArrowDownCircle, ArrowUpCircle, Minus, Percent, Activity, Building2, Wrench, TrendingUpDown, ShoppingCart, Heart, Crown, UserFriends } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -2793,7 +2793,7 @@ const Reports = () => {
                         .slice(0, 10)
                         .map((item: any) => ({
                           ...item,
-                          label: item.restriction_name || 'Unknown',
+                          label: item.restriction_name || 'None',
                           value: parseInt(item.cnt) || 0
                         }))
                         .sort((a: any, b: any) => b.value - a.value);
@@ -2899,18 +2899,31 @@ const Reports = () => {
                   {/* Utilization Gauge/Summary */}
                   {(inventoryUsage?.allocations && inventoryUsage.allocations.length > 0) && (
                     <div>
-                      <div className="text-sm font-medium mb-2">Equipment Utilization</div>
+                      <div className="text-sm font-medium mb-2 flex items-center gap-2">
+                        <Warehouse className="h-4 w-4" />
+                        <span>Equipment Utilization</span>
+                      </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="border rounded-md p-3 text-center">
-                          <div className="text-2xl font-bold">{inventoryUsage.allocations.length}</div>
-                          <div className="text-xs text-muted-foreground">Items Allocated</div>
-                        </div>
-                        <div className="border rounded-md p-3 text-center">
-                          <div className="text-2xl font-bold text-orange-600">
-                            {inventoryUsage.needsAttention?.length || 0}
-                          </div>
-                          <div className="text-xs text-muted-foreground">Need Attention</div>
-                        </div>
+                        <Card>
+                          <CardContent className="p-3 text-center">
+                            <div className="text-2xl font-bold">{inventoryUsage.allocations.length}</div>
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1">
+                              <Package className="h-3 w-3" />
+                              <span>Items Allocated</span>
+                            </div>
+                          </CardContent>
+                        </Card>
+                        <Card>
+                          <CardContent className="p-3 text-center">
+                            <div className="text-2xl font-bold text-orange-600">
+                              {inventoryUsage.needsAttention?.length || 0}
+                            </div>
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center justify-center gap-1">
+                              <AlertTriangle className="h-3 w-3" />
+                              <span>Need Attention</span>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
                     </div>
                   )}
@@ -3008,6 +3021,10 @@ const Reports = () => {
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold">{seating.summary.total_tables || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <Building2 className="h-3 w-3" />
+                          <span>Tables set up for this wedding</span>
+                        </p>
                       </CardContent>
                     </Card>
                     <Card>
@@ -3017,6 +3034,10 @@ const Reports = () => {
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold">{seating.summary.total_guests || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <Users className="h-3 w-3" />
+                          <span>Guests assigned to tables</span>
+                        </p>
                       </CardContent>
                     </Card>
                     <Card>
@@ -3026,6 +3047,10 @@ const Reports = () => {
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold">{seating.summary.total_capacity || 0}</div>
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <Hash className="h-3 w-3" />
+                          <span>Maximum seating capacity</span>
+                        </p>
                       </CardContent>
                     </Card>
                     <Card>
@@ -3035,6 +3060,10 @@ const Reports = () => {
                       </CardHeader>
                       <CardContent>
                         <div className="text-2xl font-bold">{seating.summary.occupancy_rate?.toFixed(1) || 0}%</div>
+                        <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                          <Activity className="h-3 w-3" />
+                          <span>Seats currently occupied</span>
+                        </p>
                       </CardContent>
                     </Card>
                   </div>
@@ -3043,16 +3072,30 @@ const Reports = () => {
                 {/* Tables Grid */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   {(seating?.seating || []).map((t: any) => {
-                    const guestCount = (t.guests || []).length;
+                    const isCoupleTable = t.table_category && t.table_category.toLowerCase() === 'couple';
+                    // For couple tables, always count 2 guests (the couple is always seated)
+                    const guestCount = isCoupleTable ? 2 : (t.guests || []).length;
                     const capacity = parseInt(t.capacity) || 0;
                     const occupancyPercent = capacity > 0 ? (guestCount / capacity) * 100 : 0;
                     const categoryColors: Record<string, string> = {
                       'VIP': 'bg-purple-100 dark:bg-purple-900 text-purple-800 dark:text-purple-200',
                       'Family': 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200',
                       'Friends': 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200',
+                      'Couple': 'bg-pink-100 dark:bg-pink-900 text-pink-800 dark:text-pink-200',
                       'Others': 'bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200'
                     };
                     const categoryColor = categoryColors[t.table_category] || categoryColors['Others'];
+                    
+                    // Table type icons
+                    const getTableTypeIcon = (category: string) => {
+                      const cat = (category || '').toLowerCase();
+                      if (cat === 'couple') return Heart;
+                      if (cat === 'vip') return Crown;
+                      if (cat === 'family') return Users;
+                      if (cat === 'friends') return UserFriends;
+                      return Building2;
+                    };
+                    const TableTypeIcon = getTableTypeIcon(t.table_category);
 
                     return (
                       <Card key={t.table_id} className="border-2 hover:shadow-md transition-shadow">
@@ -3063,8 +3106,9 @@ const Reports = () => {
                                 #{t.table_number || t.table_id}
                               </Badge>
                               {t.table_category && (
-                                <Badge className={`${categoryColor} px-2 py-1`}>
-                                  {t.table_category}
+                                <Badge className={`${categoryColor} px-2 py-1 flex items-center gap-1`}>
+                                  <TableTypeIcon className="h-3 w-3" />
+                                  <span>{t.table_category}</span>
                                 </Badge>
                               )}
                             </div>
@@ -3107,6 +3151,19 @@ const Reports = () => {
                               <span>Guests ({guestCount})</span>
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {isCoupleTable && guestCount === 2 && (t.guests || []).length === 0 && (
+                                <div className="border rounded-md p-2 space-y-1 bg-pink-50 dark:bg-pink-900/20">
+                                  <div className="flex items-center gap-1.5">
+                                    <Badge variant="default" className="text-xs flex items-center gap-1">
+                                      <Heart className="h-3 w-3" />
+                                      <span>Couple (Seated)</span>
+                                    </Badge>
+                                  </div>
+                                  <p className="text-xs text-muted-foreground italic">
+                                    The couple is always seated at this table
+                                  </p>
+                                </div>
+                              )}
                               {(t.guests || []).map((g: any) => {
                                 // Parse dietary restrictions if it's a JSON string
                                 let restrictions: any[] = [];
@@ -3145,9 +3202,10 @@ const Reports = () => {
                                           <Badge 
                                             key={r.restriction_id} 
                                             variant="outline" 
-                                            className="text-xs"
+                                            className="text-xs flex items-center gap-1"
                                           >
-                                            {r.restriction_name}
+                                            <AlertTriangle className="h-2.5 w-2.5" />
+                                            <span>{r.restriction_name}</span>
                                           </Badge>
                                         ))}
                                       </div>
