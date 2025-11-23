@@ -1,4 +1,4 @@
-import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package, Receipt, ArrowDownCircle, ArrowUpCircle, Minus, Percent, Activity, Building2, Wrench, TrendingUpDown, ShoppingCart, Heart, Crown, UserFriends } from 'lucide-react';
+import { BarChart3, DollarSign, TrendingUp, TrendingDown, Calculator, PieChart, FileText, CreditCard, ArrowUpDown, AlertTriangle, CheckCircle, Clock, XCircle, Hash, Users, MapPin, Calendar, Utensils, Warehouse, Package, Receipt, ArrowDownCircle, ArrowUpCircle, Minus, Percent, Activity, Building2, Wrench, TrendingUpDown, ShoppingCart, Heart, Crown, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import DashboardLayout from '@/components/layout/DashboardLayout';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -3092,7 +3092,7 @@ const Reports = () => {
                       if (cat === 'couple') return Heart;
                       if (cat === 'vip') return Crown;
                       if (cat === 'family') return Users;
-                      if (cat === 'friends') return UserFriends;
+                      if (cat === 'friends') return UserCheck;
                       return Building2;
                     };
                     const TableTypeIcon = getTableTypeIcon(t.table_category);
