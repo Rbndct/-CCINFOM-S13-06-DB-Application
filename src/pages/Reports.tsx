@@ -2787,41 +2787,95 @@ const Reports = () => {
                       );
                     })()}
 
-                    {/* Guest Restrictions Bar Chart */}
-                    {(menuDietary?.guestRestrictions && menuDietary.guestRestrictions.length > 0) && (
-                      <div>
-                        <div className="flex items-center justify-between mb-3">
-                          <div>
-                            <div className="text-sm font-semibold">Guest Dietary Restrictions</div>
-                            <div className="text-xs text-muted-foreground mt-1">
-                              Number of guests with each dietary restriction
+                    {/* Guest Restrictions Horizontal Bar Chart */}
+                    {(menuDietary?.guestRestrictions && menuDietary.guestRestrictions.length > 0) && (() => {
+                      const guestRestrictionsData = menuDietary.guestRestrictions
+                        .slice(0, 10)
+                        .map((item: any) => ({
+                          ...item,
+                          label: item.restriction_name || 'Unknown',
+                          value: parseInt(item.cnt) || 0
+                        }))
+                        .sort((a: any, b: any) => b.value - a.value);
+                      
+                      const totalGuestsWithRestrictions = guestRestrictionsData.reduce((sum: number, item: any) => sum + item.value, 0);
+                      
+                      return (
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <div className="text-sm font-semibold">Guest Dietary Restrictions</div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                {totalGuestsWithRestrictions} guest{totalGuestsWithRestrictions !== 1 ? 's' : ''} with dietary restrictions
+                              </div>
+                            </div>
+                            <Users className="h-5 w-5 text-muted-foreground" />
+                          </div>
+                          <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <BarChart 
+                                data={guestRestrictionsData} 
+                                layout="vertical"
+                                margin={{ left: 10, right: 20, top: 5, bottom: 5 }}
+                              >
+                                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
+                                <XAxis 
+                                  type="number" 
+                                  className="text-xs"
+                                  label={{ value: 'Number of Guests', position: 'insideBottom', offset: -5, className: 'text-xs fill-muted-foreground' }}
+                                />
+                                <YAxis 
+                                  dataKey="label" 
+                                  type="category" 
+                                  width={140} 
+                                  className="text-xs font-medium"
+                                  tick={{ fontSize: 11 }}
+                                />
+                                <Tooltip 
+                                  formatter={(value: number, name: string, props: any) => [
+                                    `${value} guest${value !== 1 ? 's' : ''} have "${props.payload.label}" restriction`,
+                                    'Guest Count'
+                                  ]}
+                                  contentStyle={{ 
+                                    backgroundColor: 'var(--background)', 
+                                    border: '1px solid var(--border)',
+                                    borderRadius: '6px',
+                                    padding: '8px 12px'
+                                  }}
+                                  labelStyle={{ fontWeight: 600, marginBottom: '4px' }}
+                                />
+                                <Bar 
+                                  dataKey="value" 
+                                  fill={CHART_COLORS.secondary} 
+                                  name="Guests"
+                                  radius={[0, 4, 4, 0]}
+                                  label={{ 
+                                    position: 'right', 
+                                    formatter: (value: number) => `${value}`,
+                                    className: 'text-xs font-semibold fill-foreground'
+                                  }}
+                                />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </div>
+                          {/* Summary Stats */}
+                          <div className="mt-3 pt-3 border-t">
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-purple-500"></div>
+                                <span className="text-muted-foreground">Total Restrictions:</span>
+                                <span className="font-semibold">{guestRestrictionsData.length}</span>
+                              </div>
+                              <div className="flex items-center gap-1.5">
+                                <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                                <span className="text-muted-foreground">Affected Guests:</span>
+                                <span className="font-semibold">{totalGuestsWithRestrictions}</span>
+                              </div>
                             </div>
                           </div>
-                          <Users className="h-5 w-5 text-muted-foreground" />
                         </div>
-                        <div className="h-64">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={menuDietary.guestRestrictions.slice(0, 8)}>
-                              <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                              <XAxis 
-                                dataKey="restriction_name" 
-                                angle={-45} 
-                                textAnchor="end" 
-                                height={100} 
-                                className="text-xs"
-                                interval={0}
-                              />
-                              <YAxis className="text-xs" />
-                              <Tooltip 
-                                formatter={(value: number) => [`${value} guests`, 'Guest Count']}
-                                contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
-                              />
-                              <Bar dataKey="cnt" fill={CHART_COLORS.secondary} name="Guest Count" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
 
                   {/* Empty States */}
