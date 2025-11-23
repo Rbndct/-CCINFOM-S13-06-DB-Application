@@ -8,9 +8,11 @@ echo "Wedding Management DB - Setup Scripts"
 echo "=========================================="
 echo ""
 
-# Get MySQL password
-read -sp "Enter MySQL root password: " MYSQL_PASSWORD
-echo ""
+# Get MySQL password (from environment variable or prompt)
+if [ -z "$MYSQL_PASSWORD" ]; then
+    read -sp "Enter MySQL root password: " MYSQL_PASSWORD
+    echo ""
+fi
 
 # Database name
 DB_NAME="wedding_management_db"
@@ -49,10 +51,10 @@ else
 fi
 echo ""
 
-echo "Step 4/5: Inserting weddings and guests..."
+echo "Step 4/5: Inserting weddings, guests, preferences, and table packages..."
 mysql -u root -p"$MYSQL_PASSWORD" "$DB_NAME" < "$SCRIPT_DIR/03_insert_weddings_and_guests.sql"
 if [ $? -eq 0 ]; then
-    echo "✅ Weddings and guests inserted successfully"
+    echo "✅ Weddings, guests, preferences, and table packages inserted successfully"
 else
     echo "❌ Failed to insert weddings and guests"
     exit 1
@@ -69,6 +71,10 @@ else
 fi
 echo ""
 
+echo "Optional: To add even more preferences per couple, run:"
+echo "  mysql -u root -p $DB_NAME < $SCRIPT_DIR/05_assign_couple_restrictions.sql"
+echo ""
+
 echo "=========================================="
 echo "✅ All setup scripts completed successfully!"
 echo "=========================================="
@@ -82,7 +88,9 @@ SELECT
   (SELECT COUNT(*) FROM menu_item) as menu_items,
   (SELECT COUNT(*) FROM package) as packages,
   (SELECT COUNT(*) FROM dietary_restriction) as restrictions,
-  (SELECT COUNT(*) FROM seating_table) as tables;
+  (SELECT COUNT(*) FROM seating_table) as tables,
+  (SELECT COUNT(*) FROM table_package) as table_packages,
+  (SELECT COUNT(*) FROM inventory_items) as inventory_items;
 "
 
 echo ""

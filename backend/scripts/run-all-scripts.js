@@ -94,12 +94,11 @@ async function main() {
   
   const scripts = [
     cleanupScript, // Always run cleanup first to remove previous data
-    '01_insert_food_data.sql',
-    '02_insert_couples.sql',
-    '03_insert_weddings_and_guests.sql',
-    '04_insert_inventory_items.sql',
-    '05_assign_packages_to_wedding1.sql',
-    '06_assign_couple_restrictions.sql' // Optional: Adds multiple preferences per couple
+    '01_insert_food_data.sql', // Food data, dietary restrictions, ingredients, menu items, packages
+    '02_insert_couples.sql', // Couple records
+    '03_insert_weddings_and_guests.sql', // Weddings (2024-2025), guests, preferences, table packages, cost calculations
+    '04_insert_inventory_items.sql' // Inventory items for rentals
+    // Optional: '05_assign_couple_restrictions.sql' - Adds even more preferences per couple (if needed)
   ];
   
   console.log('🧹 Cleanup mode: Will remove all previous data before inserting fresh data\n');

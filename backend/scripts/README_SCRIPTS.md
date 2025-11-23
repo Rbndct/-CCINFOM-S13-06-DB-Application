@@ -54,17 +54,23 @@ mysql -u root -p wedding_management_db < backend/scripts/03_insert_weddings_and_
 ```
 
 **What it does:**
-- Creates 12 weddings from different Naruto couples
+- Creates 12 weddings from different Naruto couples (dates scattered between 2024-2025)
 - Each wedding has at least 10-15 guests (186+ total guests)
-- Creates couple preferences with varied dietary restrictions
+- Creates couple preferences with varied dietary restrictions (includes additional preferences)
+- Assigns packages to tables for weddings 1-5
 - Creates inventory allocations for tables
+- Updates wedding costs based on package assignments
+- Payment statuses include 'paid', 'pending', and 'partially_paid'
 - **⚠️ Must run AFTER couples script**
 
 **Features:**
-- 12 weddings with varied dates, venues, and costs
+- 12 weddings with varied dates (2024-2025), venues, and costs
 - 186+ guests with diverse dietary restrictions
-- Proper junction table entries for guest_restrictions
+- Proper junction table entries for guest_restrictions (uses INSERT IGNORE)
 - Couple preferences with varied restrictions for testing
+- Table package assignments for multiple weddings
+- Cost calculations (equipment + food costs)
+- Additional couple preferences for different ceremony types
 - Couples have varied dietary restrictions:
   - Naruto & Hinata: Vegetarian, No Alcohol, Lactose Intolerant
   - Sasuke & Sakura: Peanut Allergy, Tree Nut Allergy
@@ -105,9 +111,9 @@ mysql -u root -p wedding_management_db < backend/scripts/05_assign_packages_to_w
 
 ---
 
-### 7. 06_assign_couple_restrictions.sql (OPTIONAL - for multiple preferences per couple)
+### 5. 05_assign_couple_restrictions.sql (OPTIONAL - for multiple preferences per couple)
 ```bash
-mysql -u root -p wedding_management_db < backend/scripts/06_assign_couple_restrictions.sql
+mysql -u root -p wedding_management_db < backend/scripts/05_assign_couple_restrictions.sql
 ```
 
 **What it does:**
@@ -134,24 +140,24 @@ mysql -u root -p wedding_management_db < backend/scripts/06_assign_couple_restri
 ### 03_insert_weddings_and_guests.sql
 - **Purpose:** Creates comprehensive test data with weddings and guests
 - **Features:**
-  - 12 weddings with varied dates, venues, and costs
+  - 12 weddings with varied dates (2024-2025), venues, and costs
+  - Payment statuses: 'paid', 'pending', and 'partially_paid'
   - 186+ guests with diverse dietary restrictions
-  - Proper junction table entries for guest_restrictions
+  - Proper junction table entries for guest_restrictions (uses INSERT IGNORE)
   - Couple preferences with varied restrictions for testing
+  - Additional couple preferences for different ceremony types
+  - Table package assignments for weddings 1-5
+  - Cost calculations (equipment + food costs)
   - Inventory allocations for tables
 
 ### 04_insert_inventory_items.sql
 - **Purpose:** Inserts inventory items for wedding rentals
 - **Note:** Tables are auto-created via API, so they're not included here
 
-### 05_assign_packages_to_wedding1.sql
-- **Purpose:** Assigns packages to tables for wedding 1 to make it complete
-- **Note:** This is optional but recommended for testing package functionality
-
-### 06_assign_couple_restrictions.sql
-- **Purpose:** Creates multiple preferences per couple for different ceremony types
-- **Note:** This is optional and provides more comprehensive preference data for testing
-- **Difference from script 03:** Script 03 creates one preference per couple for their wedding. This script adds 2-3 additional preferences per couple for different ceremony types.
+### 05_assign_couple_restrictions.sql
+- **Purpose:** Creates additional preferences per couple for different ceremony types
+- **Note:** This is optional and provides even more comprehensive preference data for testing
+- **Difference from script 03:** Script 03 already includes some additional preferences. This script adds even more preferences for comprehensive testing scenarios.
 
 ---
 
@@ -197,11 +203,8 @@ mysql -u root -p wedding_management_db < backend/scripts/03_insert_weddings_and_
 # 5. (Optional) Insert inventory
 mysql -u root -p wedding_management_db < backend/scripts/04_insert_inventory_items.sql
 
-# 6. (Optional) Assign packages to wedding 1
-mysql -u root -p wedding_management_db < backend/scripts/05_assign_packages_to_wedding1.sql
-
-# 7. (Optional) Assign multiple preferences to couples
-mysql -u root -p wedding_management_db < backend/scripts/06_assign_couple_restrictions.sql
+# 6. (Optional) Assign even more preferences to couples
+mysql -u root -p wedding_management_db < backend/scripts/05_assign_couple_restrictions.sql
 ```
 
 **Using Node.js Script (Recommended):**
@@ -218,8 +221,7 @@ source backend/scripts/01_insert_food_data.sql;
 source backend/scripts/02_insert_couples.sql;
 source backend/scripts/03_insert_weddings_and_guests.sql;
 source backend/scripts/04_insert_inventory_items.sql;
-source backend/scripts/05_assign_packages_to_wedding1.sql;
-source backend/scripts/06_assign_couple_restrictions.sql;
+-- Optional: source backend/scripts/05_assign_couple_restrictions.sql;
 ```
 
 ---
@@ -266,11 +268,18 @@ SELECT
 ## Script Naming Convention
 
 Scripts are numbered in execution order:
-- `01_insert_food_data.sql` - Food data and dietary restrictions
+- `00_cleanup_duplicates.sql` - Cleanup utility (removes duplicates)
+- `01_insert_food_data.sql` - Food data, dietary restrictions, ingredients, menu items, packages
 - `02_insert_couples.sql` - Couple records
-- `03_insert_weddings_and_guests.sql` - Weddings, guests, and preferences
-- `04_insert_inventory_items.sql` - Inventory items
-- `05_assign_packages_to_wedding1.sql` - Package assignments
-- `06_assign_couple_restrictions.sql` - Multiple preferences per couple
+- `03_insert_weddings_and_guests.sql` - Weddings, guests, preferences, table packages, cost calculations
+- `04_insert_inventory_items.sql` - Inventory items for rentals
+- `05_assign_couple_restrictions.sql` - Additional multiple preferences per couple (optional)
+
+**Script 03 includes:**
+- Wedding dates scattered between 2024-2025
+- Payment statuses: 'paid', 'pending', and 'partially_paid'
+- Table package assignments for weddings 1-5
+- Cost calculations based on package assignments
+- Additional couple preferences for testing
 
 This numbering ensures scripts are executed in the correct order when sorted alphabetically.
