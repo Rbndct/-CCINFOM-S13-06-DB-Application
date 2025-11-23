@@ -204,14 +204,28 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Ensure wedding_id is an integer
+    const normalizedWeddingId = parseInt(wedding_id, 10);
+    if (isNaN(normalizedWeddingId)) {
+      await connection.rollback();
+      return res.status(400).json(
+          {success: false, error: 'Invalid wedding_id'});
+    }
+
     const [result] = await connection.query(
         'INSERT INTO guest (guest_name, wedding_id, rsvp_status, table_id, restriction_id) VALUES (?, ?, ?, ?, ?)',
         [
-          finalGuestName, wedding_id, rsvp_status || 'pending',
+          finalGuestName, normalizedWeddingId, rsvp_status || 'pending',
           table_id || null, restrictionIdForGuest
         ]);
 
     const guestId = result.insertId;
+    
+    if (!guestId) {
+      await connection.rollback();
+      return res.status(500).json(
+          {success: false, error: 'Failed to create guest - no insert ID returned'});
+    }
 
     // Insert multiple dietary restrictions via junction table if
     // restriction_ids array is provided
@@ -253,11 +267,25 @@ router.post('/', async (req, res) => {
 
       if (tableCheck[0]?.cnt > 0) {
         // Insert into junction table
-        const values = restrictionIdsArray.map((rid) => [guestId, rid]);
-        if (values.length > 0) {
-          await connection.query(
-              'INSERT INTO guest_restrictions (guest_id, restriction_id) VALUES ?',
-              [values]);
+        if (restrictionIdsArray.length > 0) {
+          // Convert restriction IDs to integers to ensure proper type
+          const normalizedIds = restrictionIdsArray
+            .map(rid => parseInt(rid, 10))
+            .filter(id => !isNaN(id) && id > 0);
+          
+          if (normalizedIds.length > 0) {
+            // Use bulk insert syntax: VALUES ? with array of arrays
+            const values = normalizedIds.map(rid => [guestId, rid]);
+            try {
+              await connection.query(
+                  'INSERT INTO guest_restrictions (guest_id, restriction_id) VALUES ?',
+                  [values]);
+            } catch (insertError) {
+              console.error('Error inserting into guest_restrictions:', insertError);
+              console.error('Values being inserted:', values);
+              throw insertError;
+            }
+          }
         }
       }
     }
@@ -394,7 +422,8 @@ router.put('/:id', async (req, res) => {
           .map(rid => Number(rid));
         
         if (validRestrictionIds.length > 0) {
-          const values = validRestrictionIds.map((rid) => [req.params.id, rid]);
+          // Use bulk insert syntax: VALUES ? with array of arrays
+          const values = validRestrictionIds.map(rid => [req.params.id, rid]);
           await connection.query(
               'INSERT INTO guest_restrictions (guest_id, restriction_id) VALUES ?',
               [values]);

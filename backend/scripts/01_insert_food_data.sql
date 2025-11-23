@@ -30,10 +30,7 @@ DELETE FROM package;
 -- Delete recipes
 DELETE FROM recipe;
 
--- Clear menu_item_restrictions junction table (must be deleted before menu_item due to foreign key)
-DELETE FROM menu_item_restrictions;
-
--- Delete menu items (junction table entries will be deleted via CASCADE if not already deleted)
+-- Delete menu items (this will set restriction_id to NULL due to ON DELETE SET NULL)
 DELETE FROM menu_item;
 
 -- Delete ingredients
