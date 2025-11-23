@@ -154,19 +154,19 @@ router.get('/wedding/:id/menu-dietary', async (req, res) => {
        ORDER BY times_ordered DESC`,
         [id]);
 
-    // Allergens by menu item restriction (if any)
+    // Allergens by menu item restriction (if any) - using junction table
     const [allergens] = await promisePool.query(
-        `SELECT m.menu_item_id, m.menu_name, dr.restriction_name, dr.restriction_type, dr.severity_level
+        `SELECT DISTINCT m.menu_item_id, m.menu_name, dr.restriction_name, dr.restriction_type, dr.severity_level
        FROM menu_item m
-       LEFT JOIN dietary_restriction dr ON m.restriction_id = dr.restriction_id
+       JOIN menu_item_restrictions mir ON m.menu_item_id = mir.menu_item_id
+       JOIN dietary_restriction dr ON mir.restriction_id = dr.restriction_id
        WHERE m.menu_item_id IN (
          SELECT pmi.menu_item_id
          FROM package_menu_items pmi
          JOIN table_package tp ON tp.package_id = pmi.package_id
          JOIN seating_table st ON st.table_id = tp.table_id
          WHERE st.wedding_id = ?
-       )
-       AND m.restriction_id IS NOT NULL`,
+       )`,
         [id]);
 
     // Guest dietary restrictions
@@ -908,7 +908,8 @@ router.get('/menu-usage', async (req, res) => {
       previousUsageCount = parseFloat(prevData[0]?.total_usage || 0);
     }
 
-    const totalUsage = menuUsageData.reduce((sum, item) => sum + (item.usage_count || 0), 0);
+    // Parse usage_count as integer to avoid string concatenation
+    const totalUsage = menuUsageData.reduce((sum, item) => sum + parseInt(item.usage_count || 0, 10), 0);
     const totalRevenue = menuUsageData.reduce((sum, item) => sum + parseFloat(item.total_revenue || 0), 0);
     const totalCost = menuUsageData.reduce((sum, item) => sum + parseFloat(item.total_cost || 0), 0);
     const totalProfit = menuUsageData.reduce((sum, item) => sum + parseFloat(item.total_profit || 0), 0);
