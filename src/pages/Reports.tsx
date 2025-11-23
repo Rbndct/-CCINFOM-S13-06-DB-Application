@@ -2704,11 +2704,19 @@ const Reports = () => {
                   <CardTitle>Menu & Dietary Report</CardTitle>
                   <CardDescription>Top dishes, allergens, guest dietary restrictions</CardDescription>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-6">
                   {/* Top Dishes Bar Chart */}
                   {(menuDietary?.dishCounts && menuDietary.dishCounts.length > 0) && (
                     <div>
-                      <div className="text-sm font-medium mb-2">Top Dishes</div>
+                      <div className="flex items-center justify-between mb-3">
+                        <div>
+                          <div className="text-sm font-semibold">Most Frequently Used Dishes</div>
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Number of times each dish appears in packages assigned to tables
+                          </div>
+                        </div>
+                        <Utensils className="h-5 w-5 text-muted-foreground" />
+                      </div>
                       <div className="h-64">
                         <ResponsiveContainer width="100%" height="100%">
                           <BarChart data={menuDietary.dishCounts.slice(0, 10).reverse()} layout="vertical">
@@ -2716,75 +2724,122 @@ const Reports = () => {
                             <XAxis type="number" className="text-xs" />
                             <YAxis dataKey="menu_name" type="category" width={120} className="text-xs" />
                             <Tooltip 
-                              formatter={(value: number) => `${value} times`}
+                              formatter={(value: number) => [`${value} times`, 'Package Assignments']}
                               contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
                             />
-                            <Bar dataKey="times_ordered" fill={CHART_COLORS.primary} name="Times Ordered" />
+                            <Bar dataKey="times_ordered" fill={CHART_COLORS.primary} name="Package Assignments" radius={[0, 4, 4, 0]} />
                           </BarChart>
                         </ResponsiveContainer>
                       </div>
                     </div>
                   )}
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-2 gap-6">
                     {/* Allergens Pie Chart */}
-                    {(menuDietary?.allergens && menuDietary.allergens.length > 0) && (
-                      <div>
-                        <div className="text-sm font-medium mb-2">Allergens Distribution</div>
-                        <div className="h-48">
-                          <ResponsiveContainer width="100%" height="100%">
-                            <RechartsPieChart>
-                              <Pie
-                                data={menuDietary.allergens.reduce((acc: any, a: any) => {
-                                  const existing = acc.find((item: any) => item.name === a.restriction_name);
-                                  if (existing) {
-                                    existing.value += 1;
-                                  } else {
-                                    acc.push({ name: a.restriction_name, value: 1 });
-                                  }
-                                  return acc;
-                                }, [])}
-                                cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
-                                outerRadius={60}
-                                fill="#8884d8"
-                                dataKey="value"
-                              >
-                                {menuDietary.allergens.map((_: any, index: number) => (
-                                  <Cell key={`cell-${index}`} fill={[CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.orange, CHART_COLORS.info][index % 4]} />
-                                ))}
-                              </Pie>
-                              <Tooltip />
-                              <Legend />
-                            </RechartsPieChart>
-                          </ResponsiveContainer>
+                    {(menuDietary?.allergens && menuDietary.allergens.length > 0) && (() => {
+                      const allergenData = menuDietary.allergens.reduce((acc: any, a: any) => {
+                        const existing = acc.find((item: any) => item.name === a.restriction_name);
+                        if (existing) {
+                          existing.value += 1;
+                        } else {
+                          acc.push({ name: a.restriction_name, value: 1 });
+                        }
+                        return acc;
+                      }, []).sort((a: any, b: any) => b.value - a.value);
+                      
+                      const colors = [CHART_COLORS.warning, CHART_COLORS.danger, CHART_COLORS.orange, CHART_COLORS.info, CHART_COLORS.secondary, CHART_COLORS.purple, CHART_COLORS.pink];
+                      
+                      return (
+                        <div>
+                          <div className="flex items-center justify-between mb-3">
+                            <div>
+                              <div className="text-sm font-semibold">Allergens in Menu Items</div>
+                              <div className="text-xs text-muted-foreground mt-1">
+                                Distribution of dietary restrictions present in assigned dishes
+                              </div>
+                            </div>
+                            <AlertTriangle className="h-5 w-5 text-warning" />
+                          </div>
+                          <div className="h-64">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <RechartsPieChart>
+                                <Pie
+                                  data={allergenData}
+                                  cx="50%"
+                                  cy="50%"
+                                  labelLine={false}
+                                  label={({ name, percent }) => percent > 0.05 ? `${name}: ${(percent * 100).toFixed(0)}%` : ''}
+                                  outerRadius={80}
+                                  fill="#8884d8"
+                                  dataKey="value"
+                                >
+                                  {allergenData.map((_: any, index: number) => (
+                                    <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip 
+                                  formatter={(value: number) => [`${value} menu items`, 'Count']}
+                                  contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
+                                />
+                                <Legend 
+                                  formatter={(value: any) => {
+                                    const item = allergenData.find((d: any) => d.name === value);
+                                    return item ? `${value} (${item.value})` : value;
+                                  }}
+                                />
+                              </RechartsPieChart>
+                            </ResponsiveContainer>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Guest Restrictions Bar Chart */}
                     {(menuDietary?.guestRestrictions && menuDietary.guestRestrictions.length > 0) && (
                       <div>
-                        <div className="text-sm font-medium mb-2">Guest Restrictions</div>
-                        <div className="h-48">
+                        <div className="flex items-center justify-between mb-3">
+                          <div>
+                            <div className="text-sm font-semibold">Guest Dietary Restrictions</div>
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Number of guests with each dietary restriction
+                            </div>
+                          </div>
+                          <Users className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                        <div className="h-64">
                           <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={menuDietary.guestRestrictions.slice(0, 8)}>
                               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                              <XAxis dataKey="restriction_name" angle={-45} textAnchor="end" height={80} className="text-xs" />
+                              <XAxis 
+                                dataKey="restriction_name" 
+                                angle={-45} 
+                                textAnchor="end" 
+                                height={100} 
+                                className="text-xs"
+                                interval={0}
+                              />
                               <YAxis className="text-xs" />
                               <Tooltip 
-                                formatter={(value: number) => `${value} guests`}
+                                formatter={(value: number) => [`${value} guests`, 'Guest Count']}
                                 contentStyle={{ backgroundColor: 'var(--background)', border: '1px solid var(--border)' }}
                               />
-                              <Bar dataKey="cnt" fill={CHART_COLORS.secondary} name="Guest Count" />
+                              <Bar dataKey="cnt" fill={CHART_COLORS.secondary} name="Guest Count" radius={[4, 4, 0, 0]} />
                             </BarChart>
                           </ResponsiveContainer>
                         </div>
                       </div>
                     )}
                   </div>
+
+                  {/* Empty States */}
+                  {(!menuDietary?.dishCounts || menuDietary.dishCounts.length === 0) && 
+                   (!menuDietary?.allergens || menuDietary.allergens.length === 0) && 
+                   (!menuDietary?.guestRestrictions || menuDietary.guestRestrictions.length === 0) && (
+                    <div className="text-center py-12 text-muted-foreground">
+                      <Utensils className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                      <p>No menu or dietary data available for this wedding.</p>
+                    </div>
+                  )}
                 </CardContent>
               </Card>
 
