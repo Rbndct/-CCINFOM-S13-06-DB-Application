@@ -62,7 +62,7 @@ import DashboardLayout from '@/components/layout/DashboardLayout';
 import { menuItemsAPI, dietaryRestrictionsAPI, ingredientsAPI } from '@/api';
 import { useToast } from '@/hooks/use-toast';
 import { useCurrencyFormat } from '@/utils/currency';
-import { getTypeIcon, getTypeColor, getNoneRestrictionBadge, isNoneRestriction } from '@/utils/restrictionUtils';
+import { getTypeIcon, getTypeColor, getNoneRestrictionBadge, isNoneRestriction, getNoneRestrictionId } from '@/utils/restrictionUtils';
 import { getMenuTypeIcon, getMenuTypeColor } from '@/utils/menuTypeUtils';
 import { Checkbox } from '@/components/ui/checkbox';
 
@@ -347,34 +347,69 @@ const MenuItems = () => {
   // Handle edit item - load recipe
   const handleEditItem = async (item: any) => {
     setSelectedItem(item);
-    // Load restriction IDs from restrictions array if available, otherwise from single restriction_id
-    const restrictionIds = item.restrictions && Array.isArray(item.restrictions) && item.restrictions.length > 0
-      ? item.restrictions.map((r: any) => r.restriction_id).filter((id: any) => id != null)
-      : item.restriction_id ? [item.restriction_id] : [];
     
-    setFormData({
-      menu_name: item.menu_name || '',
-      menu_cost: (item.unit_cost || item.menu_cost || 0).toString(),
-      menu_price: (item.selling_price || item.menu_price || 0).toString(),
-      menu_type: item.menu_type || '',
-      restriction_ids: restrictionIds
-    });
-    setDefaultMarkup(item.default_markup_percentage || 200);
-    
-    // Fetch recipe for this item
+    // Fetch full item details to get recipe and restrictions
     try {
       const response: any = await menuItemsAPI.getById(item.menu_item_id || item.id);
-      if (response && response.success && response.data && response.data.recipe) {
-        const recipeData = response.data.recipe.map((r: any) => ({
-          ingredient_id: r.ingredient_id,
-          quantity: parseFloat(r.quantity_needed || r.quantity || 0)
-        }));
-        setRecipe(recipeData);
+      if (response && response.success && response.data) {
+        const fullItem = response.data;
+        
+        // Load restriction IDs from restrictions array if available, otherwise from single restriction_id
+        // Use the full item data which has the complete restrictions array
+        const restrictionIds = fullItem.restrictions && Array.isArray(fullItem.restrictions) && fullItem.restrictions.length > 0
+          ? fullItem.restrictions.map((r: any) => r.restriction_id).filter((id: any) => id != null && id !== 1)
+          : fullItem.restriction_id && fullItem.restriction_id !== 1 ? [fullItem.restriction_id] : [];
+        
+        setFormData({
+          menu_name: fullItem.menu_name || item.menu_name || '',
+          menu_cost: (fullItem.unit_cost || fullItem.menu_cost || item.unit_cost || item.menu_cost || 0).toString(),
+          menu_price: (fullItem.selling_price || fullItem.menu_price || item.selling_price || item.menu_price || 0).toString(),
+          menu_type: fullItem.menu_type || item.menu_type || '',
+          restriction_ids: restrictionIds
+        });
+        setDefaultMarkup(fullItem.default_markup_percentage || item.default_markup_percentage || 200);
+        
+        // Set recipe
+        if (fullItem.recipe && Array.isArray(fullItem.recipe)) {
+          const recipeData = fullItem.recipe.map((r: any) => ({
+            ingredient_id: r.ingredient_id,
+            quantity: parseFloat(r.quantity_needed || r.quantity || 0)
+          }));
+          setRecipe(recipeData);
+        } else {
+          setRecipe([]);
+        }
       } else {
+        // Fallback to item data if API call fails
+        const restrictionIds = item.restrictions && Array.isArray(item.restrictions) && item.restrictions.length > 0
+          ? item.restrictions.map((r: any) => r.restriction_id).filter((id: any) => id != null && id !== 1)
+          : item.restriction_id && item.restriction_id !== 1 ? [item.restriction_id] : [];
+        
+        setFormData({
+          menu_name: item.menu_name || '',
+          menu_cost: (item.unit_cost || item.menu_cost || 0).toString(),
+          menu_price: (item.selling_price || item.menu_price || 0).toString(),
+          menu_type: item.menu_type || '',
+          restriction_ids: restrictionIds
+        });
+        setDefaultMarkup(item.default_markup_percentage || 200);
         setRecipe([]);
       }
     } catch (error) {
-      console.error('Error fetching recipe:', error);
+      console.error('Error fetching menu item details:', error);
+      // Fallback to item data if API call fails
+      const restrictionIds = item.restrictions && Array.isArray(item.restrictions) && item.restrictions.length > 0
+        ? item.restrictions.map((r: any) => r.restriction_id).filter((id: any) => id != null && id !== 1)
+        : item.restriction_id && item.restriction_id !== 1 ? [item.restriction_id] : [];
+      
+      setFormData({
+        menu_name: item.menu_name || '',
+        menu_cost: (item.unit_cost || item.menu_cost || 0).toString(),
+        menu_price: (item.selling_price || item.menu_price || 0).toString(),
+        menu_type: item.menu_type || '',
+        restriction_ids: restrictionIds
+      });
+      setDefaultMarkup(item.default_markup_percentage || 200);
       setRecipe([]);
     }
     
@@ -439,21 +474,42 @@ const MenuItems = () => {
         return;
       }
       
-      // Filter out None restriction (ID 1) if present and convert to array format
-      const restrictionIds = formData.restriction_ids.filter(id => id !== 1);
+      // Filter out "None" restriction if present and convert to array format
+      // Always send as array (even if empty) to ensure restrictions are updated
+      // Ensure all IDs are numbers
+      // Get the "None" restriction ID dynamically (don't assume it's always 1)
+      const noneRestrictionId = getNoneRestrictionId(dietaryRestrictions);
+      const restrictionIds = formData.restriction_ids
+        .filter(id => {
+          // Filter out null/undefined and the "None" restriction (by ID)
+          if (id == null) return false;
+          if (noneRestrictionId && id === noneRestrictionId) return false;
+          return true;
+        })
+        .map(id => Number(id))
+        .filter(id => !isNaN(id));
+      
+      console.log('[FRONTEND] Saving menu item with restrictions:', {
+        formData_restriction_ids: formData.restriction_ids,
+        filtered_restriction_ids: restrictionIds,
+        menu_item_id: selectedItem?.menu_item_id || selectedItem?.id
+      });
       
       const data: any = {
         menu_name: formData.menu_name,
         unit_cost: calculatedCost,
         selling_price: priceValue,
         menu_type: formData.menu_type,
-        restriction_ids: restrictionIds.length > 0 ? restrictionIds : null,
+        restriction_ids: restrictionIds, // Always send as array to ensure update
         default_markup_percentage: defaultMarkup,
         recipe: recipe // Send recipe data
       };
       
+      console.log('[FRONTEND] Sending data to API:', JSON.stringify(data, null, 2));
+      
       if (selectedItem) {
         // Update
+        console.log('[FRONTEND] Updating menu item:', selectedItem.menu_item_id || selectedItem.id);
         await menuItemsAPI.update(selectedItem.menu_item_id || selectedItem.id, data);
         toast({ title: 'Success', description: 'Menu item updated successfully' });
         setEditDialogOpen(false);
@@ -1551,15 +1607,26 @@ const MenuItems = () => {
                             id={`restriction-${restriction.restriction_id}`}
                             checked={isChecked}
                             onCheckedChange={(checked) => {
+                              console.log('[FRONTEND] Checkbox changed:', {
+                                restriction_id: restriction.restriction_id,
+                                restriction_name: restriction.restriction_name,
+                                checked: checked,
+                                current_restriction_ids: formData.restriction_ids
+                              });
+                              
                               if (checked) {
+                                const newIds = [...formData.restriction_ids, restriction.restriction_id];
+                                console.log('[FRONTEND] Adding restriction, new IDs:', newIds);
                                 setFormData({
                                   ...formData,
-                                  restriction_ids: [...formData.restriction_ids, restriction.restriction_id]
+                                  restriction_ids: newIds
                                 });
                               } else {
+                                const newIds = formData.restriction_ids.filter(id => id !== restriction.restriction_id);
+                                console.log('[FRONTEND] Removing restriction, new IDs:', newIds);
                                 setFormData({
                                   ...formData,
-                                  restriction_ids: formData.restriction_ids.filter(id => id !== restriction.restriction_id)
+                                  restriction_ids: newIds
                                 });
                               }
                             }}
@@ -1597,7 +1664,7 @@ const MenuItems = () => {
                     menu_cost: '',
                     menu_price: '',
                     menu_type: '',
-                    restriction_id: ''
+                    restriction_ids: []
                   });
                   setRecipe([]);
                   setDefaultMarkup(200);

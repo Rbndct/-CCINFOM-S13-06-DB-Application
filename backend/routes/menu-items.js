@@ -297,12 +297,30 @@ router.post('/', async (req, res) => {
 
     // Handle restrictions - support both old (single) and new (array) format
     let restrictionIdsArray = [];
+    
+    // Get the "None" restriction ID from database
+    const [noneRestrictionRows] = await connection.query(
+      'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+      ['None']
+    );
+    const noneRestrictionId = noneRestrictionRows.length > 0 ? noneRestrictionRows[0].restriction_id : null;
+    
     if (restriction_ids && Array.isArray(restriction_ids) && restriction_ids.length > 0) {
       // New format: array of restriction IDs
-      restrictionIdsArray = restriction_ids.filter(id => id !== null && id !== undefined && id !== 1); // Filter out null/undefined and "None" (ID 1)
+      // Filter out null/undefined and "None" restriction (by actual ID, not hardcoded), and ensure all are numbers
+      restrictionIdsArray = restriction_ids
+        .filter(id => {
+          if (id === null || id === undefined) return false;
+          if (noneRestrictionId && Number(id) === Number(noneRestrictionId)) return false;
+          return true;
+        })
+        .map(id => Number(id))
+        .filter(id => !isNaN(id));
     } else if (restriction_id) {
       // Old format: single restriction ID (backward compatibility)
-      restrictionIdsArray = restriction_id !== 1 ? [restriction_id] : [];
+      const restrictionIdNum = Number(restriction_id);
+      const isValid = !isNaN(restrictionIdNum) && (!noneRestrictionId || restrictionIdNum !== noneRestrictionId);
+      restrictionIdsArray = isValid ? [restrictionIdNum] : [];
     }
     
     // Insert menu item (restriction_id column no longer exists)
@@ -319,6 +337,8 @@ router.post('/', async (req, res) => {
 
     // Insert restrictions into junction table
     if (restrictionIdsArray.length > 0) {
+      console.log(`[CREATE] Adding restrictions for menu_item_id ${menuItemId}:`, restrictionIdsArray);
+      
       // Validate all restriction IDs exist
       const placeholders = restrictionIdsArray.map(() => '?').join(',');
       const [restrictionCheck] = await connection.query(
@@ -334,12 +354,25 @@ router.post('/', async (req, res) => {
         });
       }
 
-      // Insert into junction table
-      const restrictionValues = restrictionIdsArray.map(rid => [menuItemId, rid]);
-      await connection.query(
-        'INSERT INTO menu_item_restrictions (menu_item_id, restriction_id) VALUES ?',
-        [restrictionValues]
-      );
+      // Insert into junction table using individual inserts for reliability
+      let insertedCount = 0;
+      for (const restrictionId of restrictionIdsArray) {
+        try {
+          const [insertResult] = await connection.query(
+            'INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id) VALUES (?, ?)',
+            [menuItemId, restrictionId]
+          );
+          if (insertResult.affectedRows > 0) {
+            insertedCount++;
+          }
+        } catch (insertError) {
+          console.error(`[CREATE] Error inserting restriction ${restrictionId}:`, insertError);
+          throw insertError;
+        }
+      }
+      console.log(`[CREATE] Inserted ${insertedCount} out of ${restrictionIdsArray.length} restrictions`);
+    } else {
+      console.log(`[CREATE] No restrictions to add for menu_item_id ${menuItemId}`);
     }
 
     // Insert recipe items
@@ -440,6 +473,14 @@ router.put('/:id', async (req, res) => {
       recipe
     } = req.body;
     const menuItemId = req.params.id;
+    
+    console.log(`[UPDATE] Received request for menu_item_id ${menuItemId}:`, {
+      restriction_ids: restriction_ids,
+      restriction_id: restriction_id,
+      restriction_ids_type: typeof restriction_ids,
+      restriction_ids_isArray: Array.isArray(restriction_ids),
+      full_body: JSON.stringify(req.body, null, 2)
+    });
 
     // Support both new (unit_cost, selling_price) and old (menu_cost,
     // menu_price) field names for backward compatibility
@@ -485,41 +526,73 @@ router.put('/:id', async (req, res) => {
     // Handle restrictions - support both old (single) and new (array) format
     let restrictionIdsArray = null;
     if (restriction_ids !== undefined) {
+      console.log(`[UPDATE] Processing restriction_ids:`, restriction_ids);
       // New format: array of restriction IDs
       if (Array.isArray(restriction_ids)) {
-        restrictionIdsArray = restriction_ids.filter(id => id !== null && id !== undefined && id !== 1); // Filter out null/undefined and "None" (ID 1)
+        // Get the "None" restriction ID from database
+        const [noneRestrictionRows] = await connection.query(
+          'SELECT restriction_id FROM dietary_restriction WHERE restriction_name = ? LIMIT 1',
+          ['None']
+        );
+        const noneRestrictionId = noneRestrictionRows.length > 0 ? noneRestrictionRows[0].restriction_id : null;
+        
+        // Filter out null/undefined and "None" restriction (by actual ID, not hardcoded), and ensure all are numbers
+        restrictionIdsArray = restriction_ids
+          .filter(id => {
+            if (id === null || id === undefined) return false;
+            if (noneRestrictionId && Number(id) === Number(noneRestrictionId)) return false;
+            return true;
+          })
+          .map(id => Number(id))
+          .filter(id => !isNaN(id));
+        console.log(`[UPDATE] Filtered restriction_ids array (None ID: ${noneRestrictionId}):`, restrictionIdsArray);
       } else if (restriction_ids === null) {
+        // Explicitly null means clear all restrictions
         restrictionIdsArray = [];
+        console.log(`[UPDATE] restriction_ids is null, setting to empty array`);
+      } else {
+        console.log(`[UPDATE] restriction_ids is not an array and not null, type:`, typeof restriction_ids);
       }
     } else if (restriction_id !== undefined) {
       // Old format: single restriction ID (backward compatibility)
       restrictionIdsArray = restriction_id && restriction_id !== 1 ? [restriction_id] : [];
+      console.log(`[UPDATE] Using old format restriction_id:`, restriction_id, '->', restrictionIdsArray);
+    } else {
+      console.log(`[UPDATE] No restriction_ids or restriction_id provided`);
     }
+    
+    console.log(`[UPDATE] Final restrictionIdsArray:`, restrictionIdsArray);
     
     // Note: restriction_id column no longer exists, restrictions are handled via junction table only
 
-    if (updateFields.length === 0) {
+    // Check if there's anything to update
+    if (updateFields.length === 0 && restrictionIdsArray === null) {
       await connection.rollback();
       return res.status(400).json(
           {success: false, error: 'No fields to update'});
     }
 
-    updateValues.push(menuItemId);
-
-    // Update menu item
-    await connection.query(
-        `UPDATE menu_item 
-       SET ${updateFields.join(', ')}
-       WHERE menu_item_id = ?`,
-        updateValues);
+    // Update menu item fields if any are provided
+    if (updateFields.length > 0) {
+      updateValues.push(menuItemId);
+      await connection.query(
+          `UPDATE menu_item 
+         SET ${updateFields.join(', ')}
+         WHERE menu_item_id = ?`,
+          updateValues);
+    }
 
     // Update restrictions in junction table if restriction_ids was provided
+    // This can be done even if no other fields are being updated
     if (restrictionIdsArray !== null) {
+      console.log(`[UPDATE] Updating restrictions for menu_item_id ${menuItemId}:`, restrictionIdsArray);
+      
       // Delete existing restrictions
-      await connection.query(
+      const [deleteResult] = await connection.query(
         'DELETE FROM menu_item_restrictions WHERE menu_item_id = ?',
         [menuItemId]
       );
+      console.log(`[UPDATE] Deleted ${deleteResult.affectedRows} existing restrictions`);
 
       // Insert new restrictions if any
       if (restrictionIdsArray.length > 0) {
@@ -538,13 +611,36 @@ router.put('/:id', async (req, res) => {
           });
         }
 
-        // Insert into junction table
-        const restrictionValues = restrictionIdsArray.map(rid => [menuItemId, rid]);
-        await connection.query(
-          'INSERT INTO menu_item_restrictions (menu_item_id, restriction_id) VALUES ?',
-          [restrictionValues]
-        );
+        // Insert into junction table using individual inserts for reliability
+        // Use INSERT IGNORE to handle any potential race conditions or duplicates
+        console.log(`[UPDATE] About to insert ${restrictionIdsArray.length} restrictions:`, restrictionIdsArray);
+        let insertedCount = 0;
+        for (const restrictionId of restrictionIdsArray) {
+          console.log(`[UPDATE] Inserting restriction: menu_item_id=${menuItemId}, restriction_id=${restrictionId}`);
+          try {
+            const [insertResult] = await connection.query(
+              'INSERT IGNORE INTO menu_item_restrictions (menu_item_id, restriction_id) VALUES (?, ?)',
+              [menuItemId, restrictionId]
+            );
+            if (insertResult.affectedRows > 0) {
+              insertedCount++;
+              console.log(`[UPDATE] Successfully inserted restriction ${restrictionId}, insertId:`, insertResult.insertId);
+            } else {
+              console.log(`[UPDATE] Restriction ${restrictionId} already exists (duplicate ignored)`);
+            }
+          } catch (insertError) {
+            console.error(`[UPDATE] Error inserting restriction ${restrictionId}:`, insertError);
+            console.error(`[UPDATE] Error code:`, insertError.code);
+            console.error(`[UPDATE] Error message:`, insertError.message);
+            throw insertError; // Re-throw to trigger rollback
+          }
+        }
+        console.log(`[UPDATE] Successfully inserted ${insertedCount} out of ${restrictionIdsArray.length} new restrictions`);
+      } else {
+        console.log(`[UPDATE] No restrictions to insert (clearing all restrictions)`);
       }
+    } else {
+      console.log(`[UPDATE] restriction_ids not provided, skipping restriction update`);
     }
 
     // Update recipe if provided
@@ -565,15 +661,18 @@ router.put('/:id', async (req, res) => {
     }
 
     await connection.commit();
+    console.log(`[UPDATE] Transaction committed successfully for menu_item_id ${menuItemId}`);
 
     res.json({success: true, message: 'Menu item updated successfully'});
   } catch (error) {
     await connection.rollback();
-    console.error('Error updating menu item:', error);
+    console.error(`[UPDATE] Error updating menu item ${req.params.id}:`, error);
+    console.error('[UPDATE] Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Failed to update menu item',
-      message: error.message
+      message: error.message,
+      details: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   } finally {
     connection.release();
