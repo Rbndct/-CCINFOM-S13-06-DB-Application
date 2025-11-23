@@ -1,0 +1,229 @@
+{
+  "wedding": {
+    "create": {
+      "endpoint": "POST /api/weddings",
+      "body": {
+        "couple_id": 1,
+        "wedding_date": "2025-12-31",
+        "wedding_time": "11:00:00",
+        "venue": "Makati",
+        "guest_count": 50,
+        "equipment_rental_cost": 5000.00,
+        "food_cost": 15000.00,
+        "total_cost": 20000.00,
+        "payment_status": "pending",
+        "preference_id": null
+      }
+    },
+    "read": {
+      "endpoint": "GET /api/weddings/1"
+    },
+    "update": {
+      "endpoint": "PUT /api/weddings/1",
+      "body": {
+        "wedding_date": "2025-12-31",
+        "wedding_time": "11:00:00",
+        "venue": "Makati City",
+        "payment_status": "partial",
+        "guest_count": 55,
+        "equipment_rental_cost": 5500.00,
+        "food_cost": 16000.00,
+        "total_cost": 21500.00
+      }
+    },
+    "delete": {
+      "endpoint": "DELETE /api/weddings/1"
+    }
+  },
+  "guests": [
+    {
+      "create": {
+        "endpoint": "POST /api/guests",
+        "body": {
+          "guest_name": "John Doe",
+          "wedding_id": 1,
+          "rsvp_status": "confirmed",
+          "table_id": null,
+          "restriction_ids": [2, 3]
+        }
+      },
+      "read": {
+        "endpoint": "GET /api/guests/1"
+      },
+      "update": {
+        "endpoint": "PUT /api/guests/1",
+        "body": {
+          "guest_name": "John Doe Updated",
+          "rsvp_status": "confirmed",
+          "table_id": 2,
+          "restriction_ids": [2]
+        }
+      },
+      "delete": {
+        "endpoint": "DELETE /api/guests/1"
+      }
+    },
+    {
+      "create": {
+        "endpoint": "POST /api/guests",
+        "body": {
+          "guest_name": "Jane Smith",
+          "wedding_id": 1,
+          "rsvp_status": "pending",
+          "table_id": null,
+          "restriction_ids": []
+        }
+      }
+    },
+    {
+      "create": {
+        "endpoint": "POST /api/guests",
+        "body": {
+          "guest_name": "Alice Johnson",
+          "wedding_id": 1,
+          "rsvp_status": "confirmed",
+          "table_id": 2,
+          "restriction_ids": [4, 5]
+        }
+      }
+    }
+  ],
+  "guest_restrictions": {
+    "note": "Restrictions are managed through guest CREATE/UPDATE endpoints using restriction_ids array",
+    "create_via_guest": {
+      "endpoint": "POST /api/guests",
+      "body": {
+        "guest_name": "Bob Wilson",
+        "wedding_id": 1,
+        "restriction_ids": [2, 3, 4]
+      }
+    },
+    "update_via_guest": {
+      "endpoint": "PUT /api/guests/1",
+      "body": {
+        "restriction_ids": [3, 6]
+      }
+    },
+    "remove_all": {
+      "endpoint": "PUT /api/guests/1",
+      "body": {
+        "restriction_ids": []
+      }
+    },
+    "read": {
+      "endpoint": "GET /api/guests/1",
+      "note": "Check dietaryRestrictions array in response"
+    }
+  },
+  "seating_tables": [
+    {
+      "type": "couple",
+      "create": {
+        "endpoint": "POST /api/tables/seating/1/couple",
+        "body": {
+          "capacity": 2
+        }
+      },
+      "read": {
+        "endpoint": "GET /api/tables/seating/1"
+      },
+      "update": {
+        "endpoint": "PUT /api/tables/seating/1",
+        "body": {
+          "table_number": "T-001-UPDATED",
+          "table_category": "couple",
+          "capacity": 2
+        }
+      },
+      "delete": {
+        "endpoint": "DELETE /api/tables/seating/1"
+      }
+    },
+    {
+      "type": "guest_family",
+      "create": {
+        "endpoint": "POST /api/tables/seating/1/guest",
+        "body": {
+          "capacity": 8,
+          "table_category": "Family"
+        }
+      }
+    },
+    {
+      "type": "guest_vip",
+      "create": {
+        "endpoint": "POST /api/tables/seating/1/guest",
+        "body": {
+          "capacity": 10,
+          "table_category": "VIP"
+        }
+      }
+    },
+    {
+      "type": "guest_friends",
+      "create": {
+        "endpoint": "POST /api/tables/seating/1/guest",
+        "body": {
+          "capacity": 6,
+          "table_category": "Friends"
+        }
+      }
+    }
+  ],
+  "table_package_assignments": [
+    {
+      "create": {
+        "endpoint": "POST /api/packages/assign",
+        "body": {
+          "table_id": 1,
+          "package_id": 1
+        }
+      },
+      "read": {
+        "endpoint": "GET /api/packages/assignments/1",
+        "note": "1 is the wedding_id"
+      },
+      "delete": {
+        "endpoint": "DELETE /api/packages/assign/1",
+        "note": "1 is the assignment_id"
+      }
+    },
+    {
+      "create": {
+        "endpoint": "POST /api/packages/assign",
+        "body": {
+          "table_id": 2,
+          "package_id": 1
+        },
+        "note": "Multiple tables can have same package"
+      }
+    },
+    {
+      "create": {
+        "endpoint": "POST /api/packages/assign",
+        "body": {
+          "table_id": 1,
+          "package_id": 2
+        },
+        "note": "Same table can have multiple packages"
+      }
+    }
+  ],
+  "test_flow_order": [
+    "1. Create Wedding (save wedding_id)",
+    "2. Create Seating Tables (save table_ids)",
+    "3. Create Guests (save guest_ids)",
+    "4. Assign Packages to Tables",
+    "5. Verify all data with READ operations",
+    "6. Test UPDATE operations",
+    "7. Test DELETE operations (cleanup)"
+  ],
+  "helper_endpoints": {
+    "get_all_dietary_restrictions": "GET /api/dietary-restrictions",
+    "get_all_packages": "GET /api/packages",
+    "get_all_couples": "GET /api/couples",
+    "get_guests_by_wedding": "GET /api/guests?wedding_id=1",
+    "get_tables_by_wedding": "GET /api/tables/seating/1"
+  }
+}
+
